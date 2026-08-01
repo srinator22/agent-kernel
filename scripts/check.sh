@@ -37,9 +37,106 @@ if [[ -n "$untracked" ]]; then
   echo "------------------------------------------------------------------"
 fi
 
-# Step 4: template-mode gate.
+# Step 4: template-mode gate. Before start runs there is no stack to
+# check, so the gauntlet checks the template itself: a green badge means
+# the template is intact, not merely that nothing executed.
 if [[ ! -f .start-done ]]; then
-  echo "TEMPLATE MODE - start has not run; stack checks inactive."
+  echo "TEMPLATE MODE - start has not run; running the template self-test."
+  tfail=0
+  terr() { echo "TEMPLATE SELF-TEST FAILED: $*" >&2; tfail=1; }
+
+  # 4a. Shell syntax of every script.
+  for s in scripts/*.sh; do
+    bash -n "$s" || terr "bash -n: $s"
+  done
+
+  # 4b. Every shipped template file exists (the blueprint tree, mechanized).
+  required=(
+    AGENTS.md CLAUDE.md README.md BACKLOG.md BUILD_NOTES.md CONTRIBUTING.md
+    SECURITY.md manifest.md cliff.toml .kernel.hash .gitignore .editorconfig
+    .gitattributes
+    .github/workflows/ci.yml
+    .github/pull_request_template.md
+    .github/ISSUE_TEMPLATE/bug_report.yml
+    docs/BLUEPRINT.md docs/ARCHITECTURE.md docs/operations.md
+    docs/decisions/0001-template-architecture.md
+    docs/procedures/start.md docs/procedures/ship.md docs/procedures/retro.md
+    docs/procedures/maintain.md docs/procedures/bugfix.md
+    docs/procedures/audit.md docs/procedures/longjob.md
+    docs/rules/architecture.md docs/rules/security.md
+    docs/rules/data-provenance.md docs/rules/scientific-integrity.md
+    docs/rules/destructive-actions.md docs/rules/ci-baseline.md
+    docs/lessons/INDEX.md docs/lessons/PENDING.md docs/lessons/QUARANTINE.md
+    scripts/check.sh scripts/check.ps1 scripts/kernel-hash.sh
+    scripts/ci-watch.sh scripts/new-task.sh scripts/bg.sh
+    .work/TASK.md .work/done/.gitkeep .work/jobs/.gitkeep
+    .claude/settings.json
+    .claude/agents/reviewer.md .claude/agents/explore.md
+    .claude/agents/worker.md .claude/agents/monitor.md
+    .claude/skills/start/SKILL.md .claude/skills/ship/SKILL.md
+    .claude/skills/retro/SKILL.md .claude/skills/maintain/SKILL.md
+    .agents/skills/start/SKILL.md .agents/skills/ship/SKILL.md
+    .agents/skills/retro/SKILL.md .agents/skills/maintain/SKILL.md
+    .codex/agents/reviewer.toml .codex/agents/worker.toml
+    .codex/agents/monitor.toml
+    .archive/README.md
+  )
+  for f in "${required[@]}"; do
+    [[ -f "$f" ]] || terr "required template file missing: $f"
+  done
+
+  # 4c. CLAUDE.md is exactly the one-line import.
+  [[ "$(cat CLAUDE.md)" == "@AGENTS.md" ]] || terr "CLAUDE.md must be exactly '@AGENTS.md'"
+
+  # 4d. Template placeholders intact; nothing pretends to be started.
+  grep -q '{{FILLED_BY_START}}' AGENTS.md || terr "AGENTS.md lost its {{FILLED_BY_START}} placeholders"
+  grep -q 'Status: TEMPLATE' AGENTS.md || terr "AGENTS.md lost its template status line"
+  # Escaped regex so this line cannot match itself, only the real placeholder.
+  grep -Eq '\{\{FORMAT_CHECK_FILLED_BY_START\}\}' scripts/check.sh || terr "check.sh lost its stack placeholders"
+  grep -q '{{title}}' .work/TASK.md || terr ".work/TASK.md is not the pristine template"
+
+  # 4e. Agent and skill frontmatter is structurally sound.
+  for f in .claude/agents/*.md .claude/skills/*/SKILL.md .agents/skills/*/SKILL.md; do
+    head -n 1 "$f" | grep -qx -- '---' || terr "frontmatter must open with ---: $f"
+    grep -q '^name:' "$f" || terr "frontmatter missing name: $f"
+    grep -q '^description:' "$f" || terr "frontmatter missing description: $f"
+  done
+  for f in .codex/agents/*.toml; do
+    grep -q '^name = ' "$f" || terr "missing name field: $f"
+    grep -q '^description = ' "$f" || terr "missing description field: $f"
+    grep -q '^developer_instructions = ' "$f" || terr "missing developer_instructions field: $f"
+  done
+
+  # 4f. settings.json parses as JSON (python3 exists in CI; degrades locally).
+  PY=""
+  command -v python3 >/dev/null 2>&1 && PY=python3
+  [[ -n "$PY" ]] || { command -v python >/dev/null 2>&1 && PY=python; } || true
+  if [[ -n "$PY" ]]; then
+    "$PY" -c 'import json; json.load(open(".claude/settings.json"))' \
+      || terr ".claude/settings.json is not valid JSON"
+  else
+    echo "WARNING: python not found; settings.json not validated here (CI validates it)."
+  fi
+
+  # 4g. Shell scripts keep their executable bit in the git index.
+  nonexec="$(git ls-files -s scripts/ | awk '$1 != "100755" && $4 ~ /\.sh$/ {print $4}')"
+  [[ -z "$nonexec" ]] || terr "scripts lost the executable bit: $nonexec"
+
+  # 4h. Style: plain hyphens only (kernel rule 20). Tracked files only.
+  # Needs grep with PCRE (GNU); where unavailable this defers to CI.
+  rc=0
+  dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
+  if (( rc == 0 )); then
+    printf '%s\n' "$dashes" | head -20
+    terr "em or en dash found; plain hyphens only"
+  elif (( rc > 1 )); then
+    echo "WARNING: git grep -P unavailable; dash check deferred to CI."
+  fi
+
+  if (( tfail )); then
+    fail "template self-test found the problems listed above"
+  fi
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, style)"
   exit 0
 fi
 

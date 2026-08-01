@@ -35,6 +35,10 @@ interviews the human and rewrites the repo for the specific project.
 - `.work/` - current task state, committed so it survives compaction
 - `scripts/` - the gauntlet and its helpers
 - `.claude/` - optional accelerators; the repo works without them
+- `.codex/agents/`, `.agents/skills/` - the same accelerators for Codex
+
+Verification is `./scripts/check.sh` everywhere; on native Windows shells,
+`./scripts/check.ps1` wraps that same script via Git Bash.
 
 Note: /start rewrites this README for the project. Add a LICENSE before
 publishing anything built from this template.

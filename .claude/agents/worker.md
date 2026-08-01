@@ -21,7 +21,9 @@ Hard rules:
 - You never run git commit or git push; the advisor reviews and commits.
   A PreToolUse hook blocks these commands (it matches the substrings
   "git commit" and "git push" in any Bash call - crude on purpose; do not
-  try to work around it).
+  try to work around it). Hook commands run under sh on unix and under
+  Git Bash on Windows when Git Bash is installed; without Git Bash the
+  hook degrades to a non-blocking error and this rule still binds.
 - You never edit a file another worker is editing concurrently. If your
   instruction appears to overlap another worker's scope, stop and say so.
 - If your instruction conflicts with what you observe in the code or the

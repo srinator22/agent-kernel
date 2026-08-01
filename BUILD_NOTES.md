@@ -32,3 +32,30 @@ github.com/srinator22/New-Project per the owner's instruction.
 - The remote repository's root commit ("Initial commit", from GitHub repo
   creation) predates this build and is not Conventional; history from the
   blueprint import onward is Conventional Commits.
+
+Post-build review round (2026-08-01), items verified before acting:
+
+- Codex conventions confirmed against developers.openai.com/codex (which
+  redirects to learn.chatgpt.com): project skills live in
+  .agents/skills/<name>/SKILL.md with the same name/description
+  frontmatter; custom agents are .codex/agents/*.toml with required
+  name, description, and developer_instructions fields; project agents
+  override the built-ins (default, worker, explorer), so worker.toml
+  deliberately overrides Codex's built-in worker. Codex offers no
+  per-command hook, so the Codex-side commit/push denial is prose plus
+  the advisor gate; the Codex reviewer is mechanically read-only via
+  sandbox_mode = "read-only".
+- Hook shell resolution confirmed in the hooks docs: hook commands run
+  under sh on unix and under Git Bash on Windows when Git Bash is
+  installed (bash on the PowerShell PATH is not required); PowerShell is
+  the default only when Git Bash is absent - and a machine without Git
+  Bash cannot run scripts/check.sh at all. The bash-syntax worker hook
+  therefore stands; where it cannot run it degrades to a non-blocking
+  error plus the prose rule and the advisor gate.
+- scripts/check.ps1 added: native Windows shells (bash not on PATH there
+  on the build machine, reproduced) get a wrapper that locates Git Bash
+  and forwards to the canonical check.sh. One gauntlet, two entry doors.
+- check.sh template mode now runs a template self-test (script syntax,
+  required-file tree, placeholders, frontmatter, settings.json validity,
+  executable bits, dash scan on tracked files) so the green badge attests
+  template integrity rather than inactivity.
