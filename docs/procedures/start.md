@@ -40,7 +40,8 @@ point in this procedure.
    lines to Standards if needed (respect the 180-line budget).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
    and, if deploying, `docs/operations.md` (deploy, rollback, monitoring).
-   Write `docs/decisions/0002-stack-choice.md` with rejected alternatives.
+   Write the next-numbered ADR under docs/decisions/ (stack choice, with
+   rejected alternatives).
 6. Rewrite `README.md` for the project, present tense. Set repo description,
    homepage, and topics (gh) so the sidebar reads properly. Scaffold
    `BACKLOG.md` with the first milestones from the interview.

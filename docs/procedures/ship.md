@@ -28,7 +28,8 @@ SHA is terminal-success (kernel rule 5).
    annotated tag `vX.Y.Z`, push the tag, AND create the platform Release
    object (`gh release create`) with user-facing plain-language notes
    curated from the changelog. A tag alone does not appear in the Releases
-   panel.
+   panel. Template-repo releases (before start runs) use annotated
+   `template-vX.Y.Z` tags; per-project releases after start use `vX.Y.Z`.
 9. Final handoff format: Outcome / Evidence (commands and terminal results)
    / Artifacts (commit, release, deployment) / Limitations / Next action
    only if required.

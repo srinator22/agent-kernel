@@ -254,7 +254,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
    10. Is there confidential context that must not appear in the committed repo? (If yes: create a gitignored local instruction file, add the ignore line first, and never reference its existence in committed files.)
 3. Wire the stack: fill every `{{...}}` in `scripts/check.sh` and `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
 4. Fill the Project decisions section of AGENTS.md; append stack-specific lines to Standards if needed (respect the 180-line budget).
-5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write `docs/decisions/0002-stack-choice.md` with rejected alternatives.
+5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write the next-numbered ADR under docs/decisions/ (stack choice, with rejected alternatives).
 6. Rewrite `README.md` for the project, present tense. Set repo description, homepage, and topics (gh) so the sidebar reads properly. Scaffold BACKLOG.md with the first milestones from the interview.
 7. Configure the harness: attribution/trailers off in settings (verify current key names at run time), branch protection if gated workflow.
 8. Verify a clean state: `./scripts/check.sh` passes for real (not template mode). Fix until it does. Completion rule: start may not declare itself complete if format/lint/typecheck/tests cannot actually execute.
@@ -336,6 +336,15 @@ Date: {{date}}
 ## Goal
 {{one paragraph}}
 
+## Budget
+<!-- declare before work starts; on exhaustion: stop, keep the best verified
+     artifact, and report unresolved items with reasons - never hide a partial
+     result behind a fluent answer -->
+- Wall-clock: {{max}}
+- Subagents / workflow runs: {{max}}
+- Retries per failing step: {{max, default 2}}
+- Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
+
 ## Acceptance criteria
 <!-- each maps to an executable test where possible; list test paths -->
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}
@@ -378,6 +387,20 @@ Strongly recommended: gh CLI (checks, releases, branch protection, repo metadata
 Recommended methodology plugin (Claude Code): Superpowers, via the official plugin marketplace (VERIFY current install command at start time). Other harnesses: docs/procedures/ is the fallback methodology.
 Policy: CLI tools over MCP servers. MCP schemas cost resident context every turn; CLIs cost nothing until invoked. Add an MCP server only when no CLI equivalent exists; record the justification as an ADR.
 Search: prefer rg for repository text search. Edits: patch-based, scoped, reviewable. Non-interactive commands; deterministic scripts.
+
+## Delegation accelerators (harness-specific; kernel rule 16 governs)
+
+- Claude Code: for large parallel scoped work (per-file audits, mass
+  migrations, extraction across many documents), prefer a dynamic workflow
+  over hand-rolled worker spawning - Claude writes the orchestration script,
+  intermediate state lives in script variables instead of the advisor's
+  context, and caps are 16 concurrent / 1,000 total per run (VERIFY current
+  availability and caps in the Claude Code workflows docs at run time).
+  Declare the TASK.md Budget before any fan-out and define the reducer first.
+- Never fragment coherent-context work (architecture design, tightly coupled
+  refactors, narrative documents). One context, per kernel rule 16.
+- Other harnesses: use the native parallel mechanism or sequential workers;
+  the budget-first and reducer-first rules still apply.
 ```
 
 ### 3.15 Remaining files
@@ -442,3 +465,9 @@ Profiles: scientific work adds reference fixtures, golden-master tests, determin
 - Do not exceed the line and count budgets anywhere; the budgets are the design.
 - Do not use em dashes or en dashes in any file you write.
 - Do not silently guess on (VERIFY) items; verify or mark TODO.
+
+---
+
+## Amendment 1 (2026-08-01)
+
+Per-task complexity budgets and dynamic-workflow delegation, from the Karpathy autoresearch / Anthropic workflow synthesis (ADR-0002). TASK.md template (3.11) and new-task.sh gain a Budget block; manifest.md (3.14) gains the Delegation accelerators section; start.md now says "the next-numbered ADR" instead of hardcoding 0002. Kernel untouched: budgets are task-state, workflow pointers are harness-specific.

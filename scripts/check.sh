@@ -60,6 +60,7 @@ if [[ ! -f .start-done ]]; then
     .github/ISSUE_TEMPLATE/bug_report.yml
     docs/BLUEPRINT.md docs/ARCHITECTURE.md docs/operations.md
     docs/decisions/0001-template-architecture.md
+    docs/decisions/0002-complexity-budgets-and-workflow-delegation.md
     docs/procedures/start.md docs/procedures/ship.md docs/procedures/retro.md
     docs/procedures/maintain.md docs/procedures/bugfix.md
     docs/procedures/audit.md docs/procedures/longjob.md
@@ -94,7 +95,12 @@ if [[ ! -f .start-done ]]; then
   grep -q 'Status: TEMPLATE' AGENTS.md || terr "AGENTS.md lost its template status line"
   # Escaped regex so this line cannot match itself, only the real placeholder.
   grep -Eq '\{\{FORMAT_CHECK_FILLED_BY_START\}\}' scripts/check.sh || terr "check.sh lost its stack placeholders"
-  grep -q '{{title}}' .work/TASK.md || terr ".work/TASK.md is not the pristine template"
+  # TASK.md is valid in two states: the pristine template, or a live
+  # in-progress task file. Both must carry a declared Budget (ADR-0002).
+  grep -q '^## Budget' .work/TASK.md || terr ".work/TASK.md lost its Budget section"
+  if ! grep -q '{{title}}' .work/TASK.md && ! grep -q '^# Task: ' .work/TASK.md; then
+    terr ".work/TASK.md is neither the pristine template nor an in-progress task"
+  fi
 
   # 4e. Agent and skill frontmatter is structurally sound.
   for f in .claude/agents/*.md .claude/skills/*/SKILL.md .agents/skills/*/SKILL.md; do
