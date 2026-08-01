@@ -59,3 +59,21 @@ Post-build review round (2026-08-01), items verified before acting:
   required-file tree, placeholders, frontmatter, settings.json validity,
   executable bits, dash scan on tracked files) so the green badge attests
   template integrity rather than inactivity.
+
+Second review round (2026-08-01):
+
+- Private vulnerability reporting was disabled while SECURITY.md pointed
+  to it; enabled via the GitHub API and verified (enabled: true), so the
+  shipped instructions are now truthful.
+- Windows execution policy Restricted reproduced: powershell -File
+  refuses unsigned scripts on default machines. scripts\check.cmd added
+  as the one-command Windows entry (per-invocation ExecutionPolicy
+  Bypass -> check.ps1 -> Git Bash -> check.sh). Batch files need CRLF;
+  .gitattributes pins *.cmd and *.bat to eol=crlf.
+- Worker-hook runtime status, stated precisely: the hook command's
+  block/pass behavior was tested in-session (exit 2 on git commit/push
+  input, 0 otherwise), and the wiring follows the documented per-agent
+  PreToolUse pattern; an end-to-end firing test requires running the
+  worker under Claude Code, which the external reviewer could not do
+  (no Claude CLI on their side). Docs confirm hook commands resolve Git
+  Bash on Windows independently of the PowerShell PATH.

@@ -7,7 +7,7 @@ approving direction. Contributions follow the same rules the agents do.
   requires human approval plus `scripts/kernel-hash.sh --update` in the
   same commit, or CI fails.
 - `./scripts/check.sh` must be green (native Windows:
-  `./scripts/check.ps1`). CI runs the exact same script.
+  `scripts\check.cmd`). CI runs the exact same script.
 - Conventional Commits; the body carries the why. No attribution
   trailers. Plain hyphens only - no em or en dashes anywhere.
 - Keep the budgets: AGENTS.md <= 180 lines, rules files <= 40 lines,

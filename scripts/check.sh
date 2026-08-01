@@ -67,8 +67,9 @@ if [[ ! -f .start-done ]]; then
     docs/rules/data-provenance.md docs/rules/scientific-integrity.md
     docs/rules/destructive-actions.md docs/rules/ci-baseline.md
     docs/lessons/INDEX.md docs/lessons/PENDING.md docs/lessons/QUARANTINE.md
-    scripts/check.sh scripts/check.ps1 scripts/kernel-hash.sh
-    scripts/ci-watch.sh scripts/new-task.sh scripts/bg.sh
+    scripts/check.sh scripts/check.ps1 scripts/check.cmd
+    scripts/kernel-hash.sh scripts/ci-watch.sh scripts/new-task.sh
+    scripts/bg.sh
     .work/TASK.md .work/done/.gitkeep .work/jobs/.gitkeep
     .claude/settings.json
     .claude/agents/reviewer.md .claude/agents/explore.md

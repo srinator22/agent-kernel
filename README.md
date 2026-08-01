@@ -37,8 +37,10 @@ interviews the human and rewrites the repo for the specific project.
 - `.claude/` - optional accelerators; the repo works without them
 - `.codex/agents/`, `.agents/skills/` - the same accelerators for Codex
 
-Verification is `./scripts/check.sh` everywhere; on native Windows shells,
-`./scripts/check.ps1` wraps that same script via Git Bash.
+Verification is `./scripts/check.sh` everywhere; on native Windows,
+`scripts\check.cmd` is the one-command entry (it bypasses the machine
+execution policy for that invocation and forwards through check.ps1 to
+the same script via Git Bash).
 
 Note: /start rewrites this README for the project. Add a LICENSE before
 publishing anything built from this template.

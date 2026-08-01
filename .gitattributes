@@ -2,6 +2,10 @@
 # working trees. The kernel hash depends on the bytes of AGENTS.md.
 * text=auto eol=lf
 
+# Windows batch files require CRLF to execute reliably under cmd.exe.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 # Common binary types - never normalize.
 *.png binary
 *.jpg binary
