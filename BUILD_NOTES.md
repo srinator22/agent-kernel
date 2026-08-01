@@ -84,3 +84,22 @@ Second review round (2026-08-01):
   allowed, matching how this template repo is actually operated. Full
   PR-gated protection was considered and declined for this repo; it
   remains the recorded default for projects after start runs.
+
+External-repo learning round (2026-08-01), adopted after verification:
+
+- docs/rules/security.md now names agent configuration (AGENTS.md, hook
+  commands, .claude/, .codex/, .agents/, MCP definitions) as an attack
+  surface, and the PR template gained the matching review checkbox.
+  Idea origin: ECC's AgentShield.
+- Kernel rule 7 is mechanized for Claude Code: a SessionStart hook runs
+  scripts/session-context.sh, which injects the mode line, the rule-7
+  reminder, and any in-progress .work/TASK.md into context at startup,
+  resume, clear, and after compaction (SessionStart fires with source
+  "compact"). A PreCompact hook was considered and dropped: PreCompact
+  stdout does not reach the model, and the post-compaction re-read is
+  the actual requirement. Other harnesses keep the prose rule.
+- .work/TASK.md and new-task.sh gained a Non-goals section (Spec Kit's
+  specify phase captures non-goals; cheap scope-creep insurance).
+- A .github/copilot-instructions.md pointer was considered and skipped:
+  Copilot coding agent reads AGENTS.md natively (GitHub changelog
+  2025-08-28), so a pointer would duplicate native behavior.

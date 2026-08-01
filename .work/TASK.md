@@ -6,6 +6,10 @@ Date: {{date}}
 ## Goal
 {{one paragraph}}
 
+## Non-goals
+<!-- explicitly out of scope; scope creep gets caught here -->
+- {{out of scope}}
+
 ## Acceptance criteria
 <!-- each maps to an executable test where possible; list test paths -->
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}

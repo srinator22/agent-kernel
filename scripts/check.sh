@@ -69,7 +69,7 @@ if [[ ! -f .start-done ]]; then
     docs/lessons/INDEX.md docs/lessons/PENDING.md docs/lessons/QUARANTINE.md
     scripts/check.sh scripts/check.ps1 scripts/check.cmd
     scripts/kernel-hash.sh scripts/ci-watch.sh scripts/new-task.sh
-    scripts/bg.sh
+    scripts/bg.sh scripts/session-context.sh
     .work/TASK.md .work/done/.gitkeep .work/jobs/.gitkeep
     .claude/settings.json
     .claude/agents/reviewer.md .claude/agents/explore.md
