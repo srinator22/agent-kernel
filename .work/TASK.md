@@ -1,75 +1,36 @@
-# Task: amendment-1
-Mode: standard
-Branch: task/amendment-1
-Date: 2026-08-01
+# Task: {{title}}
+Mode: standard | quick | autopilot
+Branch: {{branch}}
+Date: {{date}}
 
 ## Goal
-Adopt per-task complexity budgets and dynamic-workflow delegation guidance;
-repair the missing template release tag (resolved by verification: the tag
-already exists, see Progress log); fix the stale ADR number in start.md;
-keep the blueprint in sync. Spec: template-repo-amendment-1.md (pasted,
-human-approved; criteria below are the approved criteria).
+{{one paragraph}}
 
 ## Non-goals
 <!-- explicitly out of scope; scope creep gets caught here -->
-- No kernel edits; no changes to procedures, rules, or agents beyond the
-  files listed in Step 2 of the amendment.
-- No reconciliation of the blueprint with earlier post-build rounds (that
-  is a BACKLOG item, not this task).
+- {{out of scope}}
 
 ## Budget
 <!-- declare before work starts; on exhaustion: stop, keep the best verified
      artifact, and report unresolved items with reasons - never hide a partial
      result behind a fluent answer -->
-- Wall-clock: 45 minutes (started 2026-08-01T16:47:46Z)
-- Subagents / workflow runs: 2 (reviewer, monitor)
-- Retries per failing step: 2
-- Escalate to human when: budget exhausted | criteria unreachable | scope exceeds Non-goals
+- Wall-clock: {{max}}
+- Subagents / workflow runs: {{max}}
+- Retries per failing step: {{max, default 2}}
+- Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
 
 ## Acceptance criteria
 <!-- each maps to an executable test where possible; list test paths -->
-- [ ] Budget block present in `.work/TASK.md` template and emitted by `new-task.sh`; this task itself used it. -> self-test 4d + this file
-- [ ] Delegation accelerators section present in `manifest.md` with the VERIFY marker. -> grep manifest.md
-- [ ] `start.md` no longer hardcodes an ADR number; ADR-0002 exists and reads in Context/Decision/Consequences form. -> grep + file
-- [ ] `docs/BLUEPRINT.md` sections 3.11 and 3.14 match the repo again; dated Amendment 1 entry appended. -> diff inspection
-- [ ] BACKLOG entry for blueprint reconciliation exists. -> grep BACKLOG.md
-- [ ] `check.sh` green; kernel hash verified; `AGENTS.md` byte-identical to before the task. -> ./scripts/check.sh + git diff
-- [ ] Annotated tags `template-v0.2.0` (pre-amendment SHA) and `template-v0.2.1` (amendment SHA) exist on the remote. -> git ls-remote
-- [ ] CI for the pushed SHA reached terminal success; reviewer verdict and retro recorded; TASK.md archived to `.work/done/`. -> ci-watch + this file
+- [ ] {{criterion}} -> {{test path or "judgment: reason"}}
 
 ## Plan
-1. Step 2 edits: TASK template Budget (2a), new-task.sh (2b), manifest (2c), start.md (2d), ADR-0002 (2e), ship.md (2f), BLUEPRINT sync (2g), BACKLOG (2h), self-test (2i).
-2. Verify: check.sh, kernel hash, AGENTS.md untouched, bash -n, dash scan, read own diff.
-3. Reviewer gate (subagent 1), record verdict.
-4. Commit (feat), ff-merge to main, push, tag template-v0.2.1, monitor CI (subagent 2).
-5. Retro: fill section, BACKLOG update, archive TASK.md, reset template, second commit, watch CI inline.
+1. {{step}}
 
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
-- 2026-08-01T16:47:46Z task clock start; base verified green at 60d711c (kernel OK, self-test 65 files).
-- 2026-08-01T16:48Z tag premise checked: template-v0.2.0 EXISTS on remote (annotated, at 6aaaafa, the v0.2.0 build commit; pushed at build time). Step 4.2 repair resolves to verified no-op; moving a published tag would violate kernel rule 6. Evidence: git ls-remote origin refs/tags/template-*.
-- 2026-08-01T16:49Z workflow caps verified against live harness: 16 concurrent (min(16, cores-2)), 1000 total per run; VERIFY marker kept in manifest.md for future re-checks.
-- 2026-08-01T16:50Z new-task.sh first live run: branch + TASK.md instantiation worked as designed.
-- 2026-08-01T17:04Z step 2 edits complete (9 files, exactly the amendment list); check.sh green (66 required files); AGENTS.md diff empty; own diff read end to end.
-- 2026-08-01T17:11Z reviewer gate: PASS (subagent 1 of 2); verdict recorded below verbatim.
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
-PASS - staged change set for amendment-1 at review time; criteria 1-6 verified, 7-8 correctly sequenced as post-review delivery steps.
-
-Verified with evidence:
-- Criterion 1 MET: Budget block emitted by scripts/new-task.sh (lines 59-66), present and filled in .work/TASK.md (lines 20-27), asserted by check.sh 4d line 100.
-- Criterion 2 MET: manifest.md lines 9-21, VERIFY marker at lines 15-16.
-- Criterion 3 MET: start.md lines 43-44 say "the next-numbered ADR"; repo-wide grep finds "0002-stack-choice" only in the ADR's historical narrative; docs/decisions/0002-complexity-budgets-and-workflow-delegation.md has Context/Decision/Consequences, dated, accepted.
-- Criterion 4 MET for the amendment's subject matter, verbatim: BLUEPRINT 339-346 = new-task.sh 59-66; BLUEPRINT 391-403 = manifest.md 9-21; BLUEPRINT 257 = start.md step 5; dated Amendment 1 entry at BLUEPRINT line 471. Residual drift (3.11 lacks Non-goals, 3.14 lacks the Windows sentence) is pre-existing - BUILD_NOTES.md line 101 records the Non-goals round - and is the task's declared Non-goal, deferred to the BACKLOG item.
-- Criterion 5 MET: BACKLOG.md line 8.
-- Criterion 6 MET statically: no AGENTS.md or .kernel.hash hunk in the diff; AGENTS.md on disk matches the kernel text; new 4d passes against both valid TASK.md states; the new required file exists. Reviewer tools are read-only, so runtime green is confirmed by the implementer's logged run and by CI on the pushed SHA (criterion 8).
-- Criterion 7 half-MET as designed: template-v0.2.0 corroborated locally (.git/refs/tags/template-v0.2.0 -> annotated tag object 50718a96, target 6aaaafa per progress log); declining to move the published tag is correct under kernel rule 6. template-v0.2.1 is created in plan step 4, after this verdict.
-- Criterion 8 OPEN by design: this verdict is its input; monitor must confirm terminal CI success and archival.
-- Constraints: zero em or en dashes repo-wide (grep for U+2013/U+2014); no secrets; no new dependencies; diff surface is exactly the nine named files.
-- check.sh 4d is not a weakened assertion: old 4d (pristine-only) made the gate structurally red during any live task, contradicting kernel rule 5; the replacement adds a new mandatory Budget assertion plus a two-state structural check, keeps all other 4a-4h assertions, and strengthens 4b by one required file. Authorized in advance by the human-approved amendment's self-test allowance.
-
-Non-blocking observations: (a) BLUEPRINT 3.11's Budget line references Non-goals while 3.11's template block still lacks that section - resolved when the BACKLOG reconciliation runs; (b) the BACKLOG item's parenthetical omits the TASK-template Non-goals round though its main clause covers it; (c) criteria 7b and 8 must be re-verified by the monitor before delivery-done is claimed.
 
 ## Retro
 <!-- filled by docs/procedures/retro.md -->
