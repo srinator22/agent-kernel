@@ -77,3 +77,10 @@ Second review round (2026-08-01):
   worker under Claude Code, which the external reviewer could not do
   (no Claude CLI on their side). Docs confirm hook commands resolve Git
   Bash on Windows independently of the PowerShell PATH.
+- Human decisions recorded: MIT license selected by the owner (LICENSE
+  added; template consumers may relicense their generated projects).
+  Branch ruleset applied at the owner's chosen level: block force-push
+  and branch deletion on the default branch, direct pushes still
+  allowed, matching how this template repo is actually operated. Full
+  PR-gated protection was considered and declined for this repo; it
+  remains the recorded default for projects after start runs.

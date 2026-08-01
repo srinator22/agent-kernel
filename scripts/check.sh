@@ -53,8 +53,8 @@ if [[ ! -f .start-done ]]; then
   # 4b. Every shipped template file exists (the blueprint tree, mechanized).
   required=(
     AGENTS.md CLAUDE.md README.md BACKLOG.md BUILD_NOTES.md CONTRIBUTING.md
-    SECURITY.md manifest.md cliff.toml .kernel.hash .gitignore .editorconfig
-    .gitattributes
+    SECURITY.md LICENSE manifest.md cliff.toml .kernel.hash .gitignore
+    .editorconfig .gitattributes
     .github/workflows/ci.yml
     .github/pull_request_template.md
     .github/ISSUE_TEMPLATE/bug_report.yml
