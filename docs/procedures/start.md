@@ -46,7 +46,10 @@ point in this procedure.
    homepage, and topics (gh) so the sidebar reads properly. Scaffold
    `BACKLOG.md` with the first milestones from the interview.
 7. Configure the harness: attribution/trailers off in settings (verify
-   current key names at run time), branch protection if gated workflow.
+   current key names at run time); seed the permissions allowlist with
+   the stack's safe verification commands (the same format, lint,
+   typecheck, and test commands wired into check.sh); branch protection
+   if gated workflow.
 8. Verify a clean state: `./scripts/check.sh` passes for real (not template
    mode). Fix until it does. Completion rule: start may not declare itself
    complete if format/lint/typecheck/tests cannot actually execute.

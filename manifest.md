@@ -17,5 +17,8 @@ Search: prefer rg for repository text search. Edits: patch-based, scoped, review
   Declare the TASK.md Budget before any fan-out and define the reducer first.
 - Never fragment coherent-context work (architecture design, tightly coupled
   refactors, narrative documents). One context, per kernel rule 16.
+- Parallel edit isolation: concurrent edit-capable workers each get their
+  own git worktree; within one tree, two workers never touch the same file
+  (kernel rule 16).
 - Other harnesses: use the native parallel mechanism or sequential workers;
   the budget-first and reducer-first rules still apply.

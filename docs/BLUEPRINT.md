@@ -256,7 +256,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 4. Fill the Project decisions section of AGENTS.md; append stack-specific lines to Standards if needed (respect the 180-line budget).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write the next-numbered ADR under docs/decisions/ (stack choice, with rejected alternatives).
 6. Rewrite `README.md` for the project, present tense. Set repo description, homepage, and topics (gh) so the sidebar reads properly. Scaffold BACKLOG.md with the first milestones from the interview.
-7. Configure the harness: attribution/trailers off in settings (verify current key names at run time), branch protection if gated workflow.
+7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into check.sh); branch protection if gated workflow.
 8. Verify a clean state: `./scripts/check.sh` passes for real (not template mode). Fix until it does. Completion rule: start may not declare itself complete if format/lint/typecheck/tests cannot actually execute.
 9. Write `.start-done` (date + summary), write `START_REPORT.md` (detected, wired, missing, degraded, manual steps), commit with conventional commits, tag `v0.1.0`, and if the workflow is gated, confirm CI on that SHA via `scripts/ci-watch.sh`.
 10. Never touch the kernel or `.kernel.hash`.
@@ -399,6 +399,9 @@ Search: prefer rg for repository text search. Edits: patch-based, scoped, review
   Declare the TASK.md Budget before any fan-out and define the reducer first.
 - Never fragment coherent-context work (architecture design, tightly coupled
   refactors, narrative documents). One context, per kernel rule 16.
+- Parallel edit isolation: concurrent edit-capable workers each get their
+  own git worktree; within one tree, two workers never touch the same file
+  (kernel rule 16).
 - Other harnesses: use the native parallel mechanism or sequential workers;
   the budget-first and reducer-first rules still apply.
 ```

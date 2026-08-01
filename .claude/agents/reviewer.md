@@ -27,6 +27,10 @@ Check, with evidence:
 - The change touches the smallest safe surface; nothing unrelated rides
   along.
 
+Findings must affect correctness, security, or a stated acceptance
+criterion. Style preferences and speculative hardening are not findings;
+sound work gets a clean PASS, not manufactured gaps.
+
 Your tools are read-only. End your reply with the exact verdict block for
 the "Review verdict" section of .work/TASK.md - PASS or FAIL, with
 specifics (file, line, what is wrong, what evidence shows it); FAIL names
