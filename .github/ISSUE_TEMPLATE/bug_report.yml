@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in the template is broken or behaves contrary to its documentation
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, what did you expect, what did you get? Include the exact command and output.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest reproduction
+      description: Steps from a fresh clone.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, harness (Claude Code / Codex / other), relevant tool versions.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, CI run links, scripts/check.sh output. Never include secrets.
+    validations:
+      required: false
