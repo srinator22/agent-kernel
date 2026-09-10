@@ -37,6 +37,14 @@ These rules govern process. Project truth lives in the Project decisions section
 - Local folders mirroring canonical records are named by the canonical ID, no parallel schemes.
 - README stays present-tense: what the thing IS, not a history.
 
+## Response shape
+
+- Lead with the result or next action.
+- Keep active steps bounded and visible.
+- Finish the primary issue before presenting secondary issues separately.
+- Distinguish confirmed causes from hypotheses; never present an inference as evidence.
+- Preserve relevant information when brevity would make the answer incomplete.
+
 ## Rules index (triggered)
 
 - Architecture and boundaries -> docs/rules/architecture.md

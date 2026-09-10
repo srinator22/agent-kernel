@@ -1,36 +1,54 @@
-# Task: {{title}}
-Mode: standard | quick | autopilot
-Branch: {{branch}}
-Date: {{date}}
+# Task: action-first-response-shape
+Mode: standard
+Branch: codex/action-first-response-shape
+Date: 2026-09-10
 
 ## Goal
-{{one paragraph}}
+Add a small, shared response-shape contract that makes Codex and Claude
+answers easier to act on without importing the external skill's branding,
+medical claims, persistence machinery, or rigid rules.
 
 ## Non-goals
-<!-- explicitly out of scope; scope creep gets caught here -->
-- {{out of scope}}
+- Tool-specific duplicates, hooks, plugins, and runtime persistence.
+- Medical or diagnostic claims about ADHD.
+- Importing the external skill or all ten of its rules.
 
 ## Budget
-<!-- declare before work starts; on exhaustion: stop, keep the best verified
-     artifact, and report unresolved items with reasons - never hide a partial
-     result behind a fluent answer -->
-- Wall-clock: {{max}}
-- Subagents / workflow runs: {{max}}
-- Retries per failing step: {{max, default 2}}
-- Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
+- Wall-clock: 20 minutes
+- Subagents / workflow runs: 1 independent review
+- Retries per failing step: 2
+- Escalate to human when: criteria are unreachable or scope exceeds Non-goals
 
 ## Acceptance criteria
-<!-- each maps to an executable test where possible; list test paths -->
-- [ ] {{criterion}} -> {{test path or "judgment: reason"}}
+- [x] Responses lead with the result or next action -> judgment: communication behavior
+- [x] Active steps remain bounded and visible -> judgment: communication behavior
+- [x] Secondary issues remain separate from the primary issue -> judgment: communication behavior
+- [x] Confirmed causes are distinguished from hypotheses -> judgment: communication behavior
+- [x] Completeness wins when brevity would hide relevant information -> judgment: communication behavior
+- [x] One shared source governs both Codex and Claude -> `CLAUDE.md` imports `AGENTS.md`
+- [x] The canonical template gauntlet passes -> `scripts/check.sh`
 
 ## Plan
-1. {{step}}
+1. Add the smallest shared response-shape section to AGENTS.md outside the kernel.
+2. Verify Claude still imports AGENTS.md and run the canonical gauntlet.
+3. Review the diff for scope and wording.
 
 ## Progress log
-<!-- timestamped one-liners; this is what survives compaction -->
+- 2026-09-10: User-selected five-rule subset adopted as the approved acceptance criteria.
+- 2026-09-10: Created branch codex/action-first-response-shape; no matching approved lessons found.
+- 2026-09-10: Added the shared AGENTS.md response-shape section; kernel hash, template self-test, Claude import, and diff check pass.
+- 2026-09-10: Independent reviewer returned PASS on all seven acceptance criteria.
 
 ## Review verdict
-<!-- written ONLY by the independent reviewer -->
+PASS - all seven acceptance criteria are met.
+
+Verified with evidence:
+- `AGENTS.md` lines 42-46 encode the five approved response-shape behaviors directly.
+- `CLAUDE.md` line 1 remains exactly `@AGENTS.md`; the template self-test verifies this shared-source contract.
+- `scripts/check.ps1` invoked the canonical `scripts/check.sh` successfully: kernel hash OK, line budget 70/180, and template self-test OK for all 66 required files.
+- The response-shape section is outside the protected kernel; `.kernel.hash` is unchanged and verification passed.
+- Only `AGENTS.md` and `.work/TASK.md` changed. No scripts, tests, gates, dependencies, lockfiles, secrets, private data, or unrelated artifacts changed.
+- Input edge-case testing is not applicable to this prose-only behavioral contract; its non-judgment requirements are mechanically covered by the existing Claude import and canonical gauntlet checks.
 
 ## Retro
-<!-- filled by docs/procedures/retro.md -->
+<!-- filled after the feature commit by docs/procedures/retro.md -->
