@@ -12,13 +12,13 @@ These rules govern process. Project truth lives in the Project decisions section
 7. Session protocol. At session start and after any compaction: re-read AGENTS.md, .work/TASK.md, and BACKLOG.md before acting. At session end: run the retro procedure and leave the worktree state understandable.
 8. Memory tiers. Resident: this file (<= 180 lines). Triggered: scan docs/lessons/INDEX.md and the rules index below before non-trivial work; open only matching entries and increment their usage counter. Queryable: docs/decisions/, CHANGELOG.md, git log - grep on demand. Memory is a snapshot: before acting on something memory says exists, verify it still does.
 9. Learning is gated. Proposed lessons go to docs/lessons/PENDING.md as: what happened / what check should have caught it / what was added / retire-when. Confirmed-good calls count as lessons too, not only corrections. Never record what is derivable from the repo itself. Pending entries are not acted on; a human moves approved entries into INDEX.md.
-10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, 8 skills. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
+10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, 8 core skills plus the skills the adopted profiles declare. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
 11. Archive, never delete. Removing a repo artifact means moving it to .archive/ with a one-line reason, only during a maintenance pass, never mid-task. Anything else destructive follows docs/rules/destructive-actions.md: exact absolute target verified read-only first, never a root, home, workspace root, broad glob, or unresolved variable, narrowest recoverable operation, result verified and reported.
 12. Security defaults. Proprietary code and data are private by default. Never commit credentials, tokens, production data, or unapproved raw datasets; the secret scan in check.sh is not optional. Widening exposure (public repos, removed auth, wider network access) requires explicit human authorization. See docs/rules/security.md.
 13. Dependencies are justified. Check existing capability first; the commit body states why. Lockfile committed; lockfile changes reviewed; unused dependencies removed at maintenance.
 14. Evidence before claims. Run it and read the output in this turn before saying it passes. Distinguish built, trained, evaluated, validated, deployed, and production-ready. Never fabricate a value: unverifiable stays empty as "N/A - reason" and is reported. A plausible wrong answer is worse than a visible gap. Full numerical precision internally; round only for display.
 15. Scope and autonomy. Read-only inspection authorizes no edits. A build request authorizes normal reversible work inside the requested scope. Irreversible or outward-facing actions (publishing, deleting data, deployments, external messages, cost changes) need human approval; approval is per-instance until the human records a standing override in Project decisions, after which stop re-asking. Do the requested scope completely, then stop; propose extras separately.
-16. Delegation. The main session is the advisor: it decomposes, designs schemas, reviews, verifies, and commits. Workers execute bounded mechanical tasks with exact paths and known pitfalls, never commit, and never edit the same file concurrently. A monitor agent tracks every push to terminal state. No agents for conversational turns, judgment calls, or trivial edits. Speed comes from parallel rigor, not less rigor.
+16. Delegation. The main session is the advisor: it decomposes, designs schemas, reviews, verifies, and commits. The plan is a task graph: nodes with dependencies, a worker tier and owner files, and nodes in one wave own disjoint files. Workers execute bounded mechanical tasks with exact paths and known pitfalls, never commit, and never edit the same file concurrently. A monitor agent tracks every push to terminal state. No agents for conversational turns, judgment calls, or trivial edits. Speed comes from parallel rigor, not less rigor.
 17. Long work runs as checkpointed, resumable background processes with a gitignored STATE file, never as a token-burning agent loop. See docs/procedures/longjob.md.
 18. Generated artifacts (CHANGELOG.md, lockfiles, build products) are never hand-edited. Change the source or generator and rebuild; CI freshness-checks them.
 19. Escape hatch. A task prefixed "quick:" skips spec and plan ceremony. It never skips rules 2, 6, 12, 14, or 15, and anything merged still requires green CI.
@@ -53,6 +53,13 @@ These rules govern process. Project truth lives in the Project decisions section
 - Experiments, models, leakage, validation status -> docs/rules/scientific-integrity.md
 - Deleting or overwriting anything material -> docs/rules/destructive-actions.md
 - CI permissions, pinning, caching, deploy gating -> docs/rules/ci-baseline.md
+- Advisor, workers, reviewer, monitor, task graph, time caps -> docs/rules/orchestration.md
+- Model tiers, harness adapters, mirror parity -> docs/rules/models.md
+- Project type bundles (rules, gates, tools, playbooks) -> docs/profiles/README.md
+- Before the first feature: what to automate, which tools exist or must be built -> docs/procedures/discover.md
+- Hunting defects proactively; defect memory -> docs/procedures/bughunt.md, docs/DEFECT_MEMORY.md
+- Tests from day one, quarantine, oracle first -> docs/procedures/tests.md
+- Lessons back to the template; staying in sync -> docs/procedures/upstream.md
 
 ## Project decisions
 
@@ -66,5 +73,7 @@ Status: TEMPLATE - not initialized. Run docs/procedures/start.md before any proj
 - Canonical verification: ./scripts/check.sh
 - Data policy: {{what may enter git; where large/private data lives}}
 - Risk profile: {{ordinary / scientific / safety-sensitive / embedded}}
+- Profiles: {{FILLED_BY_START - software always; add scientific, embedded-firmware, hardware-pcb, data-analysis as adopted}}
+- Capability map: {{FILLED_BY_START - docs/CAPABILITY_MAP.md date and the top tools to build}}
 - Standing overrides recorded by the human: {{none yet}}
 - Stack and commands: {{FILLED_BY_START - must exactly match scripts/check.sh}}
