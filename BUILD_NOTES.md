@@ -103,3 +103,38 @@ External-repo learning round (2026-08-01), adopted after verification:
 - A .github/copilot-instructions.md pointer was considered and skipped:
   Copilot coding agent reads AGENTS.md natively (GitHub changelog
   2025-08-28), so a pointer would duplicate native behavior.
+
+Round 4 (2026-10-09): self-improving template (ADR-0003, branch
+task/self-improving-template). Sources: four prior projects of the template
+owner (embedded firmware, controller PCB, vibration data analysis, CAD
+add-in), an exploration report on this repository, and a learnings report
+across the owner's other projects; their records stay in those repositories and
+no project-identifying detail ships in the template. Added:
+
+- docs/profiles/ with README and five profiles (software, scientific,
+  embedded-firmware, hardware-pcb, data-analysis), each carrying rules,
+  gates to wire, tools to build, playbook pointers and an agent set.
+- docs/procedures/discover.md (capability discovery, called from start
+  step 0), bughunt.md (proactive hunting), tests.md (tests from day one),
+  upstream.md (lessons up, template sync down, adoption); docs/DEFECT_MEMORY.md.
+- docs/rules/orchestration.md (task graph, waves, disjoint owner files) and
+  docs/rules/models.md (tiers cheap/standard/strong/inherit, harness
+  adapters, parity rule).
+- scripts/lessons.sh, taskgraph.sh, template-sync.sh, quickgate.sh,
+  selftest.sh and tests/template/; check.sh template mode gains the lessons
+  caps, skills cap, rules-file cap, mirror parity, ADR-reference and
+  BLUEPRINT tree-parity checks and calls selftest.sh.
+- .work/TASK.md Plan became a task graph (node, depends on, owner files,
+  worker tier, status).
+- README rewritten as operating instructions (start, adopt, sync, send
+  lessons back); BLUEPRINT reconciled with the repo, sections 3.16 to 3.18
+  and Amendment 2 added; manifest gained Discovery and VERIFY dates.
+- Kernel amendments applied: rule 10 (skills cap becomes 8 core skills plus
+  the skills the adopted profiles declare, counted by scripts/lessons.sh from
+  each profile's Skills: line) and rule 16 (the plan is a task graph; nodes in
+  one wave own disjoint files, detailed in docs/rules/orchestration.md) were
+  edited and .kernel.hash updated, under the owner's blanket authorisation of
+  2026-10-09 recorded in .work/TASK.md. Revertable on request.
+- Open from this round: the profile skill sets for Claude and Codex, the
+  selftest in a Windows CI matrix, and a template-sync real-run test against
+  a published tag are in BACKLOG.md.

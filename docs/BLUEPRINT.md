@@ -40,7 +40,10 @@ If a capability referenced here does not exist in your harness, implement the po
 ```
 AGENTS.md                     # source of truth: kernel + standards + rules index + project decisions
 CLAUDE.md                     # exactly one line: @AGENTS.md
-README.md                     # for humans: what this template is, how to start
+README.md                     # for humans: start, adopt, sync, what the template enforces
+CONTRIBUTING.md               # rules for changing the template itself
+SECURITY.md                   # vulnerability reporting
+LICENSE                       # MIT
 BACKLOG.md                    # remaining work, priority, reason (template: empty scaffold)
 BUILD_NOTES.md                # gaps/uncertainties hit while building (create only if needed)
 manifest.md                   # declarative environment expectations
@@ -52,12 +55,18 @@ cliff.toml                    # git-cliff config: Conventional Commits -> CHANGE
 .github/
   workflows/
     ci.yml                    # runs scripts/check.sh; optional deploy job gated on same SHA
+  ISSUE_TEMPLATE/
+    bug_report.yml
+  pull_request_template.md
 docs/
   BLUEPRINT.md                # this file, saved verbatim
+  DEFECT_MEMORY.md            # confirmed defects: what happened, why, the check that prevents it
   ARCHITECTURE.md             # {{FILLED_BY_START}}: modules, boundaries, data flow
   operations.md               # {{FILLED_BY_START if deploy target}}: deploy, rollback, monitoring
   decisions/
     0001-template-architecture.md
+    0002-complexity-budgets-and-workflow-delegation.md
+    0003-self-improving-template.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -66,6 +75,10 @@ docs/
     bugfix.md                 # reproduce -> root cause -> failing test -> smallest fix
     audit.md                  # full-repo review with P0-P3 priorities
     longjob.md                # background work: checkpointed, resumable, polite
+    discover.md               # capability discovery before start: tool inventory and build list
+    bughunt.md                # proactive defect hunting from profile checklists and defect memory
+    tests.md                  # test harness and layers wired from day one
+    upstream.md               # lessons up to the template, template sync down, adoption
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -73,16 +86,49 @@ docs/
     scientific-integrity.md
     destructive-actions.md
     ci-baseline.md
+    orchestration.md          # task graph, waves, disjoint owner files, worker rules
+    models.md                 # model tiers (cheap/standard/strong/inherit), harness adapters, parity
+  profiles/                   # project-type bundles selected at start
+    README.md                 # index and the selection procedure
+    software/PROFILE.md       # always on
+    scientific/PROFILE.md
+    embedded-firmware/PROFILE.md
+    hardware-pcb/PROFILE.md
+    hardware-pcb/LAYOUT_PROCESS.md   # the routability-first layout order and router verdicts
+    hardware-pcb/CHECKS.md           # the issue-to-check ledger pattern
+    data-analysis/PROFILE.md
   lessons/
     INDEX.md                  # one line per approved lesson + usage counters
     PENDING.md                # proposed lessons awaiting human approval
     QUARANTINE.md             # flaky tests parked here, each as an open task
+    UPSTREAM.md               # process lessons to send back to the template
 scripts/
   check.sh                    # the single gauntlet: local == CI
   kernel-hash.sh              # --verify | --update (the only sanctioned way to touch .kernel.hash)
   ci-watch.sh                 # poll checks for the exact HEAD SHA until terminal; nonzero on failure
   new-task.sh                 # branch + .work/TASK.md scaffold from template
   bg.sh                       # start/status/tail/stop a background job with log, pidfile, exit marker
+  session-context.sh          # SessionStart hook body: mode line, rule-7 reminder, in-progress task
+  check.ps1                   # Windows wrapper: locates Git Bash, forwards to check.sh
+  check.cmd                   # Windows one-command entry (execution-policy safe), CRLF
+  lessons.sh                  # lessons caps, counters and expiry, enforced mechanically
+  taskgraph.sh                # validates the .work/TASK.md task graph
+  template-sync.sh            # pull template updates into a project, never touching Project decisions
+  quickgate.sh                # fast in-work subset of the gauntlet
+  selftest.sh                 # runs tests/template/ against the template's own scripts
+tests/
+  template/                   # fixtures and tests for the scripts above; called from check.sh
+    lib.sh                    # shared assertion helpers
+    test_kernel_hash.sh
+    test_new_task.sh
+    test_lessons.sh
+    test_taskgraph.sh
+    test_template_sync.sh
+    test_quickgate.sh
+    test_check_always.sh
+    test_blueprint_parity.sh
+    fixtures/
+      check.sh                # pristine template check.sh the tests run against
 .work/
   TASK.md                     # current-task state (template with placeholders); committed
   done/                       # archived task files; committed
@@ -90,7 +136,7 @@ scripts/
   jobs/                       # background-job STATE files and logs; GITIGNORED
     .gitkeep
 .claude/
-  settings.json
+  settings.json               # attribution off; SessionStart hook -> scripts/session-context.sh
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
@@ -101,6 +147,10 @@ scripts/
     ship/SKILL.md             # thin wrapper -> docs/procedures/ship.md
     retro/SKILL.md            # thin wrapper -> docs/procedures/retro.md
     maintain/SKILL.md         # thin wrapper -> docs/procedures/maintain.md
+.codex/
+  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml
+.agents/
+  skills/                     # Codex skills: start, ship, retro, maintain (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
 ```
@@ -130,13 +180,13 @@ These rules govern process. Project truth lives in the Project decisions section
 7. Session protocol. At session start and after any compaction: re-read AGENTS.md, .work/TASK.md, and BACKLOG.md before acting. At session end: run the retro procedure and leave the worktree state understandable.
 8. Memory tiers. Resident: this file (<= 180 lines). Triggered: scan docs/lessons/INDEX.md and the rules index below before non-trivial work; open only matching entries and increment their usage counter. Queryable: docs/decisions/, CHANGELOG.md, git log - grep on demand. Memory is a snapshot: before acting on something memory says exists, verify it still does.
 9. Learning is gated. Proposed lessons go to docs/lessons/PENDING.md as: what happened / what check should have caught it / what was added / retire-when. Confirmed-good calls count as lessons too, not only corrections. Never record what is derivable from the repo itself. Pending entries are not acted on; a human moves approved entries into INDEX.md.
-10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, 8 skills. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
+10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, 8 core skills plus the skills the adopted profiles declare. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
 11. Archive, never delete. Removing a repo artifact means moving it to .archive/ with a one-line reason, only during a maintenance pass, never mid-task. Anything else destructive follows docs/rules/destructive-actions.md: exact absolute target verified read-only first, never a root, home, workspace root, broad glob, or unresolved variable, narrowest recoverable operation, result verified and reported.
 12. Security defaults. Proprietary code and data are private by default. Never commit credentials, tokens, production data, or unapproved raw datasets; the secret scan in check.sh is not optional. Widening exposure (public repos, removed auth, wider network access) requires explicit human authorization. See docs/rules/security.md.
 13. Dependencies are justified. Check existing capability first; the commit body states why. Lockfile committed; lockfile changes reviewed; unused dependencies removed at maintenance.
 14. Evidence before claims. Run it and read the output in this turn before saying it passes. Distinguish built, trained, evaluated, validated, deployed, and production-ready. Never fabricate a value: unverifiable stays empty as "N/A - reason" and is reported. A plausible wrong answer is worse than a visible gap. Full numerical precision internally; round only for display.
 15. Scope and autonomy. Read-only inspection authorizes no edits. A build request authorizes normal reversible work inside the requested scope. Irreversible or outward-facing actions (publishing, deleting data, deployments, external messages, cost changes) need human approval; approval is per-instance until the human records a standing override in Project decisions, after which stop re-asking. Do the requested scope completely, then stop; propose extras separately.
-16. Delegation. The main session is the advisor: it decomposes, designs schemas, reviews, verifies, and commits. Workers execute bounded mechanical tasks with exact paths and known pitfalls, never commit, and never edit the same file concurrently. A monitor agent tracks every push to terminal state. No agents for conversational turns, judgment calls, or trivial edits. Speed comes from parallel rigor, not less rigor.
+16. Delegation. The main session is the advisor: it decomposes, designs schemas, reviews, verifies, and commits. The plan is a task graph: nodes with dependencies, a worker tier and owner files, and nodes in one wave own disjoint files. Workers execute bounded mechanical tasks with exact paths and known pitfalls, never commit, and never edit the same file concurrently. A monitor agent tracks every push to terminal state. No agents for conversational turns, judgment calls, or trivial edits. Speed comes from parallel rigor, not less rigor.
 17. Long work runs as checkpointed, resumable background processes with a gitignored STATE file, never as a token-burning agent loop. See docs/procedures/longjob.md.
 18. Generated artifacts (CHANGELOG.md, lockfiles, build products) are never hand-edited. Change the source or generator and rebuild; CI freshness-checks them.
 19. Escape hatch. A task prefixed "quick:" skips spec and plan ceremony. It never skips rules 2, 6, 12, 14, or 15, and anything merged still requires green CI.
@@ -210,8 +260,9 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 1, always: kernel hash verify via `scripts/kernel-hash.sh --verify`. On mismatch, print a loud multi-line error explaining kernel drift and the sanctioned edit path (human approval + `--update` in the same commit); exit 1.
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
-- Step 4: template-mode gate. If `.start-done` does not exist: print `TEMPLATE MODE - start has not run; stack checks inactive.` and exit 0.
-- Steps 5+ ({{FILLED_BY_START}}), each a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
+- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
+- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
+- Steps 6+ ({{FILLED_BY_START}}), each a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
 
@@ -285,7 +336,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 
 **maintain.md** (monthly or on request; never mid-task):
 
-1. Verify caps: AGENTS.md <= 180 lines; <= 20 lessons; <= 8 skills. Over cap: merge or archive until under.
+1. Verify caps with `scripts/lessons.sh check`: AGENTS.md <= 180 lines; <= 20 lessons; 8 core skills plus the skills the adopted profiles declare. Over cap: merge or archive until under.
 2. Archive lessons unused > 45 days or with retire-when met; merge near-duplicates into one generalized entry. Archival is a move to `.archive/` with a one-line reason.
 3. Run `./scripts/check.sh --full-mutation`; quarantine anything flaky as its own task.
 4. Audit surviving external/live data calls against the local-first rule (each must carry its written reason); convert stragglers. Remove unused dependencies; review lockfile drift.
@@ -336,6 +387,9 @@ Date: {{date}}
 ## Goal
 {{one paragraph}}
 
+## Non-goals
+- {{what this task will not do; scope creep is checked against this list}}
+
 ## Budget
 <!-- declare before work starts; on exhaustion: stop, keep the best verified
      artifact, and report unresolved items with reasons - never hide a partial
@@ -350,7 +404,10 @@ Date: {{date}}
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}
 
 ## Plan
-1. {{step}}
+<!-- task graph (Amendment 2): one node per line; nodes in one wave own disjoint files; validated by scripts/taskgraph.sh -->
+| node | depends on | owner files | worker tier | status |
+|---|---|---|---|---|
+| {{node}} | {{- or node names}} | {{paths}} | {{cheap/standard/strong/advisor}} | todo |
 
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
@@ -370,7 +427,7 @@ Date: {{date}}
 
 ### 3.13 .claude/ - accelerators only; the repo must function without this directory
 
-- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY).
+- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule).
 - **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives only the diff, `.work/TASK.md`, and files it chooses to read; must not receive implementer reasoning; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled; writes PASS/FAIL with specifics into the Review verdict section; gains nothing by being agreeable.
 - **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns findings, never modifies.
 - **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push DENIED via tool permissions (VERIFY syntax; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; reports files touched; if its instruction conflicts with observed evidence, follows the evidence and says so.
@@ -418,6 +475,36 @@ Search: prefer rg for repository text search. Edits: patch-based, scoped, review
 - **.gitignore**: `.env`, `.env.*` (allow `!.env.example`), `.work/jobs/` contents (keep `.gitkeep`), the local instruction file name used by the harness (single line, no comment advertising it), OS/editor junk, caches, coverage, build products. Comment: `.work/TASK.md` and `.work/done/` are deliberately committed - they are memory.
 - **.archive/README.md**: two lines: nothing here is deleted, only moved; every entry gets a one-line reason in the moving commit.
 - **.kernel.hash**: generated last via `scripts/kernel-hash.sh --update` once AGENTS.md is final.
+
+### 3.16 docs/profiles/ - project-type bundles (Amendment 2)
+
+A profile carries what a project type needs beyond the software baseline: rules to promote into the AGENTS.md rules index, gates to wire into `scripts/check.sh` and CI, tools to install or build, playbooks and defect-pattern checklists, an agent and skill set, parameters and record conventions, and additions to the definition of done. `docs/profiles/README.md` holds the index and the selection procedure; each profile is `docs/profiles/<name>/PROFILE.md`.
+
+- `software`: always on; the baseline every project gets.
+- `scientific`: reference fixtures, golden masters, deterministic seeds, documented tolerances, validation status.
+- `embedded-firmware`: code that drives physical outputs; safe states, fault latching, host-side simulation, hardware-in-loop gate.
+- `hardware-pcb`: board design with a decision log, requirements, issue ledger, datasheet store and release gate.
+- `data-analysis`: raw instrument files and logs, import contracts, provenance, analysis and reporting.
+
+Start question 7 (risk profile) is answered with a list; the selection is recorded in Project decisions as one `Profiles:` line, and every name must have a folder here. A profile gate that cannot run on the machine is logged in START_REPORT.md, never wired as a no-op.
+
+### 3.17 New procedures (Amendment 2)
+
+- `docs/procedures/discover.md`: capability discovery before start (start step 0). Classifies every project activity as automate, semi-automate or human only; inventories CLI and MCP tools (CLI over MCP); lists tools to build ranked by hours saved over hours to build; writes `docs/CAPABILITY_MAP.md`.
+- `docs/procedures/bughunt.md`: proactive defect hunting, distinct from bugfix. Concerns chosen from the profile checklist and `docs/DEFECT_MEMORY.md`, a ten-pass review by fresh-context readers, findings recorded and fixed through bugfix.
+- `docs/procedures/tests.md`: tests from day one. Harness, gate step and one passing test per applicable layer wired at start; the determinism contract; oracle before implementation.
+- `docs/procedures/upstream.md`: process lessons flow up to the template through `docs/lessons/UPSTREAM.md`; template updates flow down through `scripts/template-sync.sh`; the same file lists the core file set and steps for adopting the template into an existing project.
+- `docs/DEFECT_MEMORY.md`: project memory of confirmed defects with the check that now prevents each; a fix without a row is not done.
+- `docs/rules/orchestration.md` and `docs/rules/models.md`: the task graph, waves and disjoint owner files; model tiers rather than model names, harness adapters and the parity rule.
+
+### 3.18 New scripts and tests/template (Amendment 2)
+
+- `scripts/lessons.sh`: enforces the lesson caps, usage counters and retire-when expiry mechanically instead of by reading.
+- `scripts/taskgraph.sh`: validates the `.work/TASK.md` Plan table (known nodes, no cycles, disjoint owner files within a wave, valid tiers and statuses).
+- `scripts/template-sync.sh`: fetch the template at a tag, diff the core files, apply non-conflicting updates, never touch Project decisions, re-verify the kernel hash, log the run.
+- `scripts/quickgate.sh`: the fast subset of the gauntlet for use during work; the full gate runs before publication.
+- `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
+- `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
 
 ---
 
@@ -474,3 +561,11 @@ Profiles: scientific work adds reference fixtures, golden-master tests, determin
 ## Amendment 1 (2026-08-01)
 
 Per-task complexity budgets and dynamic-workflow delegation, from the Karpathy autoresearch / Anthropic workflow synthesis (ADR-0002). TASK.md template (3.11) and new-task.sh gain a Budget block; manifest.md (3.14) gains the Delegation accelerators section; start.md now says "the next-numbered ADR" instead of hardcoding 0002. Kernel untouched: budgets are task-state, workflow pointers are harness-specific.
+
+## Amendment 2 (2026-10-09)
+
+Self-improving template (ADR-0003). The original build above is kept as the record; this amendment and sections 3.16 to 3.18 add to it.
+
+Added: project-type profiles (software, scientific, embedded-firmware, hardware-pcb, data-analysis); the discover procedure that runs before start; proactive bug hunting and defect memory; tests from day one; lessons mechanized with caps, counters and expiry; the upstream and sync channel between the template and the projects built from it; a task graph in `.work/TASK.md` validated by `scripts/taskgraph.sh`; model tiers and harness adapters; template self-tests wired into check.sh. Sections 2, 3.3, 3.11 and 3.13 were reconciled with the repository as built (the post-build rounds in BUILD_NOTES.md). Kernel amendments applied (rules 10 and 16 edited, `.kernel.hash` updated with `scripts/kernel-hash.sh --update`) under the owner's blanket authorisation of 2026-10-09 recorded in `.work/TASK.md`: rule 10 skills cap becomes "8 core skills plus the skills the adopted profiles declare" (counted by `scripts/lessons.sh` from each profile's `Skills:` line); rule 16 gains "the plan is a task graph; nodes in one wave own disjoint files" (detailed in `docs/rules/orchestration.md`).
+
+Why: four real projects exposed gaps that the original template could not catch. An embedded controller firmware project (control with safety states) showed that host simulation, defect memory and proactive hunts find what bench tests and reactive fixes miss. A controller PCB project (a large per-issue ledger, decision log, datasheet store) showed that a hardware design needs requirements traceability, a release gate, and tools built early (routability checker, board-from-netlist builder). A vibration data analysis project (raw instrument files) showed the need for provenance rules, import contracts and golden-master fixtures. A CAD add-in project showed that capability discovery (what tools exist, what must be built) belongs before the first feature. Across all four, caps and rules that were prose only were not enforced, so the template now enforces them by script.
