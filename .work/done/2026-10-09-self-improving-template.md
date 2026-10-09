@@ -95,4 +95,10 @@ Findings:
 None.
 
 ## Retro
-<!-- filled by docs/procedures/retro.md -->
+Defects by discovery route (docs/procedures/retro.md):
+- (a) caught pre-merge by checks or review: 23 findings over four review rounds (exposure of private sources in a public repository, kernel records, the skills-cap mechanism, parity depth, sync claims, mirror claims, a profile contradicting the kernel, stale procedures, tier vocabulary, profile contract, a message mismatch, bookkeeping; then the self-tests failing in any started project, template-sync conflicts never recordable, UPSTREAM.md parity, three doc mismatches; then the skills parser dropping a name before a semicolon and one stale cap line). Each has a regression test or a check where one is expressible (test_check_always.sh started-project scenario and fixture drift case, test_template_sync.sh scenario (h), test_lessons.sh trailing-punctuation case, test_blueprint_parity.sh, the check.sh fixture identity step). Nothing recorded: the system worked.
+- (b) escaped past merge: none.
+- (c) reported by the human: none in this task; the owner's one steer ("keep going" after the public-repository exposure was raised) confirmed the genericising, which kernel rule 12 already states, so nothing new is recorded.
+- (d) self-noticed: shell heredoc escapes mangled a patch script once; worked around by writing the script to a file first. Tooling, not repository knowledge; nothing recorded.
+Lessons consulted: none in INDEX.md (the index is empty). No PENDING.md or UPSTREAM.md entry: every lesson is already a check.
+Open for the owner: confirm the exact applied text of kernel rules 10 and 16 (Plan item 9); decide on a template-v0.3.0 tag; BACKLOG rows on the Windows CI matrix, the real-tag sync test and the before-start skills cap stay open.
