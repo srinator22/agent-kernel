@@ -70,7 +70,12 @@ Date: $DATE_UTC
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}
 
 ## Plan
-1. {{step}}
+<!-- task graph: one node per row; nodes that can run in the same wave must
+     own disjoint files. Tiers: cheap, standard, strong, advisor, reviewer.
+     Status: todo, doing, done, blocked. Validate: scripts/taskgraph.sh check -->
+| node | depends on | owner files | worker tier | status |
+|---|---|---|---|---|
+| N1 | - | path/one, path/two | standard | todo |
 
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
