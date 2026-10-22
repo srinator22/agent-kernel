@@ -85,7 +85,9 @@ with `scientific` when a claim is quantitative.
 
 ## Agents and skills
 
-- Skills: test-data-analyst (carries the workflow above).
+- Skills: test-data-analyst, add-channel.
+  Shipped in `skills/`, installed by start: the workflow above, and adding a
+  signal to the import pipeline.
 - `reviewer` re-derives two headline numbers from the raw file independently.
 
 ## Parameters and records

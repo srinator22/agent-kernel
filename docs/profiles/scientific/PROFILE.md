@@ -82,7 +82,10 @@ into the AGENTS.md rules index.
 
 ## Agents and skills
 
-- Skills: verify-core (run goldens, read output, then claim).
+- Skills: verify-core, register-experiment, experiment-ops,
+  experiment-review, train-model, publish-model (shipped in `skills/`,
+  installed by start: goldens before claims, raw capture to a ready record,
+  routing, coverage review, audited training, gated publishing).
 - `reviewer` checks every number in a report against its source file.
 - Independent recomputation is done by a worker given only the spec, not the
   implementation.

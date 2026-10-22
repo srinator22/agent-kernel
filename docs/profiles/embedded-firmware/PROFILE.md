@@ -95,10 +95,13 @@ project supplies.
 
 - arduino-cli, host C++ compiler (g++, clang++ or the ziglang package):
   `exists`; install check `--version`; absent means gate failure.
+- Release tag and archive checker: shipped as `tools/check_release_tags.py`
+  (tests in `tools/tests/`); one call per firmware variant, `--require-current`
+  at release.
 - Host simulator (build, fakes, world, scenario loader, runner), release gate
-  script, release tag checker, release archive script, configuration contract
-  checker with tunables: `exists in a prior embedded controller firmware
-  project, port on adoption`.
+  script, release archive script, configuration contract checker with
+  tunables: `exists in a prior embedded controller firmware project, port on
+  adoption`.
 - Run-log analysers (see data-analysis profile): `build` per log schema.
 
 ## Playbooks
@@ -123,9 +126,9 @@ project supplies.
 
 - Reviewer with fresh context on every behaviour change; a coder owns one
   firmware file at a time; the host simulator replaces bench for sequencing.
-- Skills: bug-review, release-manager, test-data-analyst, electronics-docs,
-  memory-keeper (`exists in a prior embedded controller firmware project`);
-  each counts against the cap once the profile is adopted.
+- Skills: bug-review, release-manager, electronics-docs, memory-keeper
+  (shipped in `skills/`, installed by start; test-data-analyst comes with the
+  data-analysis profile).
 
 ## Parameters and records
 

@@ -197,6 +197,8 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_taskgraph.sh tests/template/test_template_sync.sh
     tests/template/test_quickgate.sh tests/template/test_check_always.sh
     tests/template/test_blueprint_parity.sh tests/template/fixtures/check.sh
+    docs/decisions/0004-profile-agent-sets.md docs/library/README.md
+    tests/template/test_profile_tools.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"

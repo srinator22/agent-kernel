@@ -127,6 +127,17 @@ echo "# alpha" > .agents/skills/alpha/SKILL.md
 run ./scripts/lessons.sh check
 assert_rc "mirrored skills pass" 0
 
+# ship_skill PROFILE NAME...: a profile ships every skill its Skills: line
+# declares (shipped_set_errors requires the folders).
+ship_skill() {
+  local p="$1" n
+  shift
+  for n in "$@"; do
+    mkdir -p "docs/profiles/$p/skills/$n"
+    printf -- '---\nname: %s\ndescription: test skill\n---\n' "$n" > "docs/profiles/$p/skills/$n/SKILL.md"
+  done
+}
+
 # Skills cap: 8 core plus declared profile skill sets.
 for i in 2 3 4 5 6 7 8 9; do
   mkdir -p ".claude/skills/s$i" ".agents/skills/s$i"
@@ -137,6 +148,7 @@ assert_rc "9 skills with no profile skill set fail" 1
 assert_contains "cap of 8 is named" "the cap is 8"
 mkdir -p docs/profiles/p1
 printf 'Profile p1\nSkills: s9-extra\n' > docs/profiles/p1/PROFILE.md
+ship_skill p1 s9-extra
 run ./scripts/lessons.sh check
 assert_rc "9 skills with one declared profile skill set pass" 0
 printf -- '- Profiles: other\n' > AGENTS.md
@@ -156,6 +168,7 @@ for i in 9 10 11; do
 done
 mkdir -p docs/profiles/p3
 printf 'Profile p3\n- Skills: ska, skb, skc\n' > docs/profiles/p3/PROFILE.md
+ship_skill p3 ska skb skc
 run ./scripts/lessons.sh check
 assert_rc "11 skills with a profile listing three pass" 0
 mkdir -p .claude/skills/s12 .agents/skills/s12
@@ -164,6 +177,7 @@ run ./scripts/lessons.sh check
 assert_rc "12 skills with a profile listing three fail" 1
 assert_contains "the cap formula prints its figures" "the cap is 11 (8 core + 3 skills listed by the adopted profiles = 11"
 printf 'Profile p3\n- Skills: ska, skb,\n  skc (a note, with a comma), skd\n' > docs/profiles/p3/PROFILE.md
+ship_skill p3 skd
 run ./scripts/lessons.sh check
 assert_rc "a list wrapped onto a second line counts four" 0
 printf 'Profile p3\n- Skills: ska, skb, skc,\n  skd (`a note`);\n  the rest of the sentence.\n' > docs/profiles/p3/PROFILE.md
@@ -172,6 +186,7 @@ assert_rc "a list ending in a parenthetical and a semicolon still counts four" 0
 run ./scripts/lessons.sh stats
 assert_contains "stats shows the four declared skills" "8 core + 4 skills"
 printf 'Profile p3\nSkills: none\n' > docs/profiles/p3/PROFILE.md
+rm -rf docs/profiles/p3/skills
 run ./scripts/lessons.sh check
 assert_rc "Skills: none adds nothing" 1
 rm -rf docs/profiles .claude/skills/s9 .claude/skills/s10 .claude/skills/s11 .claude/skills/s12
@@ -198,6 +213,55 @@ printf 'the explore agent is mentioned here only\n' > docs/rules/models.md
 run ./scripts/lessons.sh check
 assert_rc "a mention without the exception wording fails" 1
 rm -rf .claude/agents .codex docs/rules/models.md
+
+# Shipped agent and skill sets under docs/profiles/*/ and docs/library/.
+mkdir -p docs/profiles/p4
+printf 'Profile p4\n- Skills: alpha-skill\n' > docs/profiles/p4/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a declared skill with no shipped folder fails" 1
+assert_contains "the missing folder is named" "Skills: lists alpha-skill but docs/profiles/p4/skills/alpha-skill/SKILL.md does not exist"
+ship_skill p4 alpha-skill
+run ./scripts/lessons.sh check
+assert_rc "a declared and shipped skill passes" 0
+ship_skill p4 beta-skill
+run ./scripts/lessons.sh check
+assert_rc "a shipped skill the Skills: line omits fails" 1
+assert_contains "the undeclared folder is named" "docs/profiles/p4/skills/beta-skill ships but docs/profiles/p4/PROFILE.md does not list it"
+rm -rf docs/profiles/p4/skills/beta-skill
+printf -- '---\nname: wrong\ndescription: x\n---\n' > docs/profiles/p4/skills/alpha-skill/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a skill whose name: is not its folder fails" 1
+assert_contains "the name mismatch is named" "alpha-skill/SKILL.md: frontmatter name: must be alpha-skill"
+printf -- '---\nname: wrong\ndescription: x\n---\nname: alpha-skill\n' > docs/profiles/p4/skills/alpha-skill/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a body line cannot stand in for the frontmatter name" 1
+assert_contains "the frontmatter name is still required" "alpha-skill/SKILL.md: frontmatter name: must be alpha-skill"
+printf -- '---\nname: alpha-skill\n---\ndescription: in the body\n' > docs/profiles/p4/skills/alpha-skill/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a description outside the frontmatter fails" 1
+assert_contains "the missing description is named" "alpha-skill/SKILL.md: frontmatter missing description"
+ship_skill p4 alpha-skill
+mkdir -p docs/profiles/p4/agents
+printf -- '---\nname: helper\ndescription: x\nmodel: sonnet\n---\n' > docs/profiles/p4/agents/helper.md
+run ./scripts/lessons.sh check
+assert_rc "a shipped agent with no Codex twin fails" 1
+assert_contains "the missing twin is named" "no Codex twin docs/profiles/p4/agents/helper.toml"
+printf 'name = "helper"\ndescription = "x"\n' > docs/profiles/p4/agents/helper.toml
+run ./scripts/lessons.sh check
+assert_rc "a Codex twin without developer_instructions fails" 1
+assert_contains "the missing field is named" "helper.toml: missing developer_instructions field"
+printf 'developer_instructions = """\nx\n"""\n' >> docs/profiles/p4/agents/helper.toml
+run ./scripts/lessons.sh check
+assert_rc "a complete profile agent pair passes" 0
+mkdir -p docs/library/skills/gamma
+echo "no frontmatter" > docs/library/skills/gamma/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a library skill without frontmatter fails" 1
+assert_contains "the library skill is named" "docs/library/skills/gamma/SKILL.md: frontmatter must open with ---"
+printf -- '---\r\nname: gamma\r\ndescription: x\r\n---\r\n' > docs/library/skills/gamma/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a CRLF library skill with frontmatter passes" 0
+rm -rf docs/profiles docs/library
 
 # tests/quarantine.list: owner and date required, at most 30 days old.
 mkdir -p tests

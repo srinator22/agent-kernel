@@ -1,0 +1,32 @@
+{
+  "name": "Example 12 V actuator branch (made-up numbers)",
+  "rail": {"nominal_v": 12.0, "max_v": 12.6, "overshoot_v": 0.8},
+  "source": {"rating_a": 12.0, "current_limit_a": 15.0, "can_sink": false},
+  "series_resistance_ohm": {"source_output": 0.015, "wiring": 0.025, "fuse_cold": 0.02},
+  "capacitor": {"capacitance_f": 0.001, "voltage_rating_v": 25.0, "esr_ohm": 0.04},
+  "fuse": {
+    "rating_a": 4.0,
+    "type": "time-delay",
+    "melting_i2t_a2s": 30.0,
+    "pulse_derating": 0.4,
+    "voltage_rating_v": 24.0,
+    "continuous_fraction": 0.7,
+    "temperature_rerating": 0.85
+  },
+  "holder": {"rating_a": 10.0},
+  "wires": [{"name": "branch 20 AWG", "ampacity_a": 6.0}],
+  "loads": [
+    {
+      "name": "actuator",
+      "continuous_supply_a": 1.5,
+      "peak_supply_a": 6.0,
+      "peak_duration_s": 0.1,
+      "regeneration_j": 0.02,
+      "max_supply_v": 18.0
+    }
+  ],
+  "sizing_basis": [
+    {"name": "actuator current limit mA", "assumed": 2000, "current": 2000,
+     "current_source": "example", "sizes": "fuse rating"}
+  ]
+}
