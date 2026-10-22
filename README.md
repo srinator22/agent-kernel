@@ -135,7 +135,11 @@ Each profile ships its agents (with Codex twins), skills and tested tools in
 its own `agents/`, `skills/` and `tools/` folders, and start copies them in
 when the profile is adopted. Optional items proven in only one project live
 in `docs/library/` (agents, skills, procedures, tools, a shell hook) and are
-adopted by choice (ADR 0004).
+adopted by choice (ADR 0004). `docs/roster/` holds opt-in department
+agents (R&D leadership, programme, mechanical and product, electronics and
+firmware, quality and safety, production, documentation, video): read-only
+leads that review and decide, and specialists that each write one folder
+(ADR 0005).
 
 ## Procedures
 

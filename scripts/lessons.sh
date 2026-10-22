@@ -23,7 +23,7 @@
 # "- Profiles:" line naming profiles, only those count);
 # every .claude/agents/<name>.md has a .codex/agents/<name>.toml or a line in
 # docs/rules/models.md naming it with "no Codex counterpart"; the agent and
-# skill sets under docs/profiles/*/ and docs/library/ are well formed, and each
+# skill sets under docs/profiles/*/, docs/library/ and docs/roster/ are well formed, and each
 # profile's Skills: names equal its skills/ folders (shipped_set_errors);
 # every docs/rules/*.md <= 40 lines; tests/quarantine.list entries (lines
 # "<test path> # owner: <task> date: YYYY-MM-DD") carry an owner and a date and
@@ -425,11 +425,13 @@ cmd_check() {
       if [[ -n "$msg" ]]; then errs+=("$msg"); fi
     done < <(shipped_set_check "$(dirname "$pf")" "$pf")
   done
-  if [[ -d docs/library ]]; then
+  local optdir
+  for optdir in docs/library docs/roster; do
+    [[ -d "$optdir" ]] || continue
     while IFS= read -r msg; do
       if [[ -n "$msg" ]]; then errs+=("$msg"); fi
-    done < <(shipped_set_check docs/library)
-  fi
+    done < <(shipped_set_check "$optdir")
+  done
 
   # Rules files stay small enough to read whole.
   local f n
