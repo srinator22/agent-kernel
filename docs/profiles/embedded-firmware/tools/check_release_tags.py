@@ -320,7 +320,10 @@ def run_check(args: argparse.Namespace) -> list[Line]:
         # A tagged current version gets rules A, B and D through whichever name resolves it, including a
         # legacy-tag exception that the prefixed-tag discovery above cannot see.
         required.setdefault(current, "current version")
-    pending = current_tag is None and (newest is None or current == newest)
+    # A version named by an exception line is a release, never a pending one, so it keeps the checks
+    # its exception does not excuse.
+    named = {version for version, _kind in exceptions}
+    pending = current_tag is None and current not in named and (newest is None or current == newest)
     if pending:
         required.pop(current, None)
 
@@ -332,7 +335,18 @@ def run_check(args: argparse.Namespace) -> list[Line]:
         if name is None:
             legacy = exceptions.get((version, "legacy-tag"))
             if (version, "no-tag") in exceptions:
-                lines.append(Line("WARN", version, ["untagged, excused by the exceptions file"]))
+                # no-tag excuses rules A and B only; rule D (the archive) still applies unless a
+                # no-archive line excuses it too.
+                statuses = ["WARN"]
+                reasons = ["untagged, excused by the exceptions file"]
+                status, reason = verify_archive(args, version)
+                if status == "FAIL" and (version, "no-archive") in exceptions:
+                    statuses.append("WARN")
+                    reasons.append("no archive, excused by the exceptions file")
+                else:
+                    statuses.append(status)
+                    reasons.append(reason)
+                lines.append(Line(worst(statuses), version, reasons))
             elif legacy:
                 lines.append(Line("FAIL", version, [
                     f"no tag {args.tag_prefix}v{version}, and the legacy tag {legacy} that the exceptions "
@@ -389,6 +403,8 @@ def run_check(args: argparse.Namespace) -> list[Line]:
         if checked.status != "PASS":
             reason += f", but that tag fails the checks above: {'; '.join(checked.reasons)}"
         lines.append(Line(checked.status, current, [reason]))
+    elif current in named:
+        pass  # checked above as a release under its exception; nothing is pending
     elif pending:
         reasons = [f"pending release: tag before upload (current {current} has no tag)"]
         if (root / args.archive_root / f"v{current}").exists():

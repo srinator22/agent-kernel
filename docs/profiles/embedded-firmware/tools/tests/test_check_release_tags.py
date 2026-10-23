@@ -286,7 +286,8 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(code, 1, output)
         self.assertRegex(output, r"FAIL\s+1\.0\.0: no tag fw-v1\.0\.0")
         # no-tag excuses the tag: the release is listed as an excused warning, not silently skipped.
-        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n"
+                                         "0.9.0 no-archive: before the archive scheme\n")
         code, output = self.run_without_changelog()
         self.assertEqual(code, 0, output)
         self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused")
@@ -297,10 +298,41 @@ class RuleTests(unittest.TestCase):
         self.repo.archive("1.0.1")
         code, output = self.run_checker()
         self.assertEqual(code, 1, output)
-        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n"
+                                         "0.9.0 no-archive: before the archive scheme\n")
         code, output = self.run_checker("--exceptions", "EXCEPTIONS.md")
         self.assertEqual(code, 0, output)
         self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused")
+
+    def test_no_tag_does_not_excuse_the_archive(self) -> None:
+        # The review probe: 0.9.0 no-tag with no archive used to exit 0.
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertRegex(output, r"FAIL\s+0\.9\.0: untagged, excused by the exceptions file; archive releases/fw/v0\.9\.0/ missing")
+
+    def test_no_tag_release_with_its_archive_is_an_excused_warning(self) -> None:
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.archive("0.9.0")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 0, output)
+        self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused by the exceptions file; archive verified")
+
+    def test_current_version_named_by_an_exception_is_not_pending(self) -> None:
+        # The current version with a no-tag line is a release: its archive is still required, and it is
+        # not waved through as a pending release.
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.write("EXCEPTIONS.md", "1.0.0 no-tag: tagged elsewhere\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertNotIn("pending release", output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: untagged, excused by the exceptions file; archive releases/fw/v1\.0\.0/ missing")
 
     def test_tag_contents_must_match_the_version(self) -> None:
         self.repo.commit_version("1.0.0", changelog("1.0.0"), code_version="0.9.9")
