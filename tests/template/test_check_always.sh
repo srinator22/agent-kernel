@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# check.sh: the "always" section (style, memory caps, task graph, selftest when
-# tests/template exists) runs in project mode as well as template mode, and
+# check.sh: the "always" section (style, memory caps, task graph, ADR format,
+# selftest when tests/template exists) runs in project mode as well as template mode, and
 # --quick never skips it. Project mode is a fixture with a fake .start-done and a
 # minimal AGENTS.md; a clean fixture reaches the unwired stack block and fails
 # there. Template mode is a fixture with every required file stubbed and exits 0.
@@ -32,7 +32,7 @@ AG
 
 # ---- project mode ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 echo "src" > src.txt
@@ -83,11 +83,20 @@ commit_fixture
 run ./scripts/check.sh
 assert_rc "a bad task graph fails in project mode" 1
 assert_contains "the task graph failure is reported" "scripts/taskgraph.sh check failed"
+write_task
+mkdir -p docs/decisions
+printf '# 0002 - Skipped one\n\nDate: 2026-01-01\nStatus: accepted\n' > docs/decisions/0002-skipped-one.md
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "a misnumbered ADR fails project mode, even with --quick" 1
+assert_contains "the ADR failure is reported" "scripts/adr.sh check failed"
+assert_contains "the ADR problem is named" "number 0002 breaks the sequence"
+assert_not_contains "the stack block is not reached after an ADR failure" "$STACK_MSG"
 t_cleanup
 
 # ---- project mode with tests/template present: selftest runs in the always section ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh selftest.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 touch .start-done
@@ -106,7 +115,7 @@ t_cleanup
 
 # ---- template mode: a clean fixture still exits 0 ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh selftest.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh
 # The required list is read from the real check.sh so the fixture cannot drift.
 mapfile -t REQUIRED < <(sed -n '/^  required=(/,/^  )/p' "$T_CHECK" | sed '1d;$d' | tr -s ' ' '\n' | sed '/^$/d')
 BP="docs/BLUEPRINT.md"
@@ -132,6 +141,8 @@ for f in "${REQUIRED[@]}"; do
     .codex/agents/*.toml)
       printf 'name = "x"\ndescription = "y"\ndeveloper_instructions = "z"\n' > "$f" ;;
     .claude/settings.json) echo '{}' > "$f" ;;
+    docs/decisions/*.md)
+      printf '# %s - Stub\n\nDate: 2026-01-01\nStatus: accepted\n' "$(basename "$f" | cut -c1-4)" > "$f" ;;
     .work/TASK.md) printf '# Task: fixture\n\n## Budget\n' > "$f" ;;
     CLAUDE.md) echo '@AGENTS.md' > "$f" ;;
     *) echo "stub" > "$f" ;;

@@ -90,8 +90,9 @@ point in this procedure.
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
    and, if deploying, `docs/operations.md` (deploy, rollback, monitoring).
    Write the next-numbered ADR under docs/decisions/ (stack choice, with
-   rejected alternatives). The template's ADRs 0001 to 0003 stay as history;
-   project ADRs start after them.
+   rejected alternatives) with `scripts/adr.sh new` per
+   `docs/procedures/adr.md`. The template's ADRs stay as history; project
+   ADRs continue their numbering.
 6. Rewrite `README.md` for the project, present tense. Set repo description,
    homepage, and topics (gh) so the sidebar reads properly (per Q11). Replace
    `BACKLOG.md` with the project's backlog (first milestones from the
