@@ -22,7 +22,9 @@
 # docs/profiles/*/PROFILE.md, comma-separated; when AGENTS.md has a
 # "- Profiles:" line naming profiles, only those count);
 # every .claude/agents/<name>.md has a .codex/agents/<name>.toml or a line in
-# docs/rules/models.md naming it with "no Codex counterpart";
+# docs/rules/models.md naming it with "no Codex counterpart"; the agent and
+# skill sets under docs/profiles/*/ and docs/library/ are well formed, and each
+# profile's Skills: names equal its skills/ folders (shipped_set_errors);
 # every docs/rules/*.md <= 40 lines; tests/quarantine.list entries (lines
 # "<test path> # owner: <task> date: YYYY-MM-DD") carry an owner and a date and
 # are at most 30 days old. Entries whose fields are all empty are the
@@ -158,24 +160,104 @@ profile_skills_value() {
     END { if (found) print v }' "$1"
 }
 
-# Number of skills one profile declares: the comma-separated skill names in its
-# Skills: value ("none", "-", "n/a" and the "the core set" wording of the
-# software profile declare zero). Parentheticals, backticks and trailing
+# Skill names one profile declares, one per line: the comma-separated names in
+# its Skills: value ("none", "-", "n/a" and the "the core set" wording of the
+# software profile declare none). Parentheticals, backticks and trailing
 # sentence punctuation are dropped; only tokens shaped like a skill name count.
-profile_skill_count() {
-  local value lower item count=0
+profile_skill_names() {
+  local value lower item
   value="$(profile_skills_value "$1")"
-  [[ -n "$value" ]] || { echo 0; return; }
+  [[ -n "$value" ]] || return 0
   lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//')"
-  if [[ "$lower" =~ ^(none|-|n/a)([^a-z0-9]|$) ]]; then echo 0; return; fi
-  if [[ "$lower" =~ ^(the[[:space:]]+)?core([^a-z0-9]|$) ]]; then echo 0; return; fi
+  if [[ "$lower" =~ ^(none|-|n/a)([^a-z0-9]|$) ]]; then return 0; fi
+  if [[ "$lower" =~ ^(the[[:space:]]+)?core([^a-z0-9]|$) ]]; then return 0; fi
   value="$(printf '%s' "$value" | sed -e 's/([^)]*)//g' -e 's/`//g' -e 's/[[:space:]]*[.;:][[:space:]]*$//')"
   local IFS=','
   for item in $value; do
     item="$(printf '%s' "$item" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    [[ "$item" =~ ^[a-z0-9][a-z0-9-]*$ ]] && count=$((count + 1))
+    [[ "$item" =~ ^[a-z0-9][a-z0-9-]*$ ]] && echo "$item"
   done
-  echo "$count"
+  return 0
+}
+
+profile_skill_count() {
+  local n
+  n="$(profile_skill_names "$1" | grep -c . || true)"
+  echo $((n + 0))
+}
+
+# frontmatter_field FILE KEY: the value of KEY: inside the leading --- block
+# only (a body line that happens to read "name: x" does not count); CRLF-safe.
+frontmatter_field() {
+  awk -v key="$2" '
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    index($0, key ":") == 1 { v = substr($0, length(key) + 2); sub(/^[ \t]+/, "", v); print v; exit }' "$1"
+}
+
+# Printed last by shipped_set_errors; a caller that does not see it knows the
+# function stopped early (it runs in a process substitution, whose failure
+# would otherwise look like "no problems").
+SHIPPED_DONE="shipped-set-check-complete"
+
+# shipped_set_errors DIR [PROFILE.md]: one problem per line for the agents and
+# skills a profile (or docs/library) ships for start to install, then the
+# SHIPPED_DONE line. Every agents/<name>.md has frontmatter whose name: is
+# <name>, a description:, and an agents/<name>.toml Codex twin; every .toml
+# carries name, description and developer_instructions; every
+# skills/<name>/SKILL.md has frontmatter whose name: is <name> and a
+# description:. With a PROFILE.md, its Skills: names and the skills/ folders
+# are the same set, so the cap of kernel rule 10 counts exactly what start
+# installs.
+shipped_set_errors() {
+  local dir="$1" profile="${2:-}" f name declared shipped
+  for f in "$dir"/agents/*.md "$dir"/skills/*/SKILL.md; do
+    [[ -f "$f" ]] || continue
+    if [[ "$f" == */SKILL.md ]]; then name="$(basename "$(dirname "$f")")"; else name="$(basename "$f" .md)"; fi
+    if ! head -n 1 "$f" | tr -d '\r' | grep -qx -- '---'; then
+      echo "$f: frontmatter must open with ---"
+      continue
+    fi
+    [[ -n "$(frontmatter_field "$f" description)" ]] || echo "$f: frontmatter missing description"
+    [[ "$(frontmatter_field "$f" name)" == "$name" ]] || echo "$f: frontmatter name: must be $name"
+    if [[ "$f" != */SKILL.md && ! -f "$dir/agents/$name.toml" ]]; then
+      echo "$f: no Codex twin $dir/agents/$name.toml"
+    fi
+  done
+  for f in "$dir"/agents/*.toml; do
+    [[ -f "$f" ]] || continue
+    grep -q '^name = ' "$f" || echo "$f: missing name field"
+    grep -q '^description = ' "$f" || echo "$f: missing description field"
+    grep -q '^developer_instructions = ' "$f" || echo "$f: missing developer_instructions field"
+  done
+  for f in "$dir"/skills/*/; do
+    [[ -d "$f" ]] || continue
+    [[ -f "$f/SKILL.md" ]] || echo "${f%/}: skill folder has no SKILL.md"
+  done
+  if [[ -n "$profile" ]]; then
+    declared="$(profile_skill_names "$profile" | sort -u)"
+    # A missing skills/ folder must not end this function under set -e.
+    shipped="$(for f in "$dir"/skills/*/; do if [[ -d "$f" ]]; then basename "$f"; fi; done | sort -u)"
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      printf '%s\n' "$shipped" | grep -qx -- "$name" || echo "$profile: Skills: lists $name but $dir/skills/$name/SKILL.md does not exist"
+    done <<< "$declared"
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      printf '%s\n' "$declared" | grep -qx -- "$name" || echo "$dir/skills/$name ships but $profile does not list it on its Skills: line"
+    done <<< "$shipped"
+  fi
+  echo "$SHIPPED_DONE"
+}
+
+# shipped_set_check DIR [PROFILE.md]: problems from shipped_set_errors, plus one
+# when the function did not run to completion.
+shipped_set_check() {
+  local out
+  out="$(shipped_set_errors "$@" || true)"
+  printf '%s\n' "$out" | grep -vx -- "$SHIPPED_DONE" | grep . || true
+  printf '%s\n' "$out" | grep -qx -- "$SHIPPED_DONE" || echo "shipped-set check of $1 stopped before completing"
 }
 
 # Total profile skills over the adopted profiles (all profiles when AGENTS.md
@@ -332,6 +414,21 @@ cmd_check() {
       fi
       errs+=(".claude/agents/$agname.md has no .codex/agents/$agname.toml and docs/rules/models.md has no line naming '$agname' with 'no Codex counterpart'")
     done
+  fi
+
+  # Agent and skill sets shipped by profiles and the library are well formed
+  # and match what each profile declares.
+  local pf msg
+  for pf in docs/profiles/*/PROFILE.md; do
+    [[ -f "$pf" ]] || continue
+    while IFS= read -r msg; do
+      if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+    done < <(shipped_set_check "$(dirname "$pf")" "$pf")
+  done
+  if [[ -d docs/library ]]; then
+    while IFS= read -r msg; do
+      if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+    done < <(shipped_set_check docs/library)
   fi
 
   # Rules files stay small enough to read whole.

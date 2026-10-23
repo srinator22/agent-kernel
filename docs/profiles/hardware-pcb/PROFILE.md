@@ -29,6 +29,9 @@ Detail files: `LAYOUT_PROCESS.md` (order of layout work), `CHECKS.md` (ledger).
 - PCB-16 Every escaped issue gets a ledger row (`CHECKS.md`) before its fix; a layout starts with routability (`LAYOUT_PROCESS.md`).
 - PCB-17 Reviewers are read-only; findings are recorded unchanged; every external finding is dispositioned: accepted with a decision or question, rejected with the technical reason, or already covered with the reference.
 - PCB-18 One writer at a time per shared file; one KiCad operator at a time on the live board file.
+- PCB-19 Every part recommendation, substitution or re-rating goes through component-selection (coupling sweep, power-branch calculation, two or more options with side effects, a component-reviewer pass) before the owner sees it; an unpublished behaviour is UNKNOWN, never a reassurance.
+- PCB-20 No enclosure or system design is called final and no BOM goes to the owner to buy without a box-design-review verdict recorded in `analysis/<date>_EE_REVIEW_<topic>.md`.
+- PCB-21 A hardware value sized from a setting records its sizing basis beside the part; a change to that setting re-runs the sizing before use under load.
 
 ## Gates
 
@@ -42,22 +45,24 @@ Exit codes for every command: 0 pass, 1 check failed, 2 could not run (never a p
 | WARN ownership | review of the dated gate record | every WARN and numeric INFO has an owner | PCB-15 |
 | Review ladder (each milestone) | review, see Playbooks; findings in `analysis/<date>_REVIEW.md` | verdict SHIP, every finding dispositioned | PCB-17 |
 | Hold points | review; stop until the owner answers in chat | owner reply recorded | PCB-7, PCB-13 |
+| Part selection and box review | review: component-reviewer verdict; senior-ee-reviewer record | every finding dispositioned; record exists before purchase | PCB-19, PCB-20, PCB-21 |
 | Ledger counts | `<check_ledger>` (`CHECKS.md`) | exit 0, counts equal rows | PCB-L3 |
 
 Hold points: board STEP with tracks to the owner before silkscreen; owner confirmation after their own review before manufacturing outputs; usability and accessibility walk (three framed cold reads: installer, service technician, firmware engineer) before the hand-over set; a first article of a few assembled plus bare boards before any batch.
 
 ## Tools
 
-All tools take `--help` and exit 0 pass, 1 fail, 2 could not run; numbers come from the parameters file. Status of every tool: `exists in a prior controller PCB project, port on adoption` (not installable, not checkable with --version). Pass criterion per tool:
-- check_manifest: every file in datasheets/ has a row and the sha256 matches.
-- check_decisions: IDs sequential, fields present, table status equals section status, supersession target exists and is marked.
-- check_requirements: IDs unique; every cited decision and question exists.
-- check_parameters: every value in bounds with a source document.
-- check_doc_sync: superseded-terms table (term, superseding decision, history words), hole coordinates, connector-wall edge, and dash typography; FAIL on a stale term.
-- check_bom: construction policy (size, capacitor type, datasheet, grade).
-- check_part_roles: each named MPN fitted (FAIL if absent, WARN if only the alternate); unlisted MPN is WARN.
-- check_ratings, calc_trace_width: ratings against operating values with derating margin; copper width and temperature rise for a current.
-- check_connectors: allocation, pin counts, keying, cross-plug and mis-mating hazards.
+All tools take `--help` and exit 0 pass, 1 fail, 2 could not run; numbers come from the parameters file. Tools marked `shipped` are in `tools/` of this profile (Python 3.11+ standard library, tests in `tools/tests/`, run by the template self-test); the rest `exist in a prior controller PCB project, port on adoption`. BOM tools read a CSV with `ref,value,footprint` and optional `mpn,datasheet,description`, so any CAD export works. Pass criterion per tool:
+- check_manifest: shipped; every file in datasheets/ has a row and the sha256 matches.
+- check_decisions: shipped; no TBD in a logged decision (unknowns go to the open questions, PCB-8); IDs sequential, fields present, table status equals section status, supersession target exists and is marked.
+- check_requirements: shipped; IDs unique; every cited decision and question exists.
+- check_parameters: shipped; every value in bounds with a source document.
+- check_doc_sync: shipped; superseded-terms table (term, superseding decision, history words), hole coordinates, connector-wall edge, and dash typography; FAIL on a stale term.
+- check_bom: shipped; construction policy (size, capacitor type, datasheet, grade).
+- check_part_roles: shipped; each named MPN fitted (FAIL if absent, WARN if only the alternate); unlisted MPN is WARN.
+- check_ratings, calc_trace_width: shipped; ratings against operating values with derating margin; copper width and temperature rise for a current.
+- check_connectors: shipped; allocation, pin counts, keying, cross-plug and mis-mating hazards.
+- check_power_branch: shipped (example branch in `tools/examples/`); a fused DC branch: capacitor inrush I2t against fuse I2t, fast fuse against pulsed loads, wire and holder ratings, source fault clearing, overshoot and regeneration, clamp window, sizing-basis drift; UNKNOWN is reported, never assumed (PCB-19, PCB-21).
 - check_contract, check_indicators, check_test_points: netlist from kicad-cli against the interface contract, LED routing, test-point names.
 - check_layout, check_stitching: outline, holes, port axes, spacing, bottom-side classes; stitching pitch with worst gap and location; INFO until layout starts.
 - check_version: `<letter>-draft` format, serial format, silkscreen rule.
@@ -66,7 +71,7 @@ All tools take `--help` and exit 0 pass, 1 fail, 2 could not run; numbers come f
 - model_safety_chain: stop chain fault model: stop-OK required, start required, no automatic restart.
 - board_from_netlist: board from the kicad-cli netlist; `--update` keeps placement; never routes or moves.
 - export_docs: branded schematic and layout PDFs with a cover of git short hash and uncommitted flag; a unit test fails if the committed drawing sheet differs from the generated one.
-- kb_build, kb_search: full-text index of datasheets and documents.
+- kb_build, kb_search: full-text index of datasheets and documents (generic version in `docs/library/tools/kb_index.py`).
 - diag: one command over USB prints a pass/fail table against limits plus the three most likely causes; includes a no-hardware simulator.
 - route_session, pns_driver: guided routing session and scripted push-and-shove driver (needs per-run desktop consent).
 - Layout process tools (`build`, specs in `LAYOUT_PROCESS.md`): check_routability, fanout, place_groups, quick_dru, pass_progress.
@@ -81,14 +86,23 @@ All tools take `--help` and exit 0 pass, 1 fail, 2 could not run; numbers come f
 
 ## Agents and skills
 
-| Role | Tier | Writes |
-|---|---|---|
-| doc writer | cheap | Markdown in the design folder |
-| researcher, KiCad operator, simulation engineer | standard | research and datasheets; board files; tools and analysis |
-| DFM checker | standard, read-only | none |
-| safety analyst, verifier, reviewer | strong, read-only | none |
+Shipped in `agents/` (Claude `.md` plus Codex `.toml`) and `skills/`; start installs them.
 
-Skills: datasheet-keeper, decision-logger, design-review, part-sourcing, release-gate, safety-analysis, simulation (`exists in a prior controller PCB project` as a plugin, port on adoption).
+| Agent | Tier | Writes | Used by |
+|---|---|---|---|
+| pcb-doc-writer | cheap | Markdown in the design folder | every skill that records |
+| pcb-researcher | standard | research and datasheets | datasheet-keeper, part-sourcing |
+| pcb-kicad-operator | standard | CAD files, one operator on the live board | schematic and layout work |
+| pcb-simulation-engineer | standard | tools and analysis | simulation |
+| pcb-dfm-checker | standard, read-only | none | design-review |
+| pcb-design-verifier, pcb-safety-analyst, pcb-reviewer | strong, read-only | none | design-review, safety-analysis |
+| component-reviewer | strong, read-only | none | component-selection (PCB-19) |
+| senior-ee-reviewer | strong, read-only | none | box-design-review (PCB-20) |
+
+Skills: datasheet-keeper, decision-logger, design-review, part-sourcing,
+release-gate, safety-analysis, simulation, component-selection,
+box-design-review.
+design-review is the board milestone ladder; box-design-review covers the enclosure, system wiring and every BOM before purchase.
 
 ## Parameters and records
 

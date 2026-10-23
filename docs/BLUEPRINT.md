@@ -67,6 +67,7 @@ docs/
     0001-template-architecture.md
     0002-complexity-budgets-and-workflow-delegation.md
     0003-self-improving-template.md
+    0004-profile-agent-sets.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -92,11 +93,25 @@ docs/
     README.md                 # index and the selection procedure
     software/PROFILE.md       # always on
     scientific/PROFILE.md
+    scientific/skills/        # shipped skill set, installed by start (ADR 0004)
     embedded-firmware/PROFILE.md
+    embedded-firmware/skills/ # shipped skill set
+    embedded-firmware/tools/  # shipped tools with tests/
     hardware-pcb/PROFILE.md
     hardware-pcb/LAYOUT_PROCESS.md   # the routability-first layout order and router verdicts
     hardware-pcb/CHECKS.md           # the issue-to-check ledger pattern
+    hardware-pcb/agents/      # shipped agents: <n>.md plus Codex twin <n>.toml
+    hardware-pcb/skills/      # shipped skill set
+    hardware-pcb/tools/       # shipped tools with tests/
     data-analysis/PROFILE.md
+    data-analysis/skills/     # shipped skill set
+  library/                    # opt-in single-project items (ADR 0004)
+    README.md                 # one-project-evidence rule, adoption, graduation, item table
+    agents/                   # agents with Codex twins
+    skills/                   # skills a project may adopt into free core slots
+    procedures/               # procedures the library skills follow
+    tools/                    # generic tools with tests/
+    hooks/                    # harness hooks with tests/
   lessons/
     INDEX.md                  # one line per approved lesson + usage counters
     PENDING.md                # proposed lessons awaiting human approval
@@ -127,6 +142,7 @@ tests/
     test_quickgate.sh
     test_check_always.sh
     test_blueprint_parity.sh
+    test_profile_tools.sh     # runs the tests of every shipped tool and hook
     fixtures/
       check.sh                # pristine template check.sh the tests run against
 .work/

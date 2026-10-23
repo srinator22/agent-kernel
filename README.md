@@ -131,6 +131,12 @@ Selected at start; `software` is always on. Index: `docs/profiles/README.md`.
 - hardware-pcb (`docs/profiles/hardware-pcb/`): board design with decision log, requirements, issue ledger and release gate.
 - data-analysis (`docs/profiles/data-analysis/`): raw instrument files and logs, import, provenance, analysis.
 
+Each profile ships its agents (with Codex twins), skills and tested tools in
+its own `agents/`, `skills/` and `tools/` folders, and start copies them in
+when the profile is adopted. Optional items proven in only one project live
+in `docs/library/` (agents, skills, procedures, tools, a shell hook) and are
+adopted by choice (ADR 0004).
+
 ## Procedures
 
 All in `docs/procedures/`, portable to any agent.

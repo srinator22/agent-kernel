@@ -42,7 +42,8 @@ point in this procedure.
       embedded-firmware, hardware-pcb, data-analysis as the suggestion in
       `docs/CAPABILITY_MAP.md` says; the human confirms or edits it).
       (Scientific wires golden-master fixtures, deterministic seeds, and
-      promotes docs/rules/scientific-integrity.md in the index.)
+      promotes docs/rules/scientific-integrity.md in the index.) Also: which
+      optional items from `docs/library/README.md` to adopt (default none)?
    8. Default task mode: `standard | quick | autopilot` (the names
       `scripts/new-task.sh` takes)?
    9. Any hard invariants I should never violate (UX, performance,
@@ -75,6 +76,17 @@ point in this procedure.
    budget). Wire each adopted profile's gates into check.sh
    (`docs/profiles/<name>/PROFILE.md`, Gates) and scaffold the test layout of
    `docs/procedures/tests.md` with one passing example per layer.
+   Install each adopted profile's shipped set, copying, never moving, so the
+   profile folder stays in sync with the template: `agents/<n>.md` to
+   `.claude/agents/`, `agents/<n>.toml` to `.codex/agents/`,
+   `skills/<n>/` to both `.claude/skills/` and `.agents/skills/`, and
+   `tools/` (with `tools/tests/`) to the project's tool folder, recorded in
+   Project decisions; wire each tool's tests into check.sh. A name that
+   already exists is merged by hand, never overwritten. Library items chosen
+   in Q7 install the same way; a library procedure is copied to
+   `docs/procedures/`, and a library skill takes one of the core skill slots
+   (8 minus the core skills shipped). `scripts/lessons.sh check` must pass
+   after the copy (skills cap and mirror).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
    and, if deploying, `docs/operations.md` (deploy, rollback, monitoring).
    Write the next-numbered ADR under docs/decisions/ (stack choice, with
