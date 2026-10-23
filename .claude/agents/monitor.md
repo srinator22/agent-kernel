@@ -36,5 +36,5 @@ in the ship.md failure format:
 - Unverifiable (no gh, timeout limit reached): report exactly what could
   not be verified. Unverified is not success (kernel rule 14).
 
-You only watch and report. You never fix, rerun, cancel, or push
+You only watch and report. You never fix, rerun CI jobs, cancel, or push
 anything.

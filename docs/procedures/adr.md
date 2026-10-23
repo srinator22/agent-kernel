@@ -47,8 +47,9 @@ The record is permanent and short. `scripts/adr.sh check` runs in every
    edit ever made to an accepted ADR; its body is never rewritten. The
    check verifies that the superseding ADR exists.
 6. Anything that cites the ADR (a procedure, rule or profile file) names it
-   as `docs/decisions/NNNN`; `scripts/check.sh` verifies the cited file
-   exists, so create the ADR in the same change as the citation.
+   as `docs/decisions/NNNN`; in template mode `scripts/check.sh` verifies
+   the cited file exists (after start nothing does, so check it by hand),
+   so create the ADR in the same change as the citation.
 7. Run `scripts/adr.sh check`, then commit as
    `docs: add ADR NNNN <short title>` with a body that says why the
    decision was made (kernel rule 6). Never tag or push outside the
