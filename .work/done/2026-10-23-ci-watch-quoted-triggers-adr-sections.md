@@ -28,6 +28,16 @@ sections, so a truncated ADR passed.
   cases). With the fix: 40 passed, 0 failed; 74 passed, 0 failed
 - 2026-10-23 `./scripts/check.sh`: EXIT 0 (selftest 12 passed, 0 failed;
   template self-test OK, 111 required files; adr OK, 5 records)
+- 2026-10-23 PR review on 218c8f3, two findings. (1) `scripts/adr.sh`,
+  `cmd_check`, the section scan counted "## " lines inside ``` or ~~~
+  fences, so an ADR whose only "sections" sat in a code block passed. Fixed:
+  fenced lines are skipped. Fail-first: `bash tests/template/test_adr.sh`
+  against 218c8f3's adr.sh 40 passed, 4 failed; fixed 44 passed, 0 failed.
+  (2) A claim that check.sh exits 1 on 218c8f3 because the BLUEPRINT tree
+  omits `.codex/agents/reviewer.toml`: not reproduced. The tree lists
+  `.codex/agents/` as a summary entry, which covers its files;
+  `bash tests/template/test_blueprint_parity.sh` 11 passed, 0 failed, and
+  both CI `check` jobs on 218c8f3 passed. No change for it.
 
 ## Review verdict
 PASS

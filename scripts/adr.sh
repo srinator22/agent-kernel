@@ -11,7 +11,8 @@
 #   non-empty "Status:" line; a "superseded by NNNN" status names an ADR that
 #   exists;
 #   the sections "## Context", "## Decision" and "## Consequences" are present,
-#   in that order (other sections may follow or sit between them);
+#   in that order (other sections may follow or sit between them); lines
+#   inside ``` or ~~~ fenced blocks are not headings;
 #   no "{{" template placeholder is left in the file.
 # No docs/decisions/ folder, or an empty one, passes.
 # Test hook: ADR_TODAY=YYYY-MM-DD overrides today's date for new.
@@ -73,6 +74,8 @@ cmd_check() {
       fi
     fi
     read -r c d q < <(awk '{ sub(/\r$/, "") }
+      /^ ? ? ?(```|~~~)/ { fence = !fence; next }
+      fence { next }
       $0 == "## Context" && !c { c = NR }
       $0 == "## Decision" && !d { d = NR }
       $0 == "## Consequences" && !q { q = NR }
