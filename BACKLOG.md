@@ -14,3 +14,6 @@ with a reason. Priorities P0-P3 per docs/procedures/audit.md.
 | Test the shipped-set early-stop marker in scripts/lessons.sh (a forced early return must be reported) | P3 | review note 2026-10-23: the marker has no test, so a regression in it would pass silently | open |
 | Port a generic import skeleton (copy with exclusive create, hash verify, session README row) into the data-analysis profile tools | P3 | the profile lists the import tool as port on adoption; about 60 percent of a prior tool is generic | open |
 | Archive docs/library/skills/adr once the core adr procedure lands (maintenance pass, kernel rule 11) | P3 | the library copy duplicates the core skill after graduation | open |
+| Library light-worker: replace its inline Bash-only commit hook with scripts/worker-git-guard.sh under matcher Bash\|PowerShell | P3 | lesson L004 was applied to the core worker only; an adopted light-worker keeps the PowerShell gap | open |
+| Move the cited-ADR existence check (check.sh step 5h, template mode only) into scripts/adr.sh check so it runs after start | P3 | review 6 note: after start no gate verifies that a cited ADR exists | open |
+| ci-watch.sh: parse an on: list that starts at column 0 (on:\n- push) | P3 | review 5 note: it reads as no push trigger; the grace window and open-run check are the only guards | open |

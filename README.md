@@ -105,7 +105,8 @@ Full contract: `docs/procedures/upstream.md`.
   lines; untracked-files report; the dash scan; the caps below; mirror
   parity (`.claude/skills` and `.agents/skills` identical, every
   `.claude/agents` file with a `.codex` counterpart or a recorded reason);
-  the task graph; `scripts/selftest.sh` whenever `tests/template/` exists.
+  the task graph; ADR numbering and format (`scripts/adr.sh check`);
+  `scripts/selftest.sh` whenever `tests/template/` exists.
 - Template mode (before start): template integrity, including required
   files, placeholders, skill frontmatter, settings validity, executable
   bits, ADR references and BLUEPRINT tree parity.
@@ -118,7 +119,8 @@ Full contract: `docs/procedures/upstream.md`.
   archived on evidence, never deleted.
 - Self-tests: `scripts/selftest.sh` runs the fixtures in `tests/template/`
   against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`,
-  `quickgate.sh` and `template-sync.sh`. `scripts/quickgate.sh` is the
+  `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh` and
+  `worker-git-guard.sh`. `scripts/quickgate.sh` is the
   fast in-work subset of the gauntlet.
 
 ## Profiles

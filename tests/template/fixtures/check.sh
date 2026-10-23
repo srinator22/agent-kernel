@@ -126,7 +126,10 @@ fi
 # 4c. The task plan is a valid graph (docs/rules/orchestration.md).
 ./scripts/taskgraph.sh check || gerr "scripts/taskgraph.sh check failed"
 
-# 4d. The template's own scripts are tested (docs/procedures/tests.md), in
+# 4d. Decision records are numbered and formatted (docs/procedures/adr.md).
+./scripts/adr.sh check || gerr "scripts/adr.sh check failed"
+
+# 4e. The template's own scripts are tested (docs/procedures/tests.md), in
 # every mode, whenever the tests exist.
 if [[ -d tests/template ]]; then
   ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
@@ -200,6 +203,10 @@ if [[ ! -f .start-done ]]; then
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
+    docs/procedures/adr.md scripts/adr.sh scripts/worker-git-guard.sh
+    .claude/skills/adr/SKILL.md .agents/skills/adr/SKILL.md
+    tests/template/test_adr.sh tests/template/test_ci_watch.sh
+    tests/template/test_worker_git_guard.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -268,7 +275,7 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style, memory caps, task graph, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style, memory caps, task graph, ADR format, selftest)"
   exit 0
 fi
 

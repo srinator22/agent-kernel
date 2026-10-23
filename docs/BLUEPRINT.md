@@ -81,6 +81,7 @@ docs/
     bughunt.md                # proactive defect hunting from profile checklists and defect memory
     tests.md                  # test harness and layers wired from day one
     upstream.md               # lessons up to the template, template sync down, adoption
+    adr.md                    # record a decision: scripts/adr.sh new, format, superseding
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -135,6 +136,8 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
+  adr.sh                      # check (ADR numbering and format) | new <title>
+  worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
 tests/
   template/                   # fixtures and tests for the scripts above; called from check.sh
     lib.sh                    # shared assertion helpers
@@ -147,6 +150,9 @@ tests/
     test_check_always.sh
     test_blueprint_parity.sh
     test_profile_tools.sh     # runs the tests of every shipped tool and hook
+    test_adr.sh
+    test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
+    test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
     fixtures/
       check.sh                # pristine template check.sh the tests run against
 .work/
@@ -160,17 +166,18 @@ tests/
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
-    worker.md                 # mechanical execution; model sonnet; git commit/push DENIED in tools
+    worker.md                 # mechanical execution; model sonnet; Bash|PowerShell hook blocks git commit/push
     monitor.md                # post-push CI watcher; model haiku; runs scripts/ci-watch.sh
   skills/
     start/SKILL.md            # thin wrapper -> docs/procedures/start.md
     ship/SKILL.md             # thin wrapper -> docs/procedures/ship.md
     retro/SKILL.md            # thin wrapper -> docs/procedures/retro.md
     maintain/SKILL.md         # thin wrapper -> docs/procedures/maintain.md
+    adr/SKILL.md              # thin wrapper -> docs/procedures/adr.md
 .codex/
   agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml
 .agents/
-  skills/                     # Codex skills: start, ship, retro, maintain (same wrappers)
+  skills/                     # Codex skills: start, ship, retro, maintain, adr (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
 ```
@@ -280,7 +287,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 1, always: kernel hash verify via `scripts/kernel-hash.sh --verify`. On mismatch, print a loud multi-line error explaining kernel drift and the sanctioned edit path (human approval + `--update` in the same commit); exit 1.
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
-- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
+- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
 - Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - Steps 6+ ({{FILLED_BY_START}}), each a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
@@ -290,7 +297,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 
 ### 3.5 scripts/ci-watch.sh
 
-Mechanizes "a push is not done until CI is terminal." Capture the exact HEAD SHA; verify the remote branch points at it (`git ls-remote`); then poll every required check for that SHA via `gh` until each reaches a terminal state, printing transitions. Exit 0 only if all succeed; on failure, print workflow, job, and log URL, exit nonzero. Sensible timeout with clear message. Degrade: if `gh` is absent, say exactly what could not be verified and exit nonzero (unverified is not success - kernel rule 14).
+Mechanizes "a push is not done until CI is terminal." Capture the exact HEAD SHA; verify the remote branch points at it (`git ls-remote`); then poll every required check for that SHA via `gh` until each reaches a terminal state, printing transitions. Exit 0 only if all succeed; on failure, print workflow, job, and log URL, exit nonzero. Before polling it prints the workflows the commit can trigger, derived from the files it changes and each workflow's push filters (branches, tags, paths, paths-ignore), and waits for each of those to finish; a filter it cannot decide counts as expected, a root commit expects all and says so, and a SHA not in the local repository is reported as underivable (only a confident derivation may conclude that nothing is expected); `--expect` overrides, `--base` diffs from the pre-push remote SHA for a push of several commits, `--plan` prints the set and exits (Amendment 3). Sensible timeout with clear message; a timeout exits 3 so the monitor re-runs it. On a SHA mismatch print both SHAs; on failure print the failing log tail verbatim. Degrade: if `gh` is absent, say exactly what could not be verified and exit nonzero (unverified is not success - kernel rule 14).
 
 ### 3.6 scripts/new-task.sh
 
@@ -335,8 +342,8 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 **ship.md** (the done-gate; run when a logical change is ready to land):
 
 1. Confirm scope: `git status`; unrelated or untracked work is preserved and excluded; resolve every untracked file deliberately (stage it or ignore it, never leave it ambiguous).
-2. Run `./scripts/check.sh`. Anything red: stop and fix first.
-3. Reviewer gate: independent review verdict present in `.work/TASK.md` (kernel rule 5). Quick-mode tasks may skip the reviewer only if the diff touches no logic (docs/config-comments), and say so.
+2. Run `./scripts/check.sh` and keep its complete output. Anything red: stop and fix first.
+3. Reviewer gate: the reviewer receives the diff, `.work/TASK.md` and that verify output (Amendment 3); independent review verdict, ending with its Evidence checked list, present in `.work/TASK.md` (kernel rule 5). Quick-mode tasks may skip the reviewer only if the diff touches no logic (docs/config-comments), and say so.
 4. Version: bump the single source-of-truth version file per semver (patch fix, minor feature, major breaking; pre-1.0 per Project decisions).
 5. Regenerate CHANGELOG.md via git-cliff (never hand-edit; the detail lives in commit bodies).
 6. Conventional commit; the body carries why, and for fixes the exact issue, fix, and files/functions touched.
@@ -350,6 +357,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 2. Routes (a) and (d): record nothing; the system worked.
 3. Routes (b) and (c): verify the failing-then-fixed regression test exists (kernel rule 3). If the cause cannot be expressed as any check, append one entry to PENDING.md in the four-field format.
 4. Confirmed-good calls: if the human explicitly validated an approach worth repeating, that is a lesson too - same gate, same format, retire-when included.
+   (Amendment 3: traps that cost time with no escaped defect are recorded too, and the check may read "none, this note is the guard"; durable decisions go to `docs/decisions/` per adr.md, not to PENDING.md.)
 5. Never record what the repo can already tell you (layout, conventions, history).
 6. Increment `used:` and `last:` in INDEX.md for each lesson consulted.
 7. Fill the Retro section of `.work/TASK.md`; update BACKLOG.md (done items off, discovered items on, with reasons); move TASK.md to `.work/done/YYYY-MM-DD-<slug>.md`; reset from template.
@@ -366,7 +374,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 **bugfix.md**:
 
 1. Reproduce with the smallest reliable case, against real data where it exists. Get a numeric, exact root cause before writing a fix - instrument the actual code path; do not theorize.
-2. Identify the owning layer. Escaped or human-reported: failing regression test first, pinned to the real numbers from step 1, not a synthetic happy path.
+2. Identify the owning layer. For every fix (Amendment 3; originally only escaped or human-reported bugs): regression test first, pinned to the real numbers from step 1, not a synthetic happy path, shown failing for the stated root cause (file, function, condition) before the patch, with the repro command and output recorded.
 3. Patch the smallest safe surface; no unrelated cleanup.
 4. Targeted tests, then `./scripts/check.sh`. Re-verify against the motivating real data independently of the unit tests.
 5. Independent adversarial review (the reviewer agent) trying to find what is still wrong, not rubber-stamping.
@@ -448,11 +456,11 @@ Date: {{date}}
 ### 3.13 .claude/ - accelerators only; the repo must function without this directory
 
 - **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule).
-- **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives only the diff, `.work/TASK.md`, and files it chooses to read; must not receive implementer reasoning; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled; writes PASS/FAIL with specifics into the Review verdict section; gains nothing by being agreeable.
-- **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns findings, never modifies.
-- **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push DENIED via tool permissions (VERIFY syntax; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; reports files touched; if its instruction conflicts with observed evidence, follows the evidence and says so.
-- **agents/monitor.md**: `model: haiku`; tools limited to Bash for `scripts/ci-watch.sh` and gh reads (VERIFY). Body: given a SHA, watch every required check to terminal state and report per the failure format in ship.md.
-- **skills/**: four thin wrappers (start, ship, retro, maintain). Each SKILL.md: a description written to trigger on the situation ("Initialize this template for a new project...", "A logical change is complete and ready to land...", "A task just finished; capture what external signal showed...", "Periodic pruning and cap enforcement..."), body = "Follow docs/procedures/<name>.md exactly." Procedures are the truth; skills are pointers.
+- **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives the diff, `.work/TASK.md`, the verify output (Amendment 3), and files it chooses to read; must not receive implementer reasoning; returns FAIL when the verify output is missing, truncated or not clean at every stage; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled, the AGENTS.md rules index and the adopted profiles' rules; writes PASS/FAIL ending with an Evidence checked list with specifics into the Review verdict section; gains nothing by being agreeable.
+- **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns conclusions with file:line, quotes a few lines at most, skips vendored, build and dependency folders, never modifies.
+- **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push blocked by a PreToolUse hook (Amendment 3: matcher `Bash|PowerShell`, body `scripts/worker-git-guard.sh`, VERIFY 2026-10-23; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; replies with files touched, each check's command and verbatim result ("could not run" stated as such) and conflicts; no version bump unless briefed; if its instruction conflicts with observed evidence, follows the evidence and says so.
+- **agents/monitor.md**: `model: haiku`; tools limited to Bash for `scripts/ci-watch.sh` and gh reads (VERIFY). Body: given a SHA, watch every required check to terminal state and report per the failure format in ship.md; runs in the foreground at the maximum tool timeout and re-runs on timeout, never in the background.
+- **skills/**: five thin wrappers (start, ship, retro, maintain, and adr since Amendment 3). Each SKILL.md: a description written to trigger on the situation ("Initialize this template for a new project...", "A logical change is complete and ready to land...", "A task just finished; capture what external signal showed...", "Periodic pruning and cap enforcement..."), body = "Follow docs/procedures/<name>.md exactly." Procedures are the truth; skills are pointers.
 
 ### 3.14 manifest.md
 
@@ -523,7 +531,9 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/taskgraph.sh`: validates the `.work/TASK.md` Plan table (known nodes, no cycles, disjoint owner files within a wave, valid tiers and statuses).
 - `scripts/template-sync.sh`: fetch the template at a tag, diff the core files, apply non-conflicting updates, never touch Project decisions, re-verify the kernel hash, log the run.
 - `scripts/quickgate.sh`: the fast subset of the gauntlet for use during work; the full gate runs before publication.
-- `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
+- `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
+- `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
+- `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
 - `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
 
 ---
@@ -589,3 +599,7 @@ Self-improving template (ADR-0003). The original build above is kept as the reco
 Added: project-type profiles (software, scientific, embedded-firmware, hardware-pcb, data-analysis); the discover procedure that runs before start; proactive bug hunting and defect memory; tests from day one; lessons mechanized with caps, counters and expiry; the upstream and sync channel between the template and the projects built from it; a task graph in `.work/TASK.md` validated by `scripts/taskgraph.sh`; model tiers and harness adapters; template self-tests wired into check.sh. Sections 2, 3.3, 3.11 and 3.13 were reconciled with the repository as built (the post-build rounds in BUILD_NOTES.md). Kernel amendments applied (rules 10 and 16 edited, `.kernel.hash` updated with `scripts/kernel-hash.sh --update`) under the owner's blanket authorisation of 2026-10-09 recorded in `.work/TASK.md`: rule 10 skills cap becomes "8 core skills plus the skills the adopted profiles declare" (counted by `scripts/lessons.sh` from each profile's `Skills:` line); rule 16 gains "the plan is a task graph; nodes in one wave own disjoint files" (detailed in `docs/rules/orchestration.md`).
 
 Why: four real projects exposed gaps that the original template could not catch. An embedded controller firmware project (control with safety states) showed that host simulation, defect memory and proactive hunts find what bench tests and reactive fixes miss. A controller PCB project (a large per-issue ledger, decision log, datasheet store) showed that a hardware design needs requirements traceability, a release gate, and tools built early (routability checker, board-from-netlist builder). A vibration data analysis project (raw instrument files) showed the need for provenance rules, import contracts and golden-master fixtures. A CAD add-in project showed that capability discovery (what tools exist, what must be built) belongs before the first feature. Across all four, caps and rules that were prose only were not enforced, so the template now enforces them by script.
+
+## Amendment 3 (2026-10-23)
+
+Ten lessons approved by the owner on 2026-10-23 (L001 to L010 in `docs/lessons/INDEX.md`) applied to the core. The reviewer takes the verify output as input and fails without it, ends its verdict with an Evidence checked list, and checks the rules index and adopted profiles' rules. The worker replies in a fixed format with verbatim check results; its commit and push block moved into `scripts/worker-git-guard.sh` under matcher `Bash|PowerShell`. The monitor stays in the foreground and re-runs on timeout; `scripts/ci-watch.sh` derives the expected workflows from the changed files and path filters, with `--expect` and `--plan`. Explore returns conclusions. The retro records time-costing traps and routes durable decisions to ADRs; bugfix requires every regression test to fail first for the stated root cause. The library adr skill graduated to a core procedure, skill and `scripts/adr.sh`, wired into check.sh's always section (core skills: 5 of 8). Kernel untouched.

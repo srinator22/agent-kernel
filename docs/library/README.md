@@ -47,7 +47,7 @@ Every tools/ and hooks/ test runs in the template self-test
    add a Codex counterpart for every Claude agent, or record why there is none
    (`docs/rules/models.md`, parity rule).
 5. Mind the caps: kernel rule 10 allows 8 core skills plus the skills the
-   adopted profiles declare. The template ships 4 core skills, so up to 4
+   adopted profiles declare. The template ships 5 core skills, so up to 3
    library skills fit in the free core slots; beyond that, retire an unused
    skill first. `scripts/lessons.sh check` enforces the cap.
 6. Tier per agent: set `model:` in the copied agent per `docs/rules/models.md`;
@@ -109,7 +109,7 @@ one that proved unhelpful is archived with its reason.
 | writer | agent (standard tier) | Turns recorded engineering work into drafts under `articles/`; never fabricates; proposes style preferences for human approval | a hardware R&D journal project |
 | light-worker | agent (cheap tier) | One small, reversible, fully specified edit covered by existing checks; never commits; stops on any judgment call | a CAD add-in project |
 | explorer | agent (Codex only) | Read-only exploration for Codex; the Claude counterpart is the core `explore` agent | a CAD add-in project |
-| adr | skill | Writes a numbered ADR in `docs/decisions/` in the template's format; superseding rule; architecture doc update | two prior projects (a software and data project, a personal project), merged; candidate for a core procedure (see `docs/lessons/PENDING.md`) |
+| adr | skill | Graduated to core on 2026-10-23 (lesson L010): `docs/procedures/adr.md`, the core `adr` skill and `scripts/adr.sh`. Do not adopt this copy; it is archived at the next maintenance pass (BACKLOG) | two prior projects (a software and data project, a personal project), merged |
 | article | skill | Drives the editorial pipeline from idea to approved; publishing needs explicit human permission | a hardware R&D journal project |
 | component | skill | Tracks a candidate part through candidate, selected, purchased, received, measured, tested with datasheet and evidence levels | a hardware R&D journal project |
 | decision | skill | Logs an engineering design decision before implementation with evidence chain, dependents and revalidation marks | a hardware R&D journal project |
@@ -135,5 +135,5 @@ one that proved unhelpful is archived with its reason.
 | changelog generator and name-brainstorming skills | Third-party, unlicensed, redistribution not permitted. |
 | no-dash and secret-scan scripts | `scripts/check.sh` already fails on en and em dashes, and its gitleaks step is mandatory (kernel rule 12); the scripts were a Node wrapper and a scan that passed when gitleaks was missing. |
 | skill-structure checker | Its generic part (frontmatter, name equals folder, mirror, cap) is in `scripts/lessons.sh check`; the rest named one project's skills. |
-| core agent variants (reviewer, worker, monitor, explore) | Their generic improvements are proposed in `docs/lessons/PENDING.md`; core files change only after human approval (kernel rule 9). |
+| core agent variants (reviewer, worker, monitor, explore) | Their generic improvements were approved on 2026-10-23 and applied to the core agents (lessons L001 to L007 in `docs/lessons/INDEX.md`). |
 | run-log analysers, firmware host simulator, board routing and placement scripts | Mostly one product's data and log schema; profiles list them as `port on adoption`. |
