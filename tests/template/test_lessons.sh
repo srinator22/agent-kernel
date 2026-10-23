@@ -261,7 +261,15 @@ assert_contains "the library skill is named" "docs/library/skills/gamma/SKILL.md
 printf -- '---\r\nname: gamma\r\ndescription: x\r\n---\r\n' > docs/library/skills/gamma/SKILL.md
 run ./scripts/lessons.sh check
 assert_rc "a CRLF library skill with frontmatter passes" 0
-rm -rf docs/profiles docs/library
+mkdir -p docs/roster/agents
+printf -- '---\nname: lead\ndescription: x\nmodel: inherit\n---\n' > docs/roster/agents/lead.md
+run ./scripts/lessons.sh check
+assert_rc "a roster agent with no Codex twin fails" 1
+assert_contains "the roster twin is named" "docs/roster/agents/lead.md: no Codex twin docs/roster/agents/lead.toml"
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "a complete roster agent pair passes" 0
+rm -rf docs/profiles docs/library docs/roster
 
 # tests/quarantine.list: owner and date required, at most 30 days old.
 mkdir -p tests

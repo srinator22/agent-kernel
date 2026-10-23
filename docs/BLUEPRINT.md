@@ -68,6 +68,7 @@ docs/
     0002-complexity-budgets-and-workflow-delegation.md
     0003-self-improving-template.md
     0004-profile-agent-sets.md
+    0005-department-agent-roster.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -112,6 +113,9 @@ docs/
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
     hooks/                    # harness hooks with tests/
+  roster/                     # opt-in department agents, no project evidence yet (ADR 0005)
+    README.md                 # department chart, kind, tier, folder, adoption
+    agents/                   # leads (read-only) and specialists, each with a Codex twin
   lessons/
     INDEX.md                  # one line per approved lesson + usage counters
     PENDING.md                # proposed lessons awaiting human approval

@@ -199,6 +199,7 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_blueprint_parity.sh tests/template/fixtures/check.sh
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
+    docs/decisions/0005-department-agent-roster.md docs/roster/README.md
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
