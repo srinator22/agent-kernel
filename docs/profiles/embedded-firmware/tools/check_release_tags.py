@@ -3,8 +3,14 @@
 
 Purpose: enforce rule FW-14 of the embedded-firmware profile. A version counts
 as released when the changelog lists it (a heading that matches the changelog
-pattern), when a tag with the prefix already exists, or, with --check-history,
-when the version file ever held it in a commit.
+pattern), when a tag with the prefix already exists, when the exceptions file
+names it (every exception form, no-tag, no-archive and legacy-tag, says a
+release of that version exists), or, with --check-history, when the version
+file ever held it in a commit. A version named only by the exceptions file
+gets rules A, B and D like any other release; only the rule its own exception
+line excuses is relaxed (no-tag: the tag and so rules A and B; no-archive:
+rule D; legacy-tag: the tag name, never the annotation, the content or the
+archive). A legacy-tag line whose tag does not exist is a FAIL.
 
 Rules, per released version:
   A. An annotated tag <tag-prefix>vX.Y.Z exists (an exceptions-file line can
@@ -14,6 +20,9 @@ Rules, per released version:
   C. The working-tree version is tagged, or it is the newest changelog entry
      (a pending release: tag before upload). --require-current turns the
      pending case into a failure; the release flow uses it after tagging.
+     A tagged current version always gets rules A, B and D through the tag
+     name that resolves it, the prefixed name or a legacy-tag exception,
+     with or without a changelog or --check-history.
   D. <archive-root>/vX.Y.Z/ holds a sums file whose entries verify and an info
      file; an info file that says the tree was dirty fails.
 
@@ -302,7 +311,15 @@ def run_check(args: argparse.Namespace) -> list[Line]:
             candidate = name[len(f"{args.tag_prefix}v"):]
             if re.fullmatch(SEMVER, candidate):
                 required.setdefault(candidate, "tag")
+    # An exception line exists only for a released version, so the version it names is checked even when
+    # no changelog, history or prefixed tag shows it (a legacy-tag release would otherwise go unchecked).
+    for version, kind in sorted(exceptions, key=lambda key: (version_key(key[0]), key[1])):
+        required.setdefault(version, f"exceptions file {kind}")
     current_tag = tag_for(current)
+    if current_tag:
+        # A tagged current version gets rules A, B and D through whichever name resolves it, including a
+        # legacy-tag exception that the prefixed-tag discovery above cannot see.
+        required.setdefault(current, "current version")
     pending = current_tag is None and (newest is None or current == newest)
     if pending:
         required.pop(current, None)
@@ -313,8 +330,13 @@ def run_check(args: argparse.Namespace) -> list[Line]:
         reasons: list[str] = []
         name = tag_for(version)
         if name is None:
+            legacy = exceptions.get((version, "legacy-tag"))
             if (version, "no-tag") in exceptions:
                 lines.append(Line("WARN", version, ["untagged, excused by the exceptions file"]))
+            elif legacy:
+                lines.append(Line("FAIL", version, [
+                    f"no tag {args.tag_prefix}v{version}, and the legacy tag {legacy} that the exceptions "
+                    "file names does not exist"]))
             else:
                 hint = (f"version file first read it at {first_commit[version][:7]}"
                         if version in first_commit else required[version])
@@ -362,7 +384,11 @@ def run_check(args: argparse.Namespace) -> list[Line]:
         lines.append(Line(worst(statuses), version, reasons))
 
     if current_tag:
-        lines.append(Line("PASS", current, [f"current version is tagged ({current_tag})"]))
+        checked = next(line for line in lines if line.version == current)
+        reason = f"current version is tagged ({current_tag})"
+        if checked.status != "PASS":
+            reason += f", but that tag fails the checks above: {'; '.join(checked.reasons)}"
+        lines.append(Line(checked.status, current, [reason]))
     elif pending:
         reasons = [f"pending release: tag before upload (current {current} has no tag)"]
         if (root / args.archive_root / f"v{current}").exists():

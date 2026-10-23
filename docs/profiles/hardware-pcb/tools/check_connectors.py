@@ -16,11 +16,24 @@ Inputs
 parameters.toml tables read
     [connector_matability]              coding -> list of codings it mates with
       "round4" = ["round4"]             (a plug of the key mates sockets listed)
-    [connector_hazard]
+    [connector_hazard]                  required once any pairing mates (below)
       damaging_if_socket_drives = ["24V", "12V"]   pin classes that, driven by
-      onto_plug_classes = ["5V", "SIG", "GND"]     the socket, damage a plug pin
+      onto_plug_classes = ["5V", "SIG", "GND"]     the socket, damage a plug pin;
+                                                   both required, non-empty
       damaging_pairs = [["24V", "12V"]]            extra (socket, plug) class
                                                    pairs that damage, optional
+      declared_classes = ["48V"]                   classes the table may name
+                                                   although no port pin uses
+                                                   them (a reusable table),
+                                                   optional
+      No other key is allowed: an unknown key (a misspelling such as
+      "damaging_pair") is a FAIL wherever it appears. Every class named in
+      the two lists and in damaging_pairs must be a known class: a value of
+      some [[ports]] pins table (live or retired) or an entry of
+      declared_classes. Any other class (a misspelling such as "24v" for
+      "24V") is a FAIL naming the class and the closest known classes,
+      wherever it appears, because it would match no pin and so read as no
+      hazard.
     [[ports]]
       id = "P1"                         required, unique label
       name = "Main input"
@@ -49,6 +62,19 @@ parameters.toml tables read
 Rules
     - Cross-plug: FAIL for a damaging pairing, INFO for a benign one, INFO for
       interchangeable ports.
+    - Hazard table: a pairing is called benign only when [connector_hazard]
+      is present, both class lists are non-empty lists of class names,
+      damaging_pairs (if given) is a list of two-class pairs, declared_classes
+      (if given) is a list of class names, no key is unknown and no class is
+      unknown. When any pairing mates and the table is missing (including a
+      misspelt table name), empty or malformed, one connectors.hazard FAIL
+      names the problem and each pairing with no damaging pin is a
+      cross_plug FAIL reading UNKNOWN; an unknown key or an unknown class
+      does the same to the pairings and is a connectors.hazard FAIL even
+      with no mating pairing. A pin that the well-formed entries
+      already show damaging is still reported DAMAGING. This is exit 1, not
+      exit 2: the contact and header checks still run and report. With no
+      mating pairing the table is not needed.
     - Contact loading: current / contacts_per_pole over contact_rating_a: FAIL
       over the rating, WARN above 80 percent or when the current is an
       estimate or pending, else PASS. A port with no load and not the input
@@ -60,7 +86,8 @@ Rules
 
 Outputs
     One line per finding: LEVEL, check name, message. Exit 0 no FAIL, 1 at
-    least one FAIL, 2 the tool could not run.
+    least one FAIL (an unusable hazard table included), 2 the tool could not
+    run.
 
 Dependencies
     Python 3.11+ standard library only.
@@ -77,6 +104,7 @@ Validation source
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import sys
 import tomllib
@@ -89,6 +117,9 @@ UNCERTAIN_STATUSES = ("estimate", "pending")
 WARN_FRACTION = 0.80
 HEADER_KIND = "header"
 CURRENT_FIELDS = {"nominal": "i_nominal", "peak": "i_peak"}
+HAZARD_CLASS_LISTS = ("damaging_if_socket_drives", "onto_plug_classes")
+DECLARED_CLASSES = "declared_classes"
+HAZARD_KEYS = (*HAZARD_CLASS_LISTS, "damaging_pairs", DECLARED_CLASSES)
 
 
 class ToolError(Exception):
@@ -132,6 +163,86 @@ def _ids(group: list[dict]) -> str:
     return ", ".join(port["id"] for port in group)
 
 
+def _is_class_list(value: object) -> bool:
+    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item for item in value)
+
+
+def _is_pair_list(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(pair, list) and len(pair) == 2 and all(isinstance(item, str) and item for item in pair)
+        for pair in value)
+
+
+def _port_classes(params: dict) -> set[str]:
+    """Every pin class some [[ports]] row (live or retired) uses."""
+    classes = set()
+    for port in params.get("ports", []):
+        pins = port.get("pins") if isinstance(port, dict) else None
+        if isinstance(pins, dict):
+            classes.update(value for value in pins.values() if isinstance(value, str))
+    return classes
+
+
+def _closest(name: str, known: set[str]) -> str:
+    """The known classes closest to name, compared without case, for a FAIL message."""
+    by_lower: dict[str, list[str]] = {}
+    for item in sorted(known):
+        by_lower.setdefault(item.lower(), []).append(item)
+    near = difflib.get_close_matches(name.lower(), list(by_lower), n=3, cutoff=0.5)
+    found = [item for lower in near for item in by_lower[lower]]
+    if found:
+        return "closest known: " + ", ".join(repr(item) for item in found)
+    return "no close known class; known: " + (", ".join(repr(item) for item in sorted(known)) or "none")
+
+
+def _unknown_classes(usable: dict, known: set[str]) -> list[str]:
+    """One message per class the usable hazard entries name that is not a known class."""
+    named: list[tuple[str, str]] = []
+    for key in HAZARD_CLASS_LISTS:
+        named += [(key, name) for name in usable.get(key, [])]
+    for pair in usable.get("damaging_pairs", []):
+        named += [("damaging_pairs", name) for name in pair]
+    messages, seen = [], set()
+    for key, name in named:
+        if name not in known and (key, name) not in seen:
+            seen.add((key, name))
+            messages.append(f"[connector_hazard] {key} names pin class {name!r}, which no port pin uses and "
+                            f"{DECLARED_CLASSES} does not declare ({_closest(name, known)}); "
+                            "a misspelt class is read as no hazard")
+    return messages
+
+
+def hazard_table(params: dict) -> tuple[dict, list[str], list[str], list[str]]:
+    """(the usable hazard lists, unknown keys, problems that leave a pairing unjudgeable, unknown classes).
+
+    The usable lists hold only well-formed entries, so a bad entry can never be read as "no hazard"; any
+    problem, unknown key or unknown class makes a pairing with no damaging pin UNKNOWN rather than benign."""
+    if "connector_hazard" not in params:
+        return {}, [], ["[connector_hazard] is missing"], []
+    table = params["connector_hazard"]
+    if not isinstance(table, dict):
+        return {}, [], [f"[connector_hazard] is not a table ({table!r})"], []
+    unknown = sorted(set(table) - set(HAZARD_KEYS))
+    usable, problems = {}, []
+    for key in HAZARD_CLASS_LISTS:
+        if _is_class_list(table.get(key)):
+            usable[key] = table[key]
+        else:
+            problems.append(f"[connector_hazard] {key} must be a non-empty list of pin classes, "
+                            f"found {table.get(key, 'nothing')!r}")
+    pairs = table.get("damaging_pairs", [])
+    if _is_pair_list(pairs):
+        usable["damaging_pairs"] = pairs
+    else:
+        problems.append(f"[connector_hazard] damaging_pairs must be a list of [socket class, plug class] pairs, "
+                        f"found {pairs!r}")
+    declared = table.get(DECLARED_CLASSES, [])
+    if not (isinstance(declared, list) and all(isinstance(item, str) and item for item in declared)):
+        problems.append(f"[connector_hazard] {DECLARED_CLASSES} must be a list of pin classes, found {declared!r}")
+        declared = []
+    return usable, unknown, problems, _unknown_classes(usable, _port_classes(params) | set(declared))
+
+
 def _is_damaging(socket_class: str, plug_class: str, hazard: dict) -> bool:
     if socket_class in hazard.get("damaging_if_socket_drives", []) and plug_class in hazard.get("onto_plug_classes", []):
         return True
@@ -151,26 +262,36 @@ def _damaging_pins(plug: dict, socket: dict, hazard: dict) -> list[str]:
 
 def cross_plug_findings(params: dict) -> list[Finding]:
     matability = params.get("connector_matability", {})
-    hazard = params.get("connector_hazard", {})
+    hazard, unknown, problems, unknown_classes = hazard_table(params)
     groups = _groups(_live(params.get("ports", [])))
     findings = []
     for group in groups:
         if len(group) > 1:
             findings.append(Finding("INFO", f"{CHECK}.interchangeable",
                                     f"ports {_ids(group)} ({group[0]['coding']}) are interchangeable - label the ports"))
-    for plug_group in groups:
-        for socket_group in groups:
-            if plug_group is socket_group:
-                continue
-            plug, socket = plug_group[0], socket_group[0]
-            if socket["coding"] not in matability.get(plug["coding"], []):
-                continue
-            where = f"plug {_ids(plug_group)} into socket {_ids(socket_group)}"
-            bad = _damaging_pins(plug, socket, hazard)
-            if bad:
-                findings.append(Finding("FAIL", f"{CHECK}.cross_plug", f"{where}: DAMAGING, {'; '.join(bad)}"))
-            else:
-                findings.append(Finding("INFO", f"{CHECK}.cross_plug", f"{where}: benign"))
+    pairings = [(plug_group, socket_group) for plug_group in groups for socket_group in groups
+                if plug_group is not socket_group
+                and socket_group[0]["coding"] in matability.get(plug_group[0]["coding"], [])]
+    if unknown:
+        findings.append(Finding("FAIL", f"{CHECK}.hazard",
+                                f"[connector_hazard] has unknown key(s) {', '.join(unknown)} "
+                                f"(known: {', '.join(HAZARD_KEYS)}); a misspelt key is read as no hazard"))
+    for message in unknown_classes:
+        findings.append(Finding("FAIL", f"{CHECK}.hazard", message))
+    if pairings and problems:
+        findings.append(Finding("FAIL", f"{CHECK}.hazard",
+                                f"{'; '.join(problems)}: {len(pairings)} mating pairing(s) cannot be judged"))
+    unjudged = ("UNKNOWN, [connector_hazard] is incomplete or has unknown keys or classes, "
+                "no pin found damaging so far")
+    for plug_group, socket_group in pairings:
+        where = f"plug {_ids(plug_group)} into socket {_ids(socket_group)}"
+        bad = _damaging_pins(plug_group[0], socket_group[0], hazard)
+        if bad:
+            findings.append(Finding("FAIL", f"{CHECK}.cross_plug", f"{where}: DAMAGING, {'; '.join(bad)}"))
+        elif unknown or problems or unknown_classes:
+            findings.append(Finding("FAIL", f"{CHECK}.cross_plug", f"{where}: {unjudged}"))
+        else:
+            findings.append(Finding("INFO", f"{CHECK}.cross_plug", f"{where}: benign"))
     return findings
 
 

@@ -260,6 +260,71 @@ shipped_set_check() {
   printf '%s\n' "$out" | grep -qx -- "$SHIPPED_DONE" || echo "shipped-set check of $1 stopped before completing"
 }
 
+# roster_inventory_errors: the roster README advertises its roles as table rows
+# starting "| `<name>` |"; each advertised role ships agents/<name>.md and its
+# .toml twin, and every shipped agent is advertised. Without this a deleted
+# role still passes, because shipped_set_errors only judges files that exist.
+roster_inventory_errors() {
+  local readme=docs/roster/README.md listed shipped name f
+  [[ -f "$readme" ]] || return 0
+  listed="$(tr -d '\r' < "$readme" | sed -n 's/^| `\([a-z0-9][a-z0-9-]*\)` |.*/\1/p' | sort -u)"
+  # Both halves count as shipped, so an orphan .toml is caught too.
+  shipped="$(for f in docs/roster/agents/*.md docs/roster/agents/*.toml; do if [[ -f "$f" ]]; then f="${f##*/}"; echo "${f%.*}"; fi; done | sort -u)"
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    [[ -f "docs/roster/agents/$name.md" ]] || echo "$readme lists $name but docs/roster/agents/$name.md does not exist"
+    [[ -f "docs/roster/agents/$name.toml" ]] || echo "$readme lists $name but docs/roster/agents/$name.toml does not exist"
+  done <<< "$listed"
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    printf '%s\n' "$listed" | grep -qx -- "$name" || echo "docs/roster/agents/$name ships but $readme does not list it"
+  done <<< "$shipped"
+  return 0
+}
+
+# library_inventory_errors: docs/library/README.md lists its items in the
+# "## Items" table as "| <name> | <kind ...> |"; each listed item exists where
+# its kind lives (agent: agents/<name>.md or .toml, skill: skills/<name>/SKILL.md,
+# procedure: procedures/<name>.md, hook: hooks/<name>.py, tool: tools/<name>.py
+# or .sh), and every shipped item of those kinds is listed. Without this a
+# deleted library item still passes.
+library_inventory_errors() {
+  local readme=docs/library/README.md lib=docs/library rows name kind f found
+  [[ -f "$readme" ]] || return 0
+  rows="$(tr -d '\r' < "$readme" | awk '
+    /^## / { items = ($0 == "## Items"); next }
+    items && /^\| / {
+      n = split($0, c, "|"); name = c[2]; kind = c[3]
+      gsub(/^[ \t`]+|[ \t`]+$/, "", name); gsub(/^[ \t]+/, "", kind)
+      split(kind, k, /[ (]/)
+      if (name ~ /^[a-z0-9][a-z0-9_-]*$/ && k[1] ~ /^(agent|skill|procedure|hook|tool)$/) print k[1] " " name
+    }')"
+  while read -r kind name; do
+    [[ -n "$name" ]] || continue
+    found=0
+    case "$kind" in
+      agent) [[ -f "$lib/agents/$name.md" || -f "$lib/agents/$name.toml" ]] && found=1 ;;
+      skill) [[ -f "$lib/skills/$name/SKILL.md" ]] && found=1 ;;
+      procedure) [[ -f "$lib/procedures/$name.md" ]] && found=1 ;;
+      hook) [[ -f "$lib/hooks/$name.py" ]] && found=1 ;;
+      tool) [[ -f "$lib/tools/$name.py" || -f "$lib/tools/$name.sh" ]] && found=1 ;;
+    esac
+    (( found )) || echo "$readme lists $kind $name but it does not exist under $lib/"
+  done <<< "$rows"
+  for f in "$lib"/agents/*.md "$lib"/agents/*.toml "$lib"/skills/*/SKILL.md "$lib"/procedures/*.md "$lib"/hooks/*.py "$lib"/tools/*.py "$lib"/tools/*.sh; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      "$lib"/agents/*) kind=agent; name="${f##*/}"; name="${name%.*}" ;;
+      "$lib"/skills/*) kind=skill; name="${f%/SKILL.md}"; name="${name##*/}" ;;
+      "$lib"/procedures/*) kind=procedure; name="${f##*/}"; name="${name%.md}" ;;
+      "$lib"/hooks/*) kind=hook; name="${f##*/}"; name="${name%.py}" ;;
+      *) kind=tool; name="${f##*/}"; name="${name%.*}" ;;
+    esac
+    printf '%s\n' "$rows" | grep -qx -- "$kind $name" || echo "$f ships but $readme does not list it as a $kind"
+  done
+  return 0
+}
+
 # Total profile skills over the adopted profiles (all profiles when AGENTS.md
 # names none).
 profile_skill_sets() {
@@ -432,6 +497,12 @@ cmd_check() {
       if [[ -n "$msg" ]]; then errs+=("$msg"); fi
     done < <(shipped_set_check "$optdir")
   done
+  while IFS= read -r msg; do
+    if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+  done < <(roster_inventory_errors || echo "roster inventory check stopped before completing")
+  while IFS= read -r msg; do
+    if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+  done < <(library_inventory_errors || echo "library inventory check stopped before completing")
 
   # Rules files stay small enough to read whole.
   local f n

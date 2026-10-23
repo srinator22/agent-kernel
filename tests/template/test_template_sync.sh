@@ -56,6 +56,8 @@ put docs/profiles/README.md "profiles readme v1"
 put docs/profiles/software/PROFILE.md "software v1"
 put docs/profiles/embedded/PROFILE.md "embedded v1"
 put docs/profiles/scientific/PROFILE.md "scientific v1"
+put docs/library/agents/helper.md "library helper v1"
+put docs/roster/agents/lead.md "roster lead v1"
 put CONTRIBUTING.md "contributing v1"
 put manifest.md "manifest v1"
 put CLAUDE.md "@AGENTS.md"
@@ -76,6 +78,8 @@ put docs/rules/new.md "a new rule"
 put docs/procedures/p.md "procedure p v2"
 put docs/profiles/software/PROFILE.md "software v2"
 put docs/profiles/embedded/PROFILE.md "embedded v2"
+put docs/library/agents/helper.md "library helper v2"
+put docs/roster/agents/new-lead.md "a new roster agent"
 put manifest.md "manifest v2"
 put .github/workflows/ci.yml "ci v2"
 put_lessons "# Lessons index v2" "template data 1" "template data 2"
@@ -128,13 +132,15 @@ assert_contains "conflict shows a diff" "=== diff: docs/procedures/p.md"
 assert_file "conflict diff is written to .work" .work/template-sync/docs/procedures/p.md.diff
 assert_contains "carried non-adopted profile is synced as a conflict" "CONFLICT  docs/profiles/embedded/PROFILE.md"
 assert_contains "new file is an ADD" "ADD       docs/rules/new.md"
+assert_contains "untouched library file is an UPDATE" "UPDATE    docs/library/agents/helper.md"
+assert_contains "new roster agent is an ADD" "ADD       docs/roster/agents/new-lead.md"
 assert_contains "upstream removal is listed" "REMOVED   scripts/obsolete.sh"
 assert_not_contains "never lists README.md" "README.md"
 assert_not_contains "never lists BACKLOG.md" "BACKLOG.md"
 assert_not_contains "never lists decisions" "docs/decisions"
 assert_not_contains "never lists .work as a path" "  .work/"
 assert_not_contains "a profile the project does not carry is skipped" "scientific"
-assert_contains "summary counts" "update=3 add=1 conflict=2 diff=2"
+assert_contains "summary counts" "update=4 add=2 conflict=2 diff=2"
 assert_contains "dry run says nothing changed" "dry run; nothing was changed"
 assert_eq "dry run left a.sh alone" "echo a v1" "$(cat scripts/a.sh)"
 assert_no_file "dry run added nothing" docs/rules/new.md
@@ -178,6 +184,8 @@ assert_rc "apply with conflicts exits 1" 1
 assert_eq "untouched script updated" "echo a v2" "$(cat scripts/a.sh)"
 assert_eq "manifest updated" "manifest v2" "$(cat manifest.md)"
 assert_eq "new file added" "a new rule" "$(cat docs/rules/new.md)"
+assert_eq "library file updated" "library helper v2" "$(cat docs/library/agents/helper.md)"
+assert_eq "roster agent added" "a new roster agent" "$(cat docs/roster/agents/new-lead.md)"
 assert_eq "adopted profile never applied" "software v1" "$(cat docs/profiles/software/PROFILE.md)"
 assert_eq "ci.yml never applied" "ci v1 edited by the project" "$(cat .github/workflows/ci.yml)"
 assert_eq "conflicting file keeps the project version" "procedure p v1 edited by the project" "$(cat docs/procedures/p.md)"
@@ -275,5 +283,19 @@ run ./scripts/template-sync.sh --template "$FIX/does-not-exist" --dry-run
 assert_rc "an unreachable template fails" 1
 run ./scripts/template-sync.sh --template "$TPL" --ref no-such-ref --dry-run
 assert_rc "an unknown ref fails" 1
+
+# ---- core set parity: upstream.md, the script header and CORE_DIRS agree ----
+# upstream.md says the script reads the same list; this keeps the three in step
+# (a directory added to one and not the others is how docs/library and
+# docs/roster went unsynced).
+core_dirs="$(sed -n 's/^CORE_DIRS=(\(.*\))$/\1/p' "$T_ROOT/scripts/template-sync.sh" | tr ' ' '\n' | sed '/^$/d' | sort -u)"
+up_dirs="$(awk '/^## Core file set/{f=1;next} /^## /{f=0} f' "$T_ROOT/docs/procedures/upstream.md" | grep -o '`[a-z./][a-z./_-]*/`' | tr -d '`' | sed 's#/$##' | sort -u)"
+hdr="$(sed -n '/^# Core set (exactly):/,/Never touched at all:/p' "$T_ROOT/scripts/template-sync.sh" | tr '\n' ' ')"
+[[ "$hdr" == *"Never touched at all:"* && "$(printf '%s' "$hdr" | wc -c)" -lt 1200 ]] \
+  || t_bad "the core-set header range did not end at 'Never touched at all:'"
+assert_eq "upstream.md core set equals CORE_DIRS" "$core_dirs" "$up_dirs"
+missing_hdr=""
+for d in $core_dirs; do [[ "$hdr" == *"$d/"* ]] || missing_hdr="$missing_hdr $d"; done
+assert_eq "the script header names every CORE_DIRS entry" "" "$missing_hdr"
 
 t_finish

@@ -269,6 +269,50 @@ assert_contains "the roster twin is named" "docs/roster/agents/lead.md: no Codex
 printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/roster/agents/lead.toml
 run ./scripts/lessons.sh check
 assert_rc "a complete roster agent pair passes" 0
+# Roster inventory: the README's advertised roles and the shipped agents agree.
+printf '# Roster\n\n| Agent | Kind |\n|---|---|\n| `lead` | lead |\n| `ghost` | lead |\n' > docs/roster/README.md
+run ./scripts/lessons.sh check
+assert_rc "an advertised role with no files fails" 1
+assert_contains "the missing role is named" "docs/roster/README.md lists ghost but docs/roster/agents/ghost.md does not exist"
+assert_contains "its missing twin is named" "docs/roster/README.md lists ghost but docs/roster/agents/ghost.toml does not exist"
+printf '# Roster\n\n| Agent | Kind |\n|---|---|\n| `lead` | lead |\n' > docs/roster/README.md
+run ./scripts/lessons.sh check
+assert_rc "a README that matches the shipped roles passes" 0
+printf -- '---\nname: extra\ndescription: x\nmodel: inherit\n---\n' > docs/roster/agents/extra.md
+printf 'name = "extra"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/roster/agents/extra.toml
+run ./scripts/lessons.sh check
+assert_rc "a shipped role the README does not list fails" 1
+assert_contains "the unlisted role is named" "docs/roster/agents/extra ships but docs/roster/README.md does not list it"
+rm -f docs/roster/agents/extra.md
+run ./scripts/lessons.sh check
+assert_rc "an orphan roster .toml with no README row fails" 1
+assert_contains "the orphan .toml is named" "docs/roster/agents/extra ships but docs/roster/README.md does not list it"
+rm -f docs/roster/agents/extra.md docs/roster/agents/extra.toml
+rm -f docs/roster/agents/lead.md docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "deleting an advertised role's files fails" 1
+assert_contains "the deleted role is named" "docs/roster/README.md lists lead but docs/roster/agents/lead.md does not exist"
+rm -f docs/roster/README.md
+# Library inventory: the README Items table and the shipped items agree.
+rm -rf docs/library
+mkdir -p docs/library/agents docs/library/skills/sk docs/library/tools
+printf -- '---\nname: aa\ndescription: x\nmodel: sonnet\n---\n' > docs/library/agents/aa.md
+printf 'name = "aa"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/library/agents/aa.toml
+printf -- '---\nname: sk\ndescription: x\n---\n' > docs/library/skills/sk/SKILL.md
+echo 'print(1)' > docs/library/tools/tt.py
+printf '# Library\n\n## Items\n\n| Name | Kind | What |\n|---|---|---|\n| aa | agent (standard tier) | x |\n| sk | skill | x |\n| tt | tool | x |\n\n## Other\n\n| Candidate | Reason |\n|---|---|\n| zz | not ported |\n' > docs/library/README.md
+run ./scripts/lessons.sh check
+assert_rc "a library README matching its items passes" 0
+rm -rf docs/library/skills/sk
+run ./scripts/lessons.sh check
+assert_rc "a deleted library skill fails" 1
+assert_contains "the deleted skill is named" "docs/library/README.md lists skill sk but it does not exist under docs/library/"
+mkdir -p docs/library/skills/sk && printf -- '---\nname: sk\ndescription: x\n---\n' > docs/library/skills/sk/SKILL.md
+echo 'echo 1' > docs/library/tools/extra.sh
+run ./scripts/lessons.sh check
+assert_rc "an unlisted library tool fails" 1
+assert_contains "the unlisted tool is named" "docs/library/tools/extra.sh ships but docs/library/README.md does not list it as a tool"
+rm -rf docs/library
 rm -rf docs/profiles docs/library docs/roster
 
 # tests/quarantine.list: owner and date required, at most 30 days old.

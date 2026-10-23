@@ -15,6 +15,8 @@ reads the same list):
 - `CLAUDE.md`, `CONTRIBUTING.md`, `manifest.md`, `cliff.toml`
 - `docs/BLUEPRINT.md`, `docs/DEFECT_MEMORY.md`
 - `docs/procedures/`, `docs/rules/`, `docs/profiles/`
+- `docs/library/`, `docs/roster/` (opt-in items; start.md Q7 reads their
+  READMEs, so adoption must carry them)
 - `docs/lessons/INDEX.md`, `PENDING.md`, `QUARANTINE.md`, `UPSTREAM.md`
   (format only, never the entries)
 - `scripts/`, `tests/template/` (ships with the scripts)

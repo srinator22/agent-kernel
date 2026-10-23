@@ -28,7 +28,8 @@
 #
 # Core set (exactly): CLAUDE.md, CONTRIBUTING.md, manifest.md, cliff.toml,
 # docs/BLUEPRINT.md, docs/DEFECT_MEMORY.md, docs/procedures/, docs/rules/,
-# docs/profiles/, scripts/, tests/template/, .claude/, .agents/, .codex/,
+# docs/profiles/, docs/library/, docs/roster/, scripts/, tests/template/,
+# .claude/, .agents/, .codex/,
 # .github/workflows/ci.yml, and the format headers (first 12 lines only) of
 # docs/lessons/INDEX.md, PENDING.md, QUARANTINE.md and UPSTREAM.md; the rest of
 # those four files is project data and is never touched. Never touched at all:
@@ -66,7 +67,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="docs/lessons/MAINTENANCE.log"
 OUTDIR=".work/template-sync"
-CORE_DIRS=(scripts docs/procedures docs/rules docs/profiles tests/template .claude .agents .codex)
+CORE_DIRS=(scripts docs/procedures docs/rules docs/profiles docs/library docs/roster tests/template .claude .agents .codex)
 CORE_FILES=(CLAUDE.md CONTRIBUTING.md manifest.md cliff.toml docs/BLUEPRINT.md docs/DEFECT_MEMORY.md .github/workflows/ci.yml)
 HEADER_FILES=(docs/lessons/INDEX.md docs/lessons/PENDING.md docs/lessons/QUARANTINE.md docs/lessons/UPSTREAM.md)
 HEADER_LINES=12

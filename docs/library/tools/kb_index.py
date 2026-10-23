@@ -23,8 +23,12 @@ index yet, a bad query, or with --require-pdf a PDF to index and no PDF library)
 Dependencies: Python 3 standard library only for Markdown, text and search. ONE optional dependency each, never
 required: `pymupdf` for PDF text extraction and `openpyxl` for spreadsheets. When one is missing, files of that
 kind are skipped with a printed note (or exit 2 with --require-pdf) and everything else is still indexed.
+Stale content: a file that was indexed, then changed, and cannot be re-extracted (its library is now missing,
+or extraction raises) has its old rows and digest removed and is reported as STALE DROPPED, so search never
+returns its previous text as current; the next build tries it again. With --require-pdf the stale PDF rows are
+removed before the exit 2.
 Assumptions: the Python's sqlite3 was built with FTS5 (checked at start). Unchanged files (same sha256) are
-skipped on rebuild and vanished files are removed from the index.
+skipped on rebuild and vanished (deleted or newly excluded) files are removed from the index.
 Validation source: ported from a project-local index tool that was used to answer datasheet and decision
 questions; behaviour of the query builder and the section splitter is kept.
 """
@@ -74,6 +78,7 @@ class BuildSummary:
     indexed: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
+    stale_dropped: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     rows_added: int = 0
@@ -119,6 +124,12 @@ def open_db(db_path: Path, create: bool = True) -> sqlite3.Connection:
         connection.close()
         raise
     return connection
+
+
+def forget(connection: sqlite3.Connection, rel: str) -> None:
+    """Remove a file's rows and digest from the index."""
+    connection.execute("DELETE FROM docs WHERE path = ?", (rel,))
+    connection.execute("DELETE FROM files WHERE path = ?", (rel,))
 
 
 # ----------------------------------------------------------------- discovery
@@ -271,21 +282,39 @@ def build_index(root: Path, db_path: Path, doc_dirs: tuple[str, ...] = DEFAULT_D
             else:
                 todo.append(source)
         available = {fmt: globals()[check]() for fmt, (_, check) in LIBRARY_CHECKS.items()}
-        if require_pdf and any(s.format == "pdf" for s in todo) and not available["pdf"]:
-            raise KbError("pymupdf is not installed in this Python and --require-pdf was given. "
-                          "Install it with: python -m pip install pymupdf")
+
+        def drop_stale(source: Source, reason: str) -> None:
+            """A changed file that cannot be re-extracted loses its old rows and digest, so search never
+            returns its previous text as current and the next build tries it again."""
+            if source.rel in known:
+                forget(connection, source.rel)
+                summary.stale_dropped.append(f"{source.rel}: {reason}")
+
         for gone in sorted(set(known) - {s.rel for s in sources}):
-            connection.execute("DELETE FROM docs WHERE path = ?", (gone,))
-            connection.execute("DELETE FROM files WHERE path = ?", (gone,))
+            forget(connection, gone)
             summary.removed.append(gone)
+        missing_pdf = [s for s in todo if s.format == "pdf" and not available["pdf"]]
+        if require_pdf and missing_pdf:
+            for source in missing_pdf:
+                drop_stale(source, "changed since it was indexed and pymupdf is not installed")
+            connection.commit()
+            dropped = f" {len(summary.stale_dropped)} stale indexed PDF(s) were removed." \
+                if summary.stale_dropped else ""
+            raise KbError("pymupdf is not installed in this Python and --require-pdf was given."
+                          f"{dropped} Install it with: python -m pip install pymupdf")
         for source in todo:
             if source.format in available and not available[source.format]:
-                summary.skipped.append(f"{source.rel}: {LIBRARY_CHECKS[source.format][0]} is not installed")
+                library = LIBRARY_CHECKS[source.format][0]
+                if source.rel in known:
+                    drop_stale(source, f"changed since it was indexed and {library} is not installed")
+                else:
+                    summary.skipped.append(f"{source.rel}: {library} is not installed")
                 continue
             try:
                 extracted = EXTRACTORS[source.format](source)
             except Exception as error:  # one bad file must not stop the build
                 summary.errors.append(f"{source.rel}: {type(error).__name__}: {error}")
+                drop_stale(source, "changed since it was indexed and could not be re-extracted")
                 continue
             connection.execute("DELETE FROM docs WHERE path = ?", (source.rel,))
             connection.executemany(
@@ -312,6 +341,9 @@ def print_summary(summary: BuildSummary, db_path: Path) -> None:
     print(f"Removed (file gone): {len(summary.removed)}")
     for gone in summary.removed:
         print(f"  removed: {gone}")
+    print(f"Stale rows dropped (changed, not re-extracted): {len(summary.stale_dropped)}")
+    for item in summary.stale_dropped:
+        print(f"  STALE DROPPED: {item}; it is not searchable until it is indexed again")
     print(f"Notes/skipped: {len(summary.skipped)}")
     for item in summary.skipped:
         print(f"  note: {item}")

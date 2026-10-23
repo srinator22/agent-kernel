@@ -104,13 +104,48 @@ class VerificationTests(TempDirTestCase):
         self.assertEqual(of_level(findings, "FAIL"), [])
         self.assertIn("no SHA-256", joined(of_level(findings, "WARN")))
 
-    def test_directory_row_covers_files_below_and_second_table_hashes_them(self):
+    def test_directory_row_with_a_hashed_row_per_file_passes(self):
+        self.write("datasheets/motor/Top.pdf", b"layer")
+        self.write("datasheets/motor/Bottom.pdf", b"layer2")
+        manifest = (HEADER + row("motor/", "see per-file table") +
+                    f"\n| File | SHA-256 |\n|---|---|\n| Top.pdf | {sha(b'layer')} |\n| Bottom.pdf | {sha(b'layer2')} |\n")
+        self.manifest(manifest)
+        findings = self.findings()
+        self.assertEqual(of_level(findings, "FAIL"), [])
+        self.assertEqual(of_level(findings, "WARN"), [])
+        self.assertIn("2 hashes checked", joined(of_level(findings, "PASS")))
+
+    def test_directory_row_does_not_stand_in_for_a_per_file_row(self):
+        # A folder row once covered every file below it: a file with no row of its own escaped the unlisted FAIL,
+        # so a replaced or modified datasheet in that folder went undetected.
         self.write("datasheets/motor/Top.pdf", b"layer")
         self.write("datasheets/motor/Bottom.pdf", b"layer2")
         manifest = (HEADER + row("motor/", "see per-file table") +
                     f"\n| File | SHA-256 |\n|---|---|\n| Top.pdf | {sha(b'layer')} |\n")
         self.manifest(manifest)
-        self.assertEqual(of_level(self.findings(), "FAIL"), [])
+        fail = joined(of_level(self.findings(), "FAIL"))
+        self.assertIn("unlisted file: motor/Bottom.pdf", fail)
+        self.assertNotIn("Top.pdf", fail)
+        only_folder = HEADER + row("motor/", "see per-file table")
+        self.manifest(only_folder)
+        fail = joined(of_level(self.findings(), "FAIL"))
+        self.assertIn("unlisted file: motor/Top.pdf", fail)
+        self.assertIn("unlisted file: motor/Bottom.pdf", fail)
+
+    def test_directory_row_does_not_hide_a_missing_per_file_hash(self):
+        self.write("datasheets/motor/Top.pdf", b"layer")
+        self.manifest(HEADER + row("motor/", "see per-file table") +
+                      "\n| File | SHA-256 |\n|---|---|\n| Top.pdf | - |\n")
+        findings = self.findings()
+        self.assertIn("Top.pdf: no SHA-256 recorded", joined(of_level(findings, "WARN")))
+
+    def test_part_datasheet_below_a_directory_row_still_needs_its_own_row(self):
+        self.write("datasheets/motor/M1.pdf", b"data")
+        self.manifest(HEADER + row("motor/", "see per-file table"))
+        params = {"parts": [{"ref": "M1", "datasheet": "datasheets/motor/M1.pdf"}]}
+        findings = self.findings(params)
+        self.assertIn("M1: datasheet datasheets/motor/M1.pdf is not listed", joined(of_level(findings, "WARN")))
+        self.assertIn("unlisted file: motor/M1.pdf", joined(of_level(findings, "FAIL")))
 
     def test_ambiguous_bare_name_fails(self):
         self.write("datasheets/a/Top.pdf", b"1")
@@ -172,6 +207,14 @@ class CommandLineTests(TempDirTestCase):
         self.write("datasheets/MANIFEST.md", HEADER)
         self.assertEqual(run_main(cm, ["--root", str(self.root)])[0], 1)
         self.assertEqual(run_main(cm, ["--root", str(self.root / "nowhere")])[0], 2)
+
+    def test_directory_row_alone_exits_1(self):
+        (self.root / "datasheets").mkdir()
+        self.write("datasheets/motor/Top.pdf", b"layer")
+        self.write("datasheets/MANIFEST.md", HEADER + row("motor/", "see per-file table"))
+        code, out = run_main(cm, ["--root", str(self.root)])
+        self.assertEqual(code, 1, out)
+        self.assertIn("unlisted file: motor/Top.pdf", out)
 
     def test_json_output_and_help(self):
         (self.root / "datasheets").mkdir()
