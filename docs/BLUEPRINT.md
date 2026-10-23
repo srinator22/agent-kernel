@@ -532,7 +532,7 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/template-sync.sh`: fetch the template at a tag, diff the core files, apply non-conflicting updates, never touch Project decisions, re-verify the kernel hash, log the run.
 - `scripts/quickgate.sh`: the fast subset of the gauntlet for use during work; the full gate runs before publication.
 - `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
-- `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
+- `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, the Context, Decision and Consequences sections in order, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
 - `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
 - `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
 

@@ -85,7 +85,7 @@ assert_rc "a bad task graph fails in project mode" 1
 assert_contains "the task graph failure is reported" "scripts/taskgraph.sh check failed"
 write_task
 mkdir -p docs/decisions
-printf '# 0002 - Skipped one\n\nDate: 2026-01-01\nStatus: accepted\n' > docs/decisions/0002-skipped-one.md
+printf '# 0002 - Skipped one\n\nDate: 2026-01-01\nStatus: accepted\n\n## Context\n\n## Decision\n\n## Consequences\n' > docs/decisions/0002-skipped-one.md
 commit_fixture
 run ./scripts/check.sh --quick
 assert_rc "a misnumbered ADR fails project mode, even with --quick" 1
@@ -142,7 +142,7 @@ for f in "${REQUIRED[@]}"; do
       printf 'name = "x"\ndescription = "y"\ndeveloper_instructions = "z"\n' > "$f" ;;
     .claude/settings.json) echo '{}' > "$f" ;;
     docs/decisions/*.md)
-      printf '# %s - Stub\n\nDate: 2026-01-01\nStatus: accepted\n' "$(basename "$f" | cut -c1-4)" > "$f" ;;
+      printf '# %s - Stub\n\nDate: 2026-01-01\nStatus: accepted\n\n## Context\n\n## Decision\n\n## Consequences\n' "$(basename "$f" | cut -c1-4)" > "$f" ;;
     .work/TASK.md) printf '# Task: fixture\n\n## Budget\n' > "$f" ;;
     CLAUDE.md) echo '@AGENTS.md' > "$f" ;;
     *) echo "stub" > "$f" ;;

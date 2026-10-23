@@ -10,6 +10,8 @@
 #   before the first "## " heading there is a "Date: YYYY-MM-DD" line and a
 #   non-empty "Status:" line; a "superseded by NNNN" status names an ADR that
 #   exists;
+#   the sections "## Context", "## Decision" and "## Consequences" are present,
+#   in that order (other sections may follow or sit between them);
 #   no "{{" template placeholder is left in the file.
 # No docs/decisions/ folder, or an empty one, passes.
 # Test hook: ADR_TODAY=YYYY-MM-DD overrides today's date for new.
@@ -31,7 +33,7 @@ adr_files() {
 }
 
 cmd_check() {
-  local errs=() f base num prev=0 expect title header date status target seen=" "
+  local errs=() f base num prev=0 expect title header date status target seen=" " c d q
   while IFS= read -r f; do
     [[ -n "$f" ]] || continue
     base="$(basename "$f")"
@@ -69,6 +71,16 @@ cmd_check() {
       if ! ls "$DIR/$target"-*.md >/dev/null 2>&1; then
         errs+=("$f: status names ADR $target, which does not exist")
       fi
+    fi
+    read -r c d q < <(awk '{ sub(/\r$/, "") }
+      $0 == "## Context" && !c { c = NR }
+      $0 == "## Decision" && !d { d = NR }
+      $0 == "## Consequences" && !q { q = NR }
+      END { print c + 0, d + 0, q + 0 }' "$f")
+    if (( c == 0 || d == 0 || q == 0 )); then
+      errs+=("$f: needs the sections '## Context', '## Decision' and '## Consequences'")
+    elif (( c > d || d > q )); then
+      errs+=("$f: the sections must run '## Context', '## Decision', '## Consequences' in that order")
     fi
     if grep -q '{{' "$f"; then
       errs+=("$f: still holds a {{ template placeholder; fill it in")
