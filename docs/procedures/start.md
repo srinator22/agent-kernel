@@ -43,7 +43,8 @@ point in this procedure.
       `docs/CAPABILITY_MAP.md` says; the human confirms or edits it).
       (Scientific wires golden-master fixtures, deterministic seeds, and
       promotes docs/rules/scientific-integrity.md in the index.) Also: which
-      optional items from `docs/library/README.md` to adopt (default none)?
+      optional items from `docs/library/README.md` to adopt, and which
+      department agents from `docs/roster/README.md` (default none)?
    8. Default task mode: `standard | quick | autopilot` (the names
       `scripts/new-task.sh` takes)?
    9. Any hard invariants I should never violate (UX, performance,
@@ -82,8 +83,9 @@ point in this procedure.
    `skills/<n>/` to both `.claude/skills/` and `.agents/skills/`, and
    `tools/` (with `tools/tests/`) to the project's tool folder, recorded in
    Project decisions; wire each tool's tests into check.sh. A name that
-   already exists is merged by hand, never overwritten. Library items chosen
-   in Q7 install the same way; a library procedure is copied to
+   already exists is merged by hand, never overwritten. Library items and
+   roster agents chosen in Q7 install the same way (a roster agent's
+   specialist folder is created when its first artifact is written); a library procedure is copied to
    `docs/procedures/`, and a library skill takes one of the core skill slots
    (8 minus the core skills shipped). `scripts/lessons.sh check` must pass
    after the copy (skills cap and mirror).
