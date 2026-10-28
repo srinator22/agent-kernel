@@ -42,7 +42,8 @@ import render_common as rc  # noqa: E402
 
 TOOL = "scene_lint"
 PRESET_KEYS = {"name", "settings", "transparent_min_samples", "allow_units", "max_light_ratio",
-               "require_oidn_albedo_normal", "film_grain"}
+               "require_oidn_albedo_normal", "film_grain",
+               "label", "notes"}  # label and notes document the preset; nothing checks them
 _MISSING = object()
 
 
@@ -170,7 +171,8 @@ def make_parser() -> argparse.ArgumentParser:
         description="Lint a render-extract/1 JSON against a preset JSON (settings, units, textures, glass samples, "
                     "light power, keyed-but-hidden objects).",
         epilog="Exit: 0 pass, 1 findings, 2 could not run. Preset keys: name, settings (dotted keys), "
-               "transparent_min_samples, allow_units, max_light_ratio, require_oidn_albedo_normal, film_grain.")
+               "transparent_min_samples, allow_units, max_light_ratio, require_oidn_albedo_normal, film_grain; "
+               "label and notes are documentation only.")
     ap.add_argument("extract", help="render-extract/1 JSON from blender_extract")
     ap.add_argument("--preset", required=True, help="preset JSON (see the module docstring)")
     ap.add_argument("--json", help="write the machine report here")

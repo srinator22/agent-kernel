@@ -76,6 +76,12 @@ class FindingTests(LintCase):
         self.assertEqual(code, 0, out)
         self.assertIn("scene_lint: PASS preset 'final'", out.splitlines()[-1])
 
+    def test_documentation_keys_are_allowed_and_typos_are_not(self):
+        # label and notes describe a preset for sheets and humans; they carry no check.
+        code, out, err = self.lint(preset=dict(PRESET, label="FINAL", notes="seed decided by A/B"))
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.lint(preset=dict(PRESET, lable="FINAL"))[0], 2)
+
     def test_setting_mismatch_shows_both_values(self):
         d = self.mutated(lambda d: d["scene"]["cycles"].update(samples=256, use_animated_seed=True))
         code, out, _ = self.lint(d)
