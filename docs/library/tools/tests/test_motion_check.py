@@ -116,6 +116,28 @@ class SpikeTests(Base):
         self.assertEqual(code, 1)
         self.assertIn("object Lid acceleration spike", out)
 
+    def test_object_at_rest_with_one_eased_move_has_no_spike(self):
+        # Regression: a lid still for most of the shot and opened with an ease in and out was flagged,
+        # because the median acceleration over the whole shot was 0.
+        def z(i):
+            if i < 30:
+                return 0.0
+            if i >= 60:
+                return 0.05
+            s = (i - 30) / 30
+            return 0.05 * (3 * s * s - 2 * s * s * s)  # smoothstep: zero speed at both ends
+        obj = lambda i: {"Lid": {"location": [0.0, 0.0, z(i)], "aabb_min": None, "aabb_max": None,
+                                 "samples": []}}
+        code, out, _ = self.check(make_doc(n=120, objects=obj))
+        self.assertEqual(code, 0, out)
+
+    def test_object_at_rest_with_a_pop_is_a_spike(self):
+        obj = lambda i: {"Lid": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
+                                 "aabb_max": None, "samples": []}}
+        code, out, _ = self.check(make_doc(n=120, objects=obj))
+        self.assertEqual(code, 1, out)
+        self.assertIn("object Lid acceleration spike", out)
+
     def test_object_with_few_frames_is_noted(self):
         obj = lambda i: {"Lid": {"location": [0, 0, 0], "aabb_min": None, "aabb_max": None, "samples": []}} \
             if i < 2 else {}

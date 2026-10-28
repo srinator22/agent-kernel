@@ -14,8 +14,9 @@ Checks (all speeds use the real frame spacing and the scene fps):
   stop      camera linear speed and angular speed of the forward vector are both below --stop-frac times
             their median over the shot (a zero median means the component never moves and counts
             as stopped), in an interval outside the holds (needs a moving camera).
-  spike     acceleration magnitude from the second difference of position above --spike times its median and
-            above --accel-floor (m/s^2): the camera and every tracked object in frames[].objects.
+  spike     acceleration magnitude from the second difference of position above --spike times the median of
+            the 5 frames on each side (a local reference, so an eased move of an object otherwise at rest
+            passes) and above --accel-floor (m/s^2): the camera and every tracked object in frames[].objects.
   overshoot camera position between two waypoint frames leaves the waypoints' [min, max] per axis by more
             than --overshoot-tol metres.
   label     for each label and each frame of its life (fade frames included) the box centre must stay on the
@@ -76,9 +77,23 @@ def accelerations(frames, points, fps) -> list:
     return out
 
 
+SPIKE_WINDOW = 5  # neighbours on each side that set the local reference acceleration
+
+
 def spike_frames(accs, factor, floor) -> tuple:
-    med = statistics.median(a for _, a in accs) if accs else 0.0
-    bad = [(f, a) for f, a in accs if a > factor * med and a > floor]
+    """A spike is an acceleration above `factor` x the median of its neighbours (window of SPIKE_WINDOW
+    each side, itself excluded) and above `floor`. A local reference, not the shot median: an object at
+    rest for most of a shot has a median of 0, so any eased move would read as a spike."""
+    vals = [a for _, a in accs]
+    med = statistics.median(vals) if vals else 0.0
+    bad = []
+    for i, (f, a) in enumerate(accs):
+        if a <= floor:
+            continue
+        neigh = vals[max(0, i - SPIKE_WINDOW):i] + vals[i + 1:i + 1 + SPIKE_WINDOW]
+        ref = statistics.median(neigh) if neigh else 0.0
+        if a > factor * max(ref, floor):
+            bad.append((f, a))
     return bad, med
 
 
