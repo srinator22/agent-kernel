@@ -1,0 +1,30 @@
+{
+  "name": "check",
+  "label": "CHECK 960x540 128 SPP",
+  "settings": {
+    "scene.engine": "CYCLES",
+    "scene.resolution": [
+      960,
+      540
+    ],
+    "scene.view_transform": "AgX",
+    "scene.motion_blur": false,
+    "scene.cycles.samples": 128,
+    "scene.cycles.use_adaptive_sampling": true,
+    "scene.cycles.adaptive_threshold": 0.02,
+    "scene.cycles.use_denoising": true,
+    "scene.cycles.denoiser": "OPENIMAGEDENOISE",
+    "scene.cycles.denoising_input_passes": "RGB_ALBEDO_NORMAL",
+    "scene.cycles.denoising_prefilter": "ACCURATE",
+    "scene.cycles.seed": 0,
+    "scene.cycles.use_animated_seed": false,
+    "scene.cycles.filter_width": 1.75,
+    "scene.cycles.sample_clamp_indirect": 10.0
+  },
+  "transparent_min_samples": 128,
+  "allow_units": [
+    "METRIC"
+  ],
+  "max_light_ratio": 1000,
+  "film_grain": false
+}

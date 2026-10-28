@@ -25,6 +25,7 @@ asks for it.
     docs/library/procedures/<name>.md   procedure a skill follows
     docs/library/tools/<tool>           generic tool; tests in tools/tests/
     docs/library/hooks/<hook>           harness hook; tests in hooks/tests/
+    docs/library/examples/<name>/       worked example of a procedure (records, no outputs)
     docs/library/README.md              this file
 
 Every tools/ and hooks/ test runs in the template self-test
@@ -84,6 +85,34 @@ tests with `bash docs/library/tools/tests/<test>.sh`. Every tool takes
 | `fixture-guard.sh` | Fails a commit that changes a golden fixture and the code it pins together without a marker line in the body (SC-3). |
 | `check-project-readmes.sh` | Requires every folder under a projects directory to have a README with the required headings. |
 
+Render tools (`product-render` procedure; copy the whole set with
+`render_common.py`). Cores are stdlib Python with a small PNG codec; Pillow
+and numpy are optional fast paths that the tests prove equal to the stdlib
+path, so CI needs neither. Tools marked (Blender) run inside Blender through
+`blender_run`; their pure parts are tested without it.
+
+| Tool | Use |
+|---|---|
+| `render_common.py` | Shared module: PNG read and write, luma, frame names, absolute-path, git-tree and cloud-folder guards. |
+| `blender_run.py` | Runs a script in the pinned portable Blender headless (`--factory-startup`, `--python-exit-code 1`); fails on a non-zero exit, traceback or version mismatch; `--self-test`. |
+| `render_chunks.py` | Plans and runs chunked frame ranges as a resumable long job (STATE file, one log per chunk, skips present frames); `status` reports s/frame and ETA. |
+| `frame_audit.py` | Expected vs present frames per chunk, resolution, black or blank frames, fireflies, size anomalies, duplicates. |
+| `render_sheets.py` | Contact sheets, zoom crops and A/B compare sheets for reviewers. |
+| `render_estimate.py` | Local hours from measured s/frame; cloud cost only from a user-supplied, dated price table. |
+| `render_bundle.py` | Delivery folder per version: video, exact sources, records, README of commands, verified sha256 manifest. |
+| `encode_verify.py` | MP4 checks by a pure-Python box parser (frames, fps, resolution, duration, bitrate, codec); ffprobe cross-check when on PATH. |
+| `render_encode.py` | (Blender) Frames to MP4 through the VSE with the overlay track; view transform a parameter (Standard for display-referred PNG). |
+| `blender_compat.py` | (Blender) Feature-detected shims for 4.x to 5.x API breaks, GPU pinning with CPU off; `--list` prints the break table. |
+| `blender_extract.py` | (Blender) Writes the render-extract/1 JSON (settings, lights, materials, objects, per-frame camera, bounds, anchors, volumes) the checkers read. |
+| `camera_path.py` | Monotone (pchip) camera path through waypoints; `--check` finds overshoot and undeclared stops. |
+| `motion_check.py` | Camera stops outside declared holds, acceleration spikes, waypoint overshoot, label side flips. |
+| `scene_lint.py` | Scene settings against a named preset, units, missing textures, transparent-material samples, light power, keyed-but-hidden objects. |
+| `color_check.py` | Bit depth, unexpected alpha, clipped or crushed channels, exposure pops between frames. |
+| `flicker_metric.py` | Temporal instability per region in near-still windows; A/B compare for seed and denoiser choices (threshold uncalibrated). |
+| `sim_validate.py` | Liquid volume against the poured target (silent under-emission), leaks, gains, particle trend, cache hash. |
+| `render_overlay.py` | Label track with side consistency, safe area, overlap and title hold; writes the track `render_encode` consumes. |
+| `fit_check.py` | Box-level collisions, clearances and real-dimension scale checks at every keyframe state. |
+
 ## Graduating to a profile
 
 An item graduates when a second project has used it and its evidence is
@@ -125,6 +154,10 @@ one that proved unhelpful is archived with its reason.
 | kb_index | tool | Local full-text index and ranked search over Markdown, text, and optionally PDF and spreadsheets | a controller PCB project |
 | fixture-guard | tool | Fails a commit that changes a golden fixture and the code it pins without a marker line (SC-3) | a hardware R&D journal project |
 | check-project-readmes | tool | Requires a README with the required headings in every project folder | a CAD add-in project |
+| product-render | skill | Drives the staged CAD-to-film pipeline with four hold points and verified output | a product film project |
+| product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0006) | a product film project |
+| render tools | tools | The 19 render tools above, with tests | a product film project (ports where marked in each header; the rest new) |
+| product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
 
 ## Considered and not ported
 

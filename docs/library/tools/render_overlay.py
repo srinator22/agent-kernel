@@ -6,7 +6,7 @@ to the other side of its subject mid-life (including during its fades), runs off
 area, sits on top of another label, tracks an anchor that is missing or behind the camera, or an end title
 that is gone before it can be read twice.
 Inputs: --spec LABELS.json (fps, resolution, font_px, labels [id, text, subject, side left|right|above|below,
-in, out, fade (frames, default 6), offset_px (default 120)], optional title [text, in, hold_s, font_px]) and
+in, out, fade (frames, default 6), offset_px (default 120)], optional title [text, in, hold_s, font_px, position center|lower_third]) and
 --extract EXTRACT.json (render-extract/1: per-frame `anchors` {subject: [u, v, depth]}, u right and v up in
 0..1, depth in metres; minimal schema check only).
 Method: per frame of a label's life (in..out inclusive, fades included) the box is anchor + offset on the
@@ -43,6 +43,7 @@ import render_common as rc  # noqa: E402
 TOOL = "render_overlay"
 SCHEMA = "render-extract/1"
 SIDES = ("left", "right", "above", "below")
+TITLE_POSITIONS = ("center", "lower_third")
 CHAR_W, LINE_H, VISIBLE = 0.55, 1.2, 0.02
 
 
@@ -142,7 +143,10 @@ def validate_spec(spec):
             raise rc.CannotRun("title.text must be a non-empty string")
         title = {**title, "in": _pos(title.get("in"), "title.in", True),
                  "hold_s": _pos(title.get("hold_s"), "title.hold_s", minimum=1e-9),
-                 "font_px": _pos(title.get("font_px", font), "title.font_px", minimum=1e-9)}
+                 "font_px": _pos(title.get("font_px", font), "title.font_px", minimum=1e-9),
+                 "position": title.get("position", "center")}
+        if title["position"] not in TITLE_POSITIONS:
+            raise rc.CannotRun(f"title.position must be one of {', '.join(TITLE_POSITIONS)}")
     return fps, res, font, clean, title
 
 
@@ -242,11 +246,23 @@ def plan(fps, res, font, labels, title, index, scene, safe_frac, wps):
         words = len(title["text"].split())
         need = 2.0 * words / wps
         tw, th = len(title["text"]) * CHAR_W * title["font_px"], LINE_H * title["font_px"]
-        tx, ty = (W - tw) / 2, (H - th) / 2
+        tx = (W - tw) / 2
+        if title["position"] == "lower_third":  # centred on 5/6 of the height, kept inside the safe area
+            ty = min(H * 5 / 6 - th / 2, safe[3] - th)
+        else:
+            ty = (H - th) / 2
         hold_frames = int(round(title["hold_s"] * fps))
         out_title = {"text": title["text"], "in": title["in"], "out": title["in"] + hold_frames,
                      "hold_s": title["hold_s"], "hold_frames": hold_frames, "words": words,
-                     "min_hold_s": need, "x": tx, "y": ty, "w": tw, "h": th, "font_px": title["font_px"]}
+                     "min_hold_s": need, "x": tx, "y": ty, "w": tw, "h": th, "font_px": title["font_px"],
+                     "position": title["position"]}
+        covered = {}
+        for f in range(title["in"], title["in"] + hold_frames + 1):
+            for name, a in (index.get(f) or {}).items():
+                if a[2] > 0 and tx <= a[0] * W <= tx + tw and ty <= (1.0 - a[1]) * H <= ty + th:
+                    covered.setdefault(name, []).append(f)
+        out_title["advisories"] = [f"title box covers anchor {n!r} at frames {rc.format_ranges(fs)} "
+                                   f"(check contrast, or use position lower_third)" for n, fs in sorted(covered.items())]
         if title["hold_s"] < need:
             add("title", f"title hold {title['hold_s']:g}s is shorter than the {need:.2f}s needed to read "
                          f"{words} word(s) twice at {wps:g} words/s")
@@ -282,6 +298,8 @@ def main(argv=None) -> int:
         if out_title:
             track["title"] = out_title
         rc.write_json_atomic(a.out, track)
+        for note in (out_title or {}).get("advisories", []):
+            print(f"advisory: {note}")
         summary = f"(labels {len(items)}, title {'yes' if out_title else 'no'}, track {a.out})"
         return rc.finish(TOOL, findings, summary, a.json, {
             "spec": os.path.abspath(a.spec), "extract": os.path.abspath(a.extract), "track": a.out,

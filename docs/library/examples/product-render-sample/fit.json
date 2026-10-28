@@ -1,0 +1,10 @@
+{
+  "states": [1, 30, 45, 60, 120],
+  "pairs": [["Lid", "Base"], ["Ball", "Base"], ["Ball", "Lid"], ["Lid", "HingePin"]],
+  "clearance_m": 0.0005,
+  "allowed_contacts": [["Ball", "Base"], ["Lid", "HingePin"]],
+  "dimensions": {
+    "Base": {"expected_m": [0.12, 0.08, 0.04], "tol": 0.05},
+    "Lid": {"expected_m": [0.12, 0.08, 0.004], "tol": 0.05}
+  }
+}

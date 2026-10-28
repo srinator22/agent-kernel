@@ -114,7 +114,8 @@ docs/
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
     hooks/                    # harness hooks with tests/
-  roster/                     # opt-in department agents, no project evidence yet (ADR 0005)
+    examples/                 # worked examples of library procedures (records only)
+  roster/                     # opt-in department agents (ADR 0005; render roles ADR 0006)
     README.md                 # department chart, kind, tier, folder, adoption
     agents/                   # leads (read-only) and specialists, each with a Codex twin
   lessons/
@@ -603,3 +604,13 @@ Why: four real projects exposed gaps that the original template could not catch.
 ## Amendment 3 (2026-10-23)
 
 Ten lessons approved by the owner on 2026-10-23 (L001 to L010 in `docs/lessons/INDEX.md`) applied to the core. The reviewer takes the verify output as input and fails without it, ends its verdict with an Evidence checked list, and checks the rules index and adopted profiles' rules. The worker replies in a fixed format with verbatim check results; its commit and push block moved into `scripts/worker-git-guard.sh` under matcher `Bash|PowerShell`. The monitor stays in the foreground and re-runs on timeout; `scripts/ci-watch.sh` derives the expected workflows from the changed files and path filters, with `--expect` and `--plan`. Explore returns conclusions. The retro records time-costing traps and routes durable decisions to ADRs; bugfix requires every regression test to fail first for the stated root cause. The library adr skill graduated to a core procedure, skill and `scripts/adr.sh`, wired into check.sh's always section (core skills: 5 of 8). Kernel untouched.
+
+## Amendment (2026-10-29): product render capability
+
+ADR 0006. The roster gains a CG render department (four leads, seven
+specialists) and CG additions to five creative roles; the library gains the
+`product-render` procedure and skill, 19 render tools with stdlib cores and
+tests, and `docs/library/examples/product-render-sample/`. `scripts/lessons.sh
+check` now enforces roster twin parity and hand-off names. No profile yet
+(one-project evidence); the outline is the BACKLOG graduation target. Kernel
+untouched.

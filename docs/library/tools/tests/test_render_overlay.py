@@ -178,6 +178,22 @@ class Plan(OverlayCase):
         code, _, _ = self.run_tool(spec([label()], {"text": text, "in": 80, "hold_s": 3.0}), extract(moving), "--wps", "2")
         self.assertEqual(code, 1)
 
+    def test_title_lower_third_and_cover_advisory(self):
+        # A centred title over a subject is reported (advisory, exit unchanged); lower_third moves it down.
+        still = lambda f: {"Pin": [0.5, 0.5, 2.0]}
+        code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0}), extract(still))
+        self.assertEqual(code, 0, out)
+        self.assertIn("advisory: title box covers anchor 'Pin' at frames 5-", out)
+        code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0, "position": "lower_third"}),
+                                     extract(still))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("covers anchor", out)
+        t = self.track()["title"]
+        self.assertGreater(t["y"], H * 2 / 3)
+        self.assertLessEqual(t["y"] + t["h"], H * 0.95)
+        bad = spec([], {"text": "End", "in": 5, "hold_s": 2.0, "position": "top"})
+        self.assertEqual(self.run_tool(bad, extract(still))[0], 2)
+
     def test_title_alone_and_overlong_title(self):
         code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0}), extract(moving))
         self.assertEqual(code, 0, out)

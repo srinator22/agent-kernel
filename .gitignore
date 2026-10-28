@@ -31,3 +31,9 @@ __pycache__/
 .ruff_cache/
 target/
 .work/template-sync/
+
+# Render outputs and caches stay outside git (docs/library/procedures/product-render.md);
+# these catch accidental copies inside a project tree.
+*.blend1
+render/**/frames/
+render/**/cache/

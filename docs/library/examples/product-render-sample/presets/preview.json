@@ -1,0 +1,30 @@
+{
+  "name": "preview",
+  "label": "PREVIEW 480x270 64 SPP",
+  "settings": {
+    "scene.engine": "CYCLES",
+    "scene.resolution": [
+      480,
+      270
+    ],
+    "scene.view_transform": "AgX",
+    "scene.motion_blur": true,
+    "scene.cycles.samples": 64,
+    "scene.cycles.use_adaptive_sampling": true,
+    "scene.cycles.adaptive_threshold": 0.03,
+    "scene.cycles.use_denoising": true,
+    "scene.cycles.denoiser": "OPENIMAGEDENOISE",
+    "scene.cycles.denoising_input_passes": "RGB_ALBEDO_NORMAL",
+    "scene.cycles.denoising_prefilter": "ACCURATE",
+    "scene.cycles.seed": 0,
+    "scene.cycles.use_animated_seed": false,
+    "scene.cycles.filter_width": 1.75,
+    "scene.cycles.sample_clamp_indirect": 10.0
+  },
+  "transparent_min_samples": 64,
+  "allow_units": [
+    "METRIC"
+  ],
+  "max_light_ratio": 1000,
+  "film_grain": false
+}
