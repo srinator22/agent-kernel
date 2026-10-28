@@ -18,7 +18,8 @@ FAKE_TEMPLATE = r'''
 import json, runpy, sys, traceback
 args = sys.argv[1:]
 VERSION_LINE = %(version_line)r
-if VERSION_LINE:
+VERSION_LAST = %(version_last)r
+if VERSION_LINE and not VERSION_LAST:
     print(VERSION_LINE)
 print("ARGV " + json.dumps(args))
 sys.stdout.flush()
@@ -35,6 +36,8 @@ if "-P" in args and not IGNORE_SCRIPT:
     except BaseException:
         traceback.print_exc()
         exit_code = int(args[args.index("--python-exit-code") + 1]) if "--python-exit-code" in args else 0
+if VERSION_LINE and VERSION_LAST:  # Blender 5.2.3 in -b mode prints its banner after the script output
+    print(VERSION_LINE)
 sys.exit(exit_code)
 '''
 
@@ -63,8 +66,30 @@ class BlenderRunTests(unittest.TestCase):
             fh.write(text)
         return path
 
-    def fake(self, name="fake_blender.py", version_line="Blender 5.2.3 (hash abc)", ignore_script=False):
-        return self.write(name, FAKE_TEMPLATE % {"version_line": version_line, "ignore_script": ignore_script})
+    def fake(self, name="fake_blender.py", version_line="Blender 5.2.3 (hash abc)", ignore_script=False,
+             version_last=False):
+        return self.write(name, FAKE_TEMPLATE % {"version_line": version_line, "ignore_script": ignore_script,
+                                                 "version_last": version_last})
+
+    def test_version_banner_after_long_script_output(self):
+        # Regression: 5.2.3 prints the banner after the script; a scan of only the first lines missed it.
+        script = self.write("chatty.py", "for i in range(40):\n    print('line', i)\n")
+        fake = self.fake(version_line="Blender 5.2.3 LTS (hash e13b728c6880 built 2026-10-22 01:37:16)",
+                         version_last=True)
+        code, out, err = run_main(["--blender-cmd", self.cmd(fake),
+                                   "--log", self.log, "--record", self.record, script])
+        self.assertEqual(code, 0, out + err)
+        with open(self.record, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["blender_version"], "5.2.3")
+
+    def test_script_text_mentioning_blender_is_not_the_banner(self):
+        script = self.write("talk.py", "print('Blender 4.5 is the old LTS')\n")
+        fake = self.fake(version_line="Blender 5.2.3 LTS (hash abc built x)", version_last=True)
+        code, out, err = run_main(["--blender-cmd", self.cmd(fake),
+                                   "--log", self.log, "--record", self.record, script])
+        self.assertEqual(code, 0, out + err)
+        with open(self.record, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["blender_version"], "5.2.3")
 
     def cmd(self, fake):
         return json.dumps([sys.executable, fake])

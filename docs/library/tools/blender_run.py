@@ -39,7 +39,8 @@ line number.
 Exit codes: 0 pass, 1 findings, 2 could not run (bad arguments, missing input or executable, lock problem).
 Self-test exit codes: 0 failure was detected, 1 it went unnoticed, 2 Blender could not run.
 Dependencies: Python 3.10+ standard library.
-Assumptions: Blender prints "Blender X.Y.Z" within the first lines of its output in background mode. The
+Assumptions: Blender prints a banner "Blender X.Y.Z [LTS] (hash ...)" somewhere in its output (5.2.3 in
+background mode prints it after the script's own output, so the whole log is scanned). The
 working directory is left unchanged. At most 50 log findings are listed; the rest are counted.
 Origin: new (prior project ran Blender from shell loops with no traceback scan).
 """
@@ -60,8 +61,8 @@ import time
 
 TOOL = "blender_run"
 MAX_LOG_FINDINGS = 50
-VERSION_SCAN_LINES = 20
-VERSION_RE = re.compile(r"\s*Blender (\d+\.\d+(?:\.\d+)?)")
+# Only the banner shape counts, so script output that mentions a Blender version is never taken for it.
+VERSION_RE = re.compile(r"\s*Blender (\d+\.\d+(?:\.\d+)?)(?: [A-Za-z ]+)? \(hash ")
 
 
 class RunError(Exception):
@@ -155,7 +156,7 @@ def scan_log(log_path: str) -> tuple[list[dict], str | None, int]:
     with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
         for number, raw in enumerate(fh, start=1):
             line = raw.rstrip("\r\n")
-            if version is None and number <= VERSION_SCAN_LINES:
+            if version is None:
                 m = VERSION_RE.match(line)
                 if m:
                     version = m.group(1)
@@ -186,7 +187,7 @@ def execute(exe_cmd: list[str], lock_version: str | None, blend: str | None, scr
     if lock_version is not None:
         if version is None:
             findings.append({"kind": "version", "line": None,
-                             "text": f"no 'Blender X.Y.Z' line in the first {VERSION_SCAN_LINES} log lines; "
+                             "text": "no 'Blender X.Y.Z (hash ...)' banner in the log; "
                                      f"cannot confirm pinned version {lock_version}"})
         elif not versions_agree(lock_version, version):
             findings.append({"kind": "version", "line": 1,
