@@ -265,12 +265,12 @@ def plan(fps, res, font, labels, title, index, scene, safe_frac, wps, screen_box
         else:
             ty = (H - th) / 2
         hold_frames = int(round(title["hold_s"] * fps))
-        out_title = {"text": title["text"], "in": title["in"], "out": title["in"] + hold_frames,
+        out_title = {"text": title["text"], "in": title["in"], "out": title["in"] + hold_frames - 1,
                      "hold_s": title["hold_s"], "hold_frames": hold_frames, "words": words,
                      "min_hold_s": need, "x": tx, "y": ty, "w": tw, "h": th, "font_px": title["font_px"],
                      "position": title["position"]}
         covered = {}  # a subject's screen box when the extract has one (its centre may be off frame), else its anchor
-        for f in range(title["in"], title["in"] + hold_frames + 1):
+        for f in range(title["in"], title["in"] + hold_frames):
             fboxes = (screen_boxes or {}).get(f) or {}
             for name, a in (index.get(f) or {}).items():
                 b = fboxes.get(name)

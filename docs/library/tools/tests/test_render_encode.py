@@ -187,7 +187,7 @@ class OverlayPlanTests(PlanCase):
         p = re_.plan_encode(self.args(overlay=t))
         s = p["strips"][1]
         self.assertEqual((s["name"], s["text"], s["frame_start"]), ("title", "The End", 2))
-        self.assertEqual(s["keys"][-1]["frame"], 2 + 2)  # round(0.1 * 24) = 2 frames after in
+        self.assertEqual(s["keys"][-1]["frame"], 2 + 2 - 1)  # round(0.1 * 24) = 2 frames shown: 2 and 3
         self.assertEqual(s["font_size"], 5)
 
     def test_title_clipped_to_range(self):

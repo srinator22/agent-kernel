@@ -126,7 +126,8 @@ def overlay_strips(track, first, last, fps, size) -> tuple:
         if frames is None:
             try:
                 t_in = int(title["in"])
-                t_out = int(title["out"]) if title.get("out") is not None else t_in + int(round(float(title["hold_s"]) * fps))
+                # out is the last title frame (inclusive), so a hold of n frames shows exactly n frames
+                t_out = int(title["out"]) if title.get("out") is not None else t_in + int(round(float(title["hold_s"]) * fps)) - 1
             except (KeyError, TypeError, ValueError):
                 raise rc.CannotRun("overlay title needs 'in' and either 'out' or 'hold_s'")
             x = float(title.get("x", tsize[0] * 0.1))

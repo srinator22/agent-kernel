@@ -173,7 +173,10 @@ class Plan(OverlayCase):
         code, out, _ = self.run_tool(spec([label()], {"text": text, "in": 80, "hold_s": 3.4}), extract(moving))
         self.assertEqual(code, 0, out)
         t = self.track()["title"]
-        self.assertEqual((t["in"], t["out"], t["words"], t["hold_frames"]), (80, 80 + 82, 5, 82))
+        # out is the last frame shown (inclusive): in + hold_frames - 1, so exactly hold_frames frames show.
+        # Regression: out was in + hold_frames, one frame more than the stated hold (video-direction review).
+        self.assertEqual((t["in"], t["out"], t["words"], t["hold_frames"]), (80, 80 + 82 - 1, 5, 82))
+        self.assertEqual(t["out"] - t["in"] + 1, t["hold_frames"])
         self.assertAlmostEqual(t["x"] + t["w"] / 2, W / 2)
         code, _, _ = self.run_tool(spec([label()], {"text": text, "in": 80, "hold_s": 3.0}), extract(moving), "--wps", "2")
         self.assertEqual(code, 1)
