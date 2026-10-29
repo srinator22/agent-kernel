@@ -111,9 +111,10 @@ class Findings(AuditCase):
         self.assertIn("FAIL 1 finding(s)", out)
         code, out, _ = self.run_tool("--chunk", "4")
         self.assertEqual(code, 1)
-        self.assertIn("chunk 0 (frames 1-4) is missing 2 frame(s): 3-4", out)
-        self.assertIn("chunk 2 (frames 9-12) is missing 1 frame(s): 9", out)
-        self.assertNotIn("chunk 1", out)
+        # Chunks count from 1, as in render_chunks (review note: they were numbered from 0 here).
+        self.assertIn("chunk 1 (frames 1-4) is missing 2 frame(s): 3-4", out)
+        self.assertIn("chunk 3 (frames 9-12) is missing 1 frame(s): 9", out)
+        self.assertNotIn("chunk 2", out)
         self.assertIn("missing 2", out)
 
     def test_empty_folder_reports_everything_missing(self):

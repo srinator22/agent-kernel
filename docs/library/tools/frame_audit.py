@@ -86,7 +86,8 @@ def chunk_groups(missing: list, first: int, last: int, k: int) -> list:
     out = {}
     for n in missing:
         out.setdefault((n - first) // k, []).append(n)
-    return [(i, first + i * k, min(last, first + (i + 1) * k - 1), out[i]) for i in sorted(out)]
+    # Chunks count from 1, as render_chunks numbers them.
+    return [(i + 1, first + i * k, min(last, first + (i + 1) * k - 1), out[i]) for i in sorted(out)]
 
 
 def audit(args) -> tuple:

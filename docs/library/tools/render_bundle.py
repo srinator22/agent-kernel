@@ -51,7 +51,7 @@ import shutil
 import sys
 
 TOOL = "render_bundle"
-CLOUD_SEGMENTS = ("onedrive", "dropbox", "icloud", "icloud drive", "google drive", "googledrive")
+CLOUD_SEGMENTS = ("onedrive", "dropbox", "icloud", "icloud drive", "iclouddrive", "google drive", "googledrive")
 VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 RESERVED = {"readme.txt", "manifest.sha256", "source", "records"}
 SKIP_DIRS = {".git", "__pycache__"}
