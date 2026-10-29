@@ -152,9 +152,11 @@ when the profile is adopted. Optional items proven in only one project live
 in `docs/library/` (agents, skills, procedures, tools, a shell hook) and are
 adopted by choice (ADR 0004). `docs/roster/` holds opt-in department
 agents (R&D leadership, programme, mechanical and product, electronics and
-firmware, quality and safety, production, documentation, video): read-only
-leads that review and decide, and specialists that each write one folder
-(ADR 0005).
+firmware, quality and safety, production, documentation, video, CG render):
+read-only leads that review and decide, and specialists that each write one
+folder (ADR 0005). Photoreal product stills, animation and product films use
+the render roles with the library `product-render` procedure, skill and
+tools (ADR 0007).
 
 ## Procedures
 

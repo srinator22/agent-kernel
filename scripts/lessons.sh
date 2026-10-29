@@ -235,6 +235,10 @@ shipped_set_errors() {
     [[ -d "$f" ]] || continue
     [[ -f "$f/SKILL.md" ]] || echo "${f%/}: skill folder has no SKILL.md"
   done
+  if [[ "$dir" == docs/roster ]]; then
+    roster_twin_errors "$dir"
+    handoff_errors "$dir"
+  fi
   if [[ -n "$profile" ]]; then
     declared="$(profile_skill_names "$profile" | sort -u)"
     # A missing skills/ folder must not end this function under set -e.
@@ -249,6 +253,53 @@ shipped_set_errors() {
     done <<< "$shipped"
   fi
   echo "$SHIPPED_DONE"
+}
+
+# trim_blank_edges: drop leading and trailing blank lines and CRs from stdin.
+trim_blank_edges() {
+  awk '{ sub(/\r$/, ""); lines[NR] = $0 }
+    END { s = 1; while (s <= NR && lines[s] ~ /^[ \t]*$/) s++
+          e = NR; while (e >= s && lines[e] ~ /^[ \t]*$/) e--
+          for (i = s; i <= e; i++) print lines[i] }'
+}
+
+# roster_twin_errors DIR: a roster agent's Codex developer_instructions is its
+# .md body, unchanged except that a hard-rule line "- Read-only." may read
+# "- Your sandbox is read-only." (Codex enforces it with sandbox_mode); both
+# forms ship today. Twins drifted silently before this check existed.
+roster_twin_errors() {
+  local dir="$1" md toml
+  for md in "$dir"/agents/*.md; do
+    [[ -f "$md" ]] || continue
+    toml="${md%.md}.toml"
+    [[ -f "$toml" ]] || continue
+    if ! diff -q \
+      <(awk '{ sub(/\r$/, "") } NR == 1 && $0 == "---" { f = 1; next } f == 1 && $0 == "---" { f = 2; next } f == 2' "$md" \
+          | trim_blank_edges) \
+      <(awk '{ sub(/\r$/, "") } /^developer_instructions = """/ { f = 1; next } f && $0 == "\"\"\"" { exit } f' "$toml" \
+          | sed 's/^- Your sandbox is read-only\./- Read-only./' | trim_blank_edges) \
+      >/dev/null; then
+      echo "$toml: developer_instructions differ from the body of $md (regenerate the twin from the .md)"
+    fi
+  done
+}
+
+# handoff_errors DIR: every backticked lowercase-hyphenated name in an agent's
+# "## Hand-offs" section is an agent that ships in this template (core, library,
+# profiles or roster), so a hand-off never points at a role that does not exist.
+handoff_errors() {
+  local dir="$1" md known name
+  known="$(for f in .claude/agents/*.md .codex/agents/*.toml docs/library/agents/*.md docs/library/agents/*.toml docs/profiles/*/agents/*.md docs/roster/agents/*.md; do
+    [[ -f "$f" ]] && basename "$f" | sed 's/\.[a-z]*$//'
+  done | sort -u)"
+  for md in "$dir"/agents/*.md; do
+    [[ -f "$md" ]] || continue
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      printf '%s\n' "$known" | grep -qx -- "$name" || echo "$md: Hand-offs names \`$name\`, which is not an agent in this template"
+    done < <(awk '{ sub(/\r$/, "") } /^## / { f = ($0 == "## Hand-offs"); next } f' "$md" \
+      | grep -o '`[a-z][a-z0-9]*\(-[a-z0-9]\+\)\+`' | tr -d '`' | sort -u)
+  done
 }
 
 # shipped_set_check DIR [PROFILE.md]: problems from shipped_set_errors, plus one

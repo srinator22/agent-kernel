@@ -262,13 +262,41 @@ printf -- '---\r\nname: gamma\r\ndescription: x\r\n---\r\n' > docs/library/skill
 run ./scripts/lessons.sh check
 assert_rc "a CRLF library skill with frontmatter passes" 0
 mkdir -p docs/roster/agents
-printf -- '---\nname: lead\ndescription: x\nmodel: inherit\n---\n' > docs/roster/agents/lead.md
+printf -- '---\nname: lead\ndescription: x\nmodel: inherit\n---\n\nx\n' > docs/roster/agents/lead.md
 run ./scripts/lessons.sh check
 assert_rc "a roster agent with no Codex twin fails" 1
 assert_contains "the roster twin is named" "docs/roster/agents/lead.md: no Codex twin docs/roster/agents/lead.toml"
 printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/roster/agents/lead.toml
 run ./scripts/lessons.sh check
 assert_rc "a complete roster agent pair passes" 0
+
+# Roster twin parity: the Codex body equals the .md body; only the read-only
+# hard-rule line may use the sandbox wording.
+printf -- '---\r\nname: lead\r\ndescription: x\r\nmodel: inherit\r\n---\r\n\r\nYou lead.\r\n\r\n- Read-only. Advisor records.\r\n' > docs/roster/agents/lead.md
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nYou lead.\n\n- Your sandbox is read-only. Advisor records.\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "a CRLF twin pair differing only by the sandbox line passes" 0
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nYou lead.\n\n- Read-only. Advisor records.\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "a twin pair keeping the md read-only wording passes" 0
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nYou lead the team.\n\n- Read-only. Advisor records.\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "a drifted roster twin fails" 1
+assert_contains "the drifted twin is named" "docs/roster/agents/lead.toml: developer_instructions differ from the body of docs/roster/agents/lead.md"
+
+# Hand-offs resolve: backticked hyphenated names must be shipped agents.
+mkdir -p docs/library/agents
+printf -- '---\nname: helper-one\ndescription: x\n---\n' > docs/library/agents/helper-one.md
+printf -- '---\nname: lead\ndescription: x\nmodel: inherit\n---\n\nx\n\n## Hand-offs\n\n- Review: `helper-one`; files under `render/scenes/`; run `frame_audit`.\n\n## Output\n\n`not-an-agent` outside the section is ignored.\n' > docs/roster/agents/lead.md
+awk 'NR > 5' docs/roster/agents/lead.md > /dev/null
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n\n## Hand-offs\n\n- Review: `helper-one`; files under `render/scenes/`; run `frame_audit`.\n\n## Output\n\n`not-an-agent` outside the section is ignored.\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_not_contains "a hand-off to a shipped agent, paths and tool names pass" "Hand-offs names"
+printf -- '---\nname: lead\ndescription: x\nmodel: inherit\n---\n\nx\n\n## Hand-offs\n\n- Review: `ghost-role`.\n' > docs/roster/agents/lead.md
+printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n\n## Hand-offs\n\n- Review: `ghost-role`.\n"""\n' > docs/roster/agents/lead.toml
+run ./scripts/lessons.sh check
+assert_rc "a hand-off to an agent that does not ship fails" 1
+assert_contains "the unknown hand-off is named" "docs/roster/agents/lead.md: Hand-offs names \`ghost-role\`, which is not an agent in this template"
 rm -rf docs/profiles docs/library docs/roster
 
 # tests/quarantine.list: owner and date required, at most 30 days old.

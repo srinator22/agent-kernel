@@ -116,7 +116,8 @@ docs/
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
     hooks/                    # harness hooks with tests/
-  roster/                     # opt-in department agents, no project evidence yet (ADR 0005)
+    examples/                 # worked examples of library procedures (records only)
+  roster/                     # opt-in department agents (ADR 0005; render roles ADR 0007)
     README.md                 # department chart, kind, tier, folder, adoption
     agents/                   # leads (read-only) and specialists, each with a Codex twin
   lessons/
@@ -630,3 +631,13 @@ Ten lessons approved by the owner on 2026-10-23 (L001 to L010 in `docs/lessons/I
 ## Amendment 4 (2026-10-29)
 
 Nine process ideas from a public knowledge base on agentic coding (coleam00/cole-medin-knowledge-base, no license, so ideas re-expressed and no text copied), approved by the owner on 2026-10-29. Hooks: `scripts/destructive-guard.sh` (PreToolUse, every session) refuses recursive removal of roots, home, the workspace, bare globs and unresolved variables, and destructive git forms (force push, `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, whole-tree checkout and restore, `stash drop` and `clear`), mechanizing kernel rules 6 and 11; `scripts/stop-gate.sh` (Stop) blocks a turn end on broken task state and runs `scripts/quickgate.sh` once every criterion is ticked, cached by working-tree state, because the quick lane takes minutes where template self-tests exist; `scripts/session-context.sh` primes the session with branch, status and the last 10 commits. Task state: TASK.md gains Assumptions and Plan verdict sections, and `scripts/tasklint.sh` (check in the always section, ship in the full gate only) requires evidence for ticked criteria, a status per assumption, no open assumption at ship, and a PASS plan verdict for an autopilot task that has started; the reviewer documents the plan review. Documentation: `docs/procedures/doc-eval.md` with `tests/docs/questions.md` and `scripts/doc-eval.sh` test that a fresh agent finds answers by navigation and declines trap questions; maintain runs it. Style: check.sh also fails on curly quotes, the ellipsis character, non-breaking space, the replacement character and mojibake. ADR 0006 records the hook decisions. The hardware-pcb profile ships `tools/check_quotes.py`, which verifies a cited quote against the stored document and page. Upgrade note: a project that syncs this while an autopilot task is already running (a node doing or done) adds a `## Plan verdict` section with the reviewer's plan review, or `scripts/tasklint.sh check` fails. Kernel untouched.
+
+## Amendment 5 (2026-10-29): product render capability
+
+ADR 0007. The roster gains a CG render department (four leads, seven
+specialists) and CG additions to five creative roles; the library gains the
+`product-render` procedure and skill, 19 render tools with stdlib cores and
+tests, and `docs/library/examples/product-render-sample/`. `scripts/lessons.sh
+check` now enforces roster twin parity and hand-off names. No profile yet
+(one-project evidence); the outline is the BACKLOG graduation target. Kernel
+untouched.

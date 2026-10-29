@@ -7,10 +7,15 @@ them by hand (ADR 0005).
 
 ## Status and rules
 
-- New roles with no project evidence yet. Each checklist is senior
-  judgment, not learned practice; the first project that uses a role
-  revises it and records what it caught. A role graduates to a profile or
-  the library by the rules in `docs/library/README.md`.
+- New roles with no project evidence yet, except where a role's Evidence
+  line says it carries one product film project's evidence (the CG render
+  department and the CG additions to the creative roles, ADR 0007). Each
+  checklist is senior judgment, not learned practice; the first project
+  that uses a role revises it and records what it caught. A role graduates
+  to a profile or the library by the rules in `docs/library/README.md`.
+- `scripts/lessons.sh check` requires each Codex twin to equal its `.md`
+  body (only the read-only line may use the sandbox wording) and every
+  backticked agent name in a Hand-offs section to be a shipped agent.
 - Every role works inside the template's orchestration (kernel rule 16):
   the main session is the advisor and records verdicts; no role commits,
   pushes, orders, purchases, publishes, signs, or contacts suppliers,
@@ -97,3 +102,33 @@ them by hand (ADR 0005).
 | `storyboard-specialist` | specialist | standard | `storyboards/` | Storyboard specialist who turns an approved script and brief into a numbered shot list and storyboard - framing, angle, movement, duration, action, audio, on-screen text, transitions, coverage, B-roll - and states which shots exist in the footage log and which must be filmed, writing only under storyboards/ |
 | `footage-analyst` | specialist | standard | `footage-logs/` | Footage analyst who logs raw video and audio without modifying it - ffprobe technical metadata, SHA-256 per source file, optional scene-change detection and thumbnails, timecoded technical defects and content tags from what is visible or audible - writing only under footage-logs/ |
 | `video-direction-reviewer` | lead | strong | none (read-only) | Fresh-context video reviewer who evaluates a storyboard or a cut against the brief and the art direction - opening, single message, pacing and runtime, shot variety, continuity, audio, captions, accessibility and the factual accuracy of every engineering claim shown or said - and returns timecoded findings with a verdict |
+
+### CG render (product stills, animation and film)
+
+Run with the library `product-render` procedure and tools
+(`docs/library/procedures/product-render.md`, ADR 0007). Render job state
+lives in `.work/jobs/render/` (gitignored, `docs/procedures/longjob.md`);
+frames, caches and videos live outside the repo and outside cloud-synced
+folders. Evidence: one product film project for the roles marked one-project.
+
+| Agent | Kind | Tier | Writes | Evidence | Role |
+|---|---|---|---|---|---|
+| `render-technical-director` | lead | strong | none (read-only) | one-project | Owns the render pipeline and quality bar - pinned portable Blender, colour management, check / preview / final presets, samples, denoise and seed policy, time budget per frame, determinism, folder layout - and gives GO / NO-GO before any preview or final with a measured time and cost estimate |
+| `render-research-lead` | lead | strong | none (read-only) | new | Runs the research team with bounded briefs for `researcher`, merges reports into the recommendation table, spot-checks citations, and decides what to research next when a shot is not good enough |
+| `animation-adversarial-reviewer` | lead | strong | none (read-only) | new | Fresh-context reviewer that sees only frames, sheets, tool numbers and the brief, never scripts, and tries to break the animation: stops, jerks, overshoot, pops, intersections, impossible physics, scale, flicker, label flips, timing, liquid realism |
+| `cold-viewer` | lead | standard | none (read-only) | new | Shown only the finished film's frames with no brief, states in one sentence the message it took away; the advisor compares it with the brief |
+| `blender-operator` | specialist | standard | `render/scenes/` | one-project | The only agent that edits scene scripts, .blend files and presets and runs Blender, always through `blender_run`; one operator at a time; never starts a preview or final without a recorded GO |
+| `cad-asset-preparer` | specialist | standard | `render/assets/` | one-project | CAD to render meshes: export, units, part names, tessellation, bevels, placements, fit checks with clearances at every keyframe state, scale against real dimensions |
+| `lookdev-artist` | specialist | standard | `render/lookdev/` | one-project | Materials from the CMF hand-off and real reference photos, the material library, turntable check stills per material |
+| `cinematographer` | specialist | standard | `render/layout/` | one-project | Lighting rigs and camera paths: monotone splines through waypoints, lenses, depth of field, the never-fully-stop rule, safe areas for text |
+| `animator` | specialist | standard | `render/anim/` | one-project | Mechanism motion from CAD kinematics and the real part's behaviour, timing curves, label track anchoring |
+| `fx-simulation-artist` | specialist | strong | `render/fx/` | one-project | Liquids, cloth, paper and particles: solver choice, the simulation ladder, bakes as long jobs, cache validation by numbers, thin-feature rebuilds, a hand-off of what the sim can and cannot show |
+| `render-wrangler` | specialist | cheap | `.work/jobs/render/` | one-project | Queues chunked renders and bakes as resumable long jobs, chains them, audits frame counts, reports measured s/frame and ETA, checks GPU use, estimates cloud cost on request |
+
+The brief's `render/jobs/` folder for the wrangler moved to
+`.work/jobs/render/`, where the longjob procedure keeps STATE files. The
+CG additions in `art-director`, `storyboard-specialist`,
+`video-direction-reviewer`, `senior-video-editor` and `industrial-designer`
+carry the same one-project evidence; brand and typography stay with
+`art-director`, and music and sound licences are recorded by
+`senior-video-editor` until a film with audio needs a sound role.

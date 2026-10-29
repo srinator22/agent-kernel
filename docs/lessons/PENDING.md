@@ -81,3 +81,84 @@ Entry format (all four fields required):
 - retire-when: scripts/selftest.sh runs in a CI matrix that includes
   Windows and Linux before merge (BACKLOG P2), or merges always wait for
   branch CI.
+
+### A worked example on real software finds what unit tests cannot
+
+- what happened: the render library tools passed 440+ unit tests, yet taking
+  a primitive sample scene through every stage on the real Blender build
+  found 10 tool defects (a version banner printed after the script output,
+  font sizes not scaled, an off-by-one title hold, done chunks with deleted
+  frames skipped, a self-test that wrote no record, and more); the
+  independent review found an eleventh (a failed command passing the render
+  gate when every frame existed).
+- what check should have caught it: a library procedure that drives an
+  external tool ships with a worked example run end to end on that tool
+  before it is called done; the example's record quotes every gate.
+- what was added: docs/library/examples/product-render-sample/ and its
+  RECORD.md; each defect has a failing-first regression test.
+- retire-when: a profile rule requires a recorded end-to-end example for
+  every procedure that drives an external program.
+
+### A reviewer's GO must rest on evidence newer than the inputs
+
+- what happened: the render technical director reviewed extracts and lints
+  while the advisor was still changing the scene script (a reflection card
+  was added mid-review), so the evidence described an older scene; it
+  caught this itself from file modification times and returned NO-GO.
+- what check should have caught it: a gate record quotes the hash of the
+  scene script and presets it describes, and the gate fails when the
+  current files hash differently.
+- what was added: none, this note is the guard; the GO procedure re-ran
+  extract, lint and measurement after every scene edit.
+- retire-when: scene_lint or the stage record stores and compares the
+  scene and preset hashes.
+
+### Stop processes by PID, never by image name
+
+- what happened: a worker stopped its own hung test with
+  `taskkill /F /IM python.exe` and killed three python processes on the
+  machine, which may have belonged to other sessions.
+- what check should have caught it: the destructive-command guard refuses
+  `taskkill /IM`, `Stop-Process -Name` and `pkill`/`killall` by name.
+- what was added: worker briefs now say "stop only by PID or task id";
+  scripts/destructive-guard.sh does not cover process kills yet.
+- retire-when: the guard refuses kill-by-name with a test.
+
+### Python from stdin hangs this machine's shell wrapper
+
+- what happened: commands of the form `python - <<EOF` or `python -I -`
+  hung until the 120 s timeout three times in one session (twice by the
+  advisor, once by a worker), costing a background-task stop each time.
+- what check should have caught it: the library hook
+  `refuse_shell_stdin.py`, which refuses exactly this, adopted into the
+  core settings for every session.
+- what was added: none, this note is the guard.
+- retire-when: the hook is wired in `.claude/settings.json` with its test.
+
+### ADR numbers collide across parallel branches
+
+- what happened: this branch added ADR 0006 while another branch merged
+  its own ADR 0006 to main; adr.sh check passed on each branch alone and
+  only the merge showed the duplicate, which forced a renumber and edits in
+  six files.
+- what check should have caught it: none on one branch; the merge step
+  re-runs adr.sh, which did catch it.
+- what was added: none, this note is the guard: before a merge, fetch main
+  and renumber new ADRs to follow main's last one.
+- retire-when: ADRs are numbered at merge time by a script.
+
+### Lookdev data points from the sample scene (one project, to confirm)
+
+- what happened: a 12 cm product under area lights of 120, 40 and 60 W
+  rendered washed out (matte black read light grey); 3, 0.8 and 2 W looked
+  right. A closed clear lid was invisible until a reflection-only card
+  (glossy only, no diffuse) sat at the camera's mirror angle. A reflection
+  of an object inside clear acrylic reaches it as a transmission-type ray
+  in Cycles, so hiding it needed both glossy and transmission visibility
+  off. Fixed seed on a held window measured flicker 0.0000003 vs 0.00036 to
+  0.00199 for animated seed.
+- what check should have caught it: check stills at stage 4 did; no tool
+  can judge a look.
+- what was added: the sample's RECORD.md holds the numbers.
+- retire-when: a second project confirms or corrects them, and the
+  lookdev-artist or cinematographer agent carries the confirmed defaults.

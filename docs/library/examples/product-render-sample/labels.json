@@ -1,0 +1,10 @@
+{
+  "fps": 24,
+  "resolution": [960, 540],
+  "font_px": 28,
+  "labels": [
+    {"id": "hinge", "text": "HINGE", "subject": "HingePin", "side": "right",
+     "in": 50, "out": 80, "fade": 6, "offset_px": 90}
+  ],
+  "title": {"text": "SAMPLE SCENE", "in": 84, "hold_s": 1.5417, "position": "lower_third"}
+}

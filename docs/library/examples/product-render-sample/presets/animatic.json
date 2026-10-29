@@ -1,0 +1,16 @@
+{
+  "name": "animatic",
+  "label": "ANIMATIC 480x270 WORKBENCH",
+  "settings": {
+    "scene.engine": "BLENDER_WORKBENCH",
+    "scene.resolution": [
+      480,
+      270
+    ]
+  },
+  "allow_units": [
+    "METRIC"
+  ],
+  "max_light_ratio": 1000,
+  "film_grain": false
+}
