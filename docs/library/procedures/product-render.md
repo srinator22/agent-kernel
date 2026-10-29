@@ -44,18 +44,18 @@ Project decisions that names the deliverable.
 
 ## Stages
 
-| # | Stage | Owner (checks) | Output | Gate |
-|---|---|---|---|---|
-| 0 | Brief: message in one sentence, audience, runtime, platform, resolution, fps, deliverables, references, look words, must-show features, hard nos | advisor with `art-director` | brief file, reference board (`art-director`), CMF hand-off (`industrial-designer`) | art-director APPROVE |
-| 1 | Storyboard and shot spec: TO RENDER shots, waypoints with lens, timing and easing, mechanism state per beat, risky frames | `storyboard-specialist` | `storyboards/` | art-director APPROVE; `engineering-reviewer` on every claim shown |
-| 2 | Assets and fit check | `cad-asset-preparer` | `render/assets/`, `placements.json` | `fit_check` exit 0 at every keyframe state |
-| 3 | Animatic: workbench or EEVEE, real timing, real camera | `cinematographer`, `animator`, run by `blender-operator` | animatic frames and video (labelled ANIMATIC) | `camera_path --check`, `motion_check`; **HOLD for the human** |
-| 4 | Lookdev and lighting: check stills at key frames, preview preset | `lookdev-artist`, `cinematographer`, run by `blender-operator` | check stills, `render_sheets contact` and `crops` | `scene_lint` against `check`; art-director locks the look; **HOLD** |
-| 5 | Animation and FX: check frames at the riskiest moments only | `animator`, `fx-simulation-artist` | check frames; FX caches outside git | `sim_validate` exit 0 before any FX render; `animation-adversarial-reviewer` APPROVE |
-| 6 | Preview video at reduced resolution and samples, labelled PREVIEW with both values | `render-wrangler`, `blender-operator` | preview frames, preview MP4 | `render-technical-director` GO first; `frame_audit`, `flicker_metric`, `encode_verify`; adversarial review; **HOLD** |
-| 7 | Final render, chunked resumable jobs, overnight allowed | `render-wrangler` | final frames | `render-technical-director` GO with `render_estimate` from measured s/frame; `render_chunks status` all done |
-| 8 | Frame QC, finishing, encode, verify | `render-wrangler`, `senior-video-editor`, `blender-operator` | delivered MP4 per platform | `frame_audit` per chunk, `color_check`, `flicker_metric`, `render_overlay`, `render_encode`, `encode_verify`; `animation-adversarial-reviewer`, `video-direction-reviewer`, `cold-viewer` (its sentence compared with the brief's message); **HOLD** |
-| 9 | Deliver and retro | advisor | `<delivery root>/<version>/` by `render_bundle` | manifest verified; retro proposes lessons to `docs/lessons/PENDING.md` |
+| # | Stage | Owner (checks) | Inputs | Output | Gate |
+|---|---|---|---|---|---|
+| 0 | Brief: message in one sentence, audience, runtime, platform, resolution, fps, deliverables, references, look words, must-show features, hard nos | advisor with `art-director` | the human request; real reference photos; any brand guide | brief file, reference board (`art-director`), CMF hand-off (`industrial-designer`) | art-director APPROVE |
+| 1 | Storyboard and shot spec: TO RENDER shots, waypoints with lens, timing and easing, mechanism state per beat, risky frames | `storyboard-specialist` | approved brief | `storyboards/` | art-director APPROVE; `engineering-reviewer` on every claim shown |
+| 2 | Assets and fit check | `cad-asset-preparer` | CAD; real dimensions; CMF hand-off | `render/assets/`, `placements.json` | `fit_check` exit 0 at every keyframe state |
+| 3 | Animatic: workbench or EEVEE, real timing, real camera | `cinematographer`, `animator`, run by `blender-operator` | storyboard and waypoints; assets and `placements.json`; pinned Blender | animatic frames and video (labelled ANIMATIC) | `camera_path --check`, `motion_check`; **HOLD for the human** |
+| 4 | Lookdev and lighting: check stills at key frames, `check` preset | `lookdev-artist`, `cinematographer`, run by `blender-operator` | animatic approval; CMF hand-off and reference board; `check` preset | check stills, `render_sheets contact` and `crops` | `scene_lint` against `check`; art-director locks the look; **HOLD** |
+| 5 | Animation and FX: check frames at the riskiest moments only | `animator`, `fx-simulation-artist` | locked look; mechanism kinematics; FX brief | check frames; FX caches outside git | `sim_validate` exit 0 before any FX render; `animation-adversarial-reviewer` APPROVE |
+| 6 | Preview video at reduced resolution and samples, labelled PREVIEW with both values | `render-wrangler`, `blender-operator` | everything above approved; `preview` preset; label track | preview frames, preview MP4 | `render-technical-director` GO first; `frame_audit`, `flicker_metric`, `encode_verify`; adversarial review; **HOLD** |
+| 7 | Final render, chunked resumable jobs, overnight allowed | `render-wrangler` | preview approval; `final` preset; measured s/frame | final frames | `render-technical-director` GO with `render_estimate` from measured s/frame; `render_chunks status` all done |
+| 8 | Frame QC, finishing, encode, verify | `render-wrangler`, `senior-video-editor`, `blender-operator` | final frames; overlay spec and encode settings in `edit/` | delivered MP4 per platform | `frame_audit` per chunk, `color_check`, `flicker_metric`, `render_overlay`, `render_encode`, `encode_verify`; `animation-adversarial-reviewer`, `video-direction-reviewer`, `cold-viewer` (its sentence compared with the brief's message); **HOLD** |
+| 9 | Deliver and retro | advisor | verified delivered file; run records; exact sources | `<delivery root>/<version>/` by `render_bundle` | manifest verified; retro proposes lessons to `docs/lessons/PENDING.md` |
 
 Rules for every render:
 
@@ -122,7 +122,8 @@ a rule in the owning agent with the reason it stays prose.
 | One shot, no cuts, no freeze frames, no end card; title held to read twice | tool check for the hold; prose for the one-shot choice (a brief decision) | `render_overlay` title hold, `art-director` |
 | Labels keep one side of their subject for their whole life, including fades | tool check | `render_overlay`, `motion_check --track` |
 | Mechanisms move like the real part; start edges tucked where reality hides them | prose: needs the real part's behaviour | `animator`, adversarial review |
-| No film grain on finals; enough samples for transparent and frosted parts (about double, to measure); accurate denoising; tight adaptive threshold | tool check against the preset; measured by `flicker_metric` | `scene_lint` (preset keys, `transparent_min_samples`, denoiser), `render-technical-director` |
+| No film grain on finals | prose: grain lives in the compositor, which the extract does not read, so `scene_lint` can only print an advisory | `render-technical-director`, `blender-operator` |
+| Enough samples for transparent and frosted parts (about double, to measure); accurate denoising; tight adaptive threshold | tool check against the preset; measured by `flicker_metric` | `scene_lint` (preset keys, `transparent_min_samples`, denoiser quality and device), `render-technical-director` |
 | Sub-pixel detail and thin bright edges shimmer: cap detail, clamp indirect, filter width about 1.75 px (to measure), motion blur on | preset keys linted; measured | `scene_lint`, `flicker_metric`, `lookdev-artist` |
 | Seed: the prior lesson said a fixed seed; the Cycles manual recommends Animated Seed | default to measure: the preset states it, an A/B decides | `flicker_metric --compare`, `render-technical-director` |
 | Thin-skin colliders leak or float; colliders closed solids thicker than a few cells | tool check for the symptom (volume loss); prose for the cause | `sim_validate` leak check, `cad-asset-preparer`, `fx-simulation-artist` |
