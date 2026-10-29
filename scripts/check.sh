@@ -230,6 +230,7 @@ if [[ ! -f .start-done ]]; then
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
+    docs/decisions/0006-claude-code-hooks-enforce-the-destructive-action-rule-and-th.md
     docs/procedures/adr.md scripts/adr.sh scripts/worker-git-guard.sh
     .claude/skills/adr/SKILL.md .agents/skills/adr/SKILL.md
     tests/template/test_adr.sh tests/template/test_ci_watch.sh
