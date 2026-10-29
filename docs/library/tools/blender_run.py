@@ -257,6 +257,31 @@ def report(result: dict, extra_summary: str) -> int:
     return 0
 
 
+def build_record(result, code, exe_cmd, lock_version, log, self_test=False) -> dict:
+    run = result["run"]
+    return {
+        "tool": TOOL, "status": "pass" if code == 0 else "fail", "self_test": self_test,
+        "blender": exe_cmd[-1] if len(exe_cmd) == 1 else exe_cmd,
+        "blender_version": result["version"], "lock_version": lock_version,
+        "argv": result["cmd"], "cwd": os.getcwd(), "log": log,
+        "start": run["start"], "end": run["end"], "seconds": run["seconds"],
+        "returncode": run["returncode"], "timed_out": run["timed_out"],
+        "findings": result["findings"], "findings_omitted": result["omitted"],
+    }
+
+
+def write_record(path, record) -> int:
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(record, fh, indent=2)
+            fh.write("\n")
+    except OSError as exc:
+        err(f"cannot write record {path}: {exc}")
+        return 2
+    return 0
+
+
 def self_test(args, exe_cmd: list[str], lock_version: str | None) -> int:
     tmp = tempfile.mkdtemp(prefix="blender_run_selftest_")
     script = os.path.join(tmp, "selftest_raise.py")
@@ -271,14 +296,20 @@ def self_test(args, exe_cmd: list[str], lock_version: str | None) -> int:
     detected = bool(kinds & {"returncode", "traceback"})
     if result["run"]["timed_out"]:
         err("self-test: Blender did not finish before the timeout; it could not be exercised")
-        return 2
-    if detected:
+        code = 2
+    elif detected:
         print(f"{TOOL}: PASS self-test: failure detected ({', '.join(sorted(kinds))}) "
               f"rc={result['run']['returncode']} blender={result['version'] or 'unknown'}")
-        return 0
-    print(f"{TOOL}: FAIL 1 finding(s) self-test: the script raised RuntimeError but rc was "
-          f"{result['run']['returncode']} and the log had no traceback")
-    return 1
+        code = 0
+    else:
+        print(f"{TOOL}: FAIL 1 finding(s) self-test: the script raised RuntimeError but rc was "
+              f"{result['run']['returncode']} and the log had no traceback")
+        code = 1
+    if args.record:
+        wrote = write_record(args.record, build_record(result, code, exe_cmd, lock_version, log, self_test=True))
+        if wrote:
+            return wrote
+    return code
 
 
 def main(argv=None) -> int:
@@ -313,25 +344,9 @@ def main(argv=None) -> int:
         return 2
     code = report(result, f" log={args.log}")
     if args.record:
-        run = result["run"]
-        record = {
-            "tool": TOOL, "status": "pass" if code == 0 else "fail",
-            "blender": exe_cmd[-1] if len(exe_cmd) == 1 else exe_cmd,
-            "blender_version": result["version"], "lock_version": lock_version,
-            "argv": result["cmd"], "cwd": os.getcwd(), "log": args.log,
-            "start": run["start"], "end": run["end"], "seconds": run["seconds"],
-            "returncode": run["returncode"], "timed_out": run["timed_out"],
-            "findings": result["findings"], "findings_omitted": result["omitted"],
-        }
-        try:
-            parent = os.path.dirname(os.path.abspath(args.record))
-            os.makedirs(parent, exist_ok=True)
-            with open(args.record, "w", encoding="utf-8") as fh:
-                json.dump(record, fh, indent=2)
-                fh.write("\n")
-        except OSError as exc:
-            err(f"cannot write record {args.record}: {exc}")
-            return 2
+        wrote = write_record(args.record, build_record(result, code, exe_cmd, lock_version, args.log))
+        if wrote:
+            return wrote
     return code
 
 

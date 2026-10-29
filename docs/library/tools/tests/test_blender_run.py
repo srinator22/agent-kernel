@@ -296,6 +296,16 @@ class BlenderRunTests(unittest.TestCase):
         self.assertEqual(code, 0, out + err)
         self.assertIn("failure detected", out)
 
+    def test_self_test_writes_its_record(self):
+        # Regression: --self-test returned before --record was written, so the gate left no record.
+        code, out, err = run_main(["--blender-cmd", self.cmd(self.fake()), "--self-test", "--log", self.log,
+                                   "--record", self.record])
+        self.assertEqual(code, 0, out + err)
+        with open(self.record, encoding="utf-8") as fh:
+            rec = json.load(fh)
+        self.assertEqual((rec["self_test"], rec["status"], rec["blender_version"]), (True, "pass", "5.2.3"))
+        self.assertNotEqual(rec["returncode"], 0)
+
     def test_self_test_fails_when_exception_goes_unnoticed(self):
         # A "Blender" that ignores the script exits 0 with a clean log: the gate must report it.
         fake = self.fake(name="fake_deaf.py", ignore_script=True)
