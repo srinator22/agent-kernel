@@ -16,7 +16,7 @@ title cut in at frame 84 with no fade and held to the last frame.
 |---|---|---|---|---|---|
 | 1 Reveal | 1-30 | W1 to W2: slow arc from front left at about 35 degrees elevation, so the ball reads through the lid over the front wall | lid closed | - | 1 (first frame), 30 |
 | 2 Open | 30-60 | W2 to W3: continuous push toward the hinge side | lid rotates 0 to 70 degrees about the rear pin | "HINGE" fades in from frame 50 (after the fastest lid motion) | 45 (fastest lid motion, transparency over the ball) |
-| 3 Detail | 60-84 | W3 to W4: direct push to about 0.38 m from the pin, narrow swing, never stopping | lid open, still | "HINGE" right of the pin until frame 80, fading out 74-80 | 70 (label next to the clear lid) |
+| 3 Detail | 60-84 | W3 to W4: direct push to about 0.47 m from the pin, narrow swing, never stopping | lid open, still | "HINGE" right of the pin until frame 80, fading out 74-80 | 70 (label next to the clear lid) |
 | 4 Title | 84-120 | W4 to W5: hold (declared, the only stop), framed so the ball (y 178-429 px) and the pin (y 47-98 px) are fully in frame | lid open | "SAMPLE SCENE" in the lower third (y 433-467 px), over the matte black front wall of the box | 84 (title in, camera arrives), 100 (title text) |
 
 Waypoints: W1 frame 1, W2 frame 30, W3 frame 60, W4 frame 84, W5 frame 120

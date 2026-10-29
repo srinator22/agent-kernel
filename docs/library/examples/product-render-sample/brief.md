@@ -26,4 +26,4 @@ stage 0 of `docs/library/procedures/product-render.md`.
 | Title | "SAMPLE SCENE" in the lower third, over the matte black front wall of the box, from frame 84 to 120 (1.5 s; read twice at 3 words/s needs 1.33 s), no fade | labels.json |
 | Unverified figures | the 3 words/s reading rate and the 5 percent safe margin are tool defaults, UNVERIFIED; a researcher sources a reading rate and SMPTE ST 2046-1 before any real project | render_overlay --help |
 | Honesty label | CG render: carried by the bundle README and the file names (local review only, no publication); previews carry PREVIEW with resolution and samples | art-director check |
-| Known limits | primitive hinge: the lid meets a plain pin, with no knuckles, so the real-hinge cue is not shown | art-director finding |
+| Known limits | primitive hinge: the lid meets a plain pin, with no knuckles, so the real-hinge cue is not shown; no lens vignette or fringe (real-lens cue partly met: 90 mm and depth of field only) | art-director findings |

@@ -174,7 +174,7 @@ def build():
     world.use_nodes = True
     world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.01, 0.01, 0.012, 1)
 
-    def area(name, size, loc, energy, spread_deg, glossy=True, transmission=True):
+    def area(name, size, loc, energy, spread_deg, glossy=True, transmission=True, diffuse=True):
         data = bpy.data.lights.new(name, "AREA")
         data.shape = "RECTANGLE"
         data.size, data.size_y = size
@@ -187,12 +187,16 @@ def build():
         obj.visible_camera = False
         obj.visible_glossy = glossy
         obj.visible_transmission = transmission
+        obj.visible_diffuse = diffuse
         return obj
 
-    area("Key", (0.6, 0.3), (-0.6, -0.5, 0.7), 120.0, 60.0)
-    area("Fill", (0.5, 0.5), (0.7, -0.3, 0.4), 40.0, 90.0)
+    area("Key", (0.6, 0.3), (-0.6, -0.5, 0.7), 3.0, 60.0)
+    area("Fill", (0.5, 0.5), (0.7, -0.3, 0.4), 0.8, 90.0)
     # Rim strip: never visible in glossy or transmission on clear parts.
-    area("Rim", (1.0, 0.15), (0.0, 0.5, 0.6), 60.0, 45.0, glossy=False, transmission=False)
+    area("Rim", (1.0, 0.15), (0.0, 0.5, 0.6), 2.0, 45.0, glossy=False, transmission=False)
+    # Reflection card: a soft panel at the camera's mirror angle, seen only in glossy reflections, so the
+    # closed clear lid shows a reflection band (it lights nothing and never shows through the lid).
+    area("ReflectionCard", (1.6, 0.12), (0.30, 0.75, 0.70), 3.0, 180.0, transmission=False, diffuse=False)
 
     cam_data = bpy.data.cameras.new("Camera")
     cam_data.lens = 90.0
