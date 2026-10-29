@@ -357,6 +357,12 @@ class ExtractHelperTests(unittest.TestCase):
         with self.assertRaises(rc.CannotRun):
             bx.parse_frames("1-3", 1, 5, 0)
 
+    def test_denoise_quality_and_device_are_recorded(self):
+        # A GO must quote the denoise quality and the denoise device (OIDN on GPU is off by default).
+        cyc = bx.skeleton("5.2.3")["scene"]["cycles"]
+        self.assertIn("denoising_quality", cyc)
+        self.assertIn("denoising_use_gpu", cyc)
+
     def test_skeleton_is_valid_with_no_frames(self):
         self.assertEqual(bx.validate_extract(bx.skeleton("5.2.3")), [])
 

@@ -42,7 +42,7 @@ SCHEMA = "render-extract/1"
 CYCLES_KEYS = ["device", "samples", "use_adaptive_sampling", "adaptive_threshold", "use_denoising",
                "denoiser", "denoising_input_passes", "denoising_prefilter", "seed", "use_animated_seed",
                "filter_width", "sample_clamp_direct", "sample_clamp_indirect", "max_bounces",
-               "transmission_bounces"]
+               "transmission_bounces", "denoising_quality", "denoising_use_gpu"]
 SCENE_KEYS = ["name", "fps", "frame_start", "frame_end", "resolution", "resolution_percentage", "engine",
               "unit_system", "scale_length", "view_transform", "look", "exposure", "gamma", "motion_blur",
               "film_transparent"]
