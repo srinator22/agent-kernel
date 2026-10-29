@@ -31,7 +31,7 @@ for n in range(first, last + 1):
         sys.exit(1)
     with open("%s/frame_%04d.png" % (out, n), "wb") as fh:
         fh.write(b"" if (mode[0] == "zero" and n == skip) else b"PNGDATA")
-sys.exit(0)
+sys.exit(1 if mode[0] == "fail_after_all" else 0)
 '''
 
 
@@ -164,6 +164,11 @@ class RenderChunksTests(unittest.TestCase):
         code, _, err = run_main(self.plan_args(out=os.path.join(self.dir, "OneDrive", "frames")))
         self.assertEqual(code, 0)
         self.assertIn("WARNING", err)
+        # Same segment list as render_common (review note: iCloudDrive was missing here).
+        code, _, err = run_main(self.plan_args(out=os.path.join(self.dir, "iCloudDrive", "frames"),
+                                               state=os.path.join(self.jobs, "icloud.json")))
+        self.assertEqual(code, 0)
+        self.assertIn("WARNING", err)
 
     def test_plan_overlap_with_other_state_same_out(self):
         self.plan(first=1, last=10)
@@ -274,6 +279,32 @@ class RenderChunksTests(unittest.TestCase):
         self.assertEqual(chunk["returncodes"], [1])
         self.assertIn("4 frame(s) missing", out)
 
+    def test_failed_command_with_every_frame_present_is_a_failure(self):
+        # Regression (independent review): a chunk whose blender_run exited non-zero (a traceback after the
+        # frames were written, a version mismatch with the lock) was marked done because every frame existed.
+        self.plan(first=1, last=4, chunk=4)
+        self.set_mode("fail_after_all")
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 1, out)
+        chunk = self.load()["chunks"][0]
+        self.assertEqual((chunk["status"], chunk["returncodes"], chunk["failed_rc"]), ("failed", [1], 1))
+        self.assertIn("command returned 1", out)
+        code, out, _ = run_main(["status", "--state", self.state])
+        self.assertEqual(code, 1, out)
+        # A re-run never passes frames a failed command wrote; it says to delete them and stays failed.
+        os.remove(self.calls)
+        self.set_mode("ok")
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.call_lines(), [])
+        self.assertIn("delete them to render again", out)
+        for n in range(1, 5):
+            os.remove(os.path.join(self.out, "frame_%04d.png" % n))
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.call_lines(), [["1", "4", "0"]])
+        self.assertNotIn("failed_rc", self.load()["chunks"][0])
+
     def test_zero_size_frame_written_by_command_is_a_failure(self):
         self.plan(first=1, last=3, chunk=3)
         self.set_mode("zero 2")
@@ -334,6 +365,8 @@ class RenderChunksTests(unittest.TestCase):
         variants["wrongtool"] = dict(good, tool="other")
         variants["nochunks"] = dict(good, chunks=[])
         variants["badstatus"] = dict(good, chunks=[dict(good["chunks"][0], status="weird")])
+        # Regression (review note): a chunk without an index passed validation and crashed later (exit 1).
+        variants["noindex"] = dict(good, chunks=[{k: v for k, v in good["chunks"][0].items() if k != "index"}])
         variants["badrange"] = dict(good, last=0)
         variants["relout"] = dict(good, out="rel")
         variants["nopattern"] = dict(good, pattern="frame.png")

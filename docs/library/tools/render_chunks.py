@@ -32,9 +32,12 @@ another render_chunks STATE file in the same folder with the same --out.
 Behaviour: a frame is present when its file exists and is not empty; a zero-size file (crash-truncated) is
 missing, is deleted before the chunk runs, and is rendered again. Frames already present are never given to
 the command: for a partly finished chunk the command runs once per contiguous run of missing frames, with
-{first} and {last} set to that run. After the command, the frames are checked again; all present marks the
-chunk done, otherwise failed with the missing list. STATE is replaced atomically after every step, so a kill
-at any moment resumes exactly. A chunk left "running" by a kill is run again.
+{first} and {last} set to that run. After the command, the frames are checked again; all present and every
+command exit code 0 marks the chunk done. Missing frames make it failed with the missing list; a non-zero exit
+with every frame present makes it failed too (blender_run reports tracebacks and a version mismatch with the
+lock through its exit code), and a later run never passes those frames: it says to delete them, then renders
+them again. A done chunk whose frames were deleted renders them again. STATE is replaced atomically after
+every step, so a kill at any moment resumes exactly. A chunk left "running" by a kill is run again.
 Outputs: progress lines and a summary line `render_chunks: PASS ...` or `render_chunks: FAIL n finding(s) ...`.
 Exit codes: 0 all chunks done, 1 any chunk failed or not yet done (for example stopped by --max-chunks),
 2 could not run (bad arguments, bad STATE, the command cannot be started, overlap with another STATE).
@@ -62,7 +65,7 @@ import time
 
 TOOL = "render_chunks"
 STATUSES = ("todo", "running", "done", "failed")
-CLOUD_SEGMENTS = ("onedrive", "dropbox", "icloud", "icloud drive", "google drive", "googledrive")
+CLOUD_SEGMENTS = ("onedrive", "dropbox", "icloud", "icloud drive", "iclouddrive", "google drive", "googledrive")
 HASH_RUN = re.compile(r"#+")
 MISSING_LISTED = 200
 
@@ -187,8 +190,8 @@ def load_state(path: str) -> dict:
         for c in chunks:
             if not isinstance(c, dict) or c.get("status") not in STATUSES:
                 raise ValueError("a chunk has no valid status")
-            if not all(isinstance(c.get(k), int) and not isinstance(c.get(k), bool) for k in ("first", "last")):
-                raise ValueError("a chunk has non-integer first/last")
+            if not all(isinstance(c.get(k), int) and not isinstance(c.get(k), bool) for k in ("index", "first", "last")):
+                raise ValueError("a chunk has non-integer index/first/last")
             if c["last"] < c["first"] or not isinstance(c.get("log"), str):
                 raise ValueError("a chunk has a bad range or log")
     except (KeyError, ValueError) as exc:
@@ -290,6 +293,15 @@ def cmd_run(args) -> int:
             break
         label = f"chunk {chunk['index']}/{total} frames {chunk['first']}-{chunk['last']}"
         missing = missing_frames(out, pattern, chunk["first"], chunk["last"])
+        if chunk.get("failed_rc") is not None:
+            if not missing:
+                # Frames written by a command that then failed are suspect (a traceback after writing, a
+                # version mismatch with the lock); never pass them, and never delete them automatically.
+                failed += 1
+                print(f"{TOOL}: finding: {label}: its frames come from a command that returned "
+                      f"{chunk['failed_rc']}; delete them to render again (log {chunk.get('log')})")
+                continue
+            chunk.pop("failed_rc")  # the suspect frames were deleted; render them again below
         if not missing:
             chunk.update(status="done", seconds=0.0, frames_rendered=0, ended=now_iso(), missing=[])
             save_state(args.state, state)
@@ -327,9 +339,20 @@ def cmd_run(args) -> int:
             if args.stop_on_fail:
                 break
             continue
+        bad_rc = next((rc for rc in rcs if rc != 0), None)
+        if bad_rc is not None:
+            # Every frame exists but the command failed: blender_run reports tracebacks, script errors and
+            # a version mismatch with the lock through its exit code, so the chunk is not done.
+            chunk.update(status="failed", failed_rc=bad_rc)
+            failed += 1
+            print(f"{TOOL}: finding: {label}: failed, the command returned {bad_rc} although every frame is "
+                  f"present; read the log {chunk['log']}")
+            save_state(args.state, state)
+            if args.stop_on_fail:
+                break
+            continue
         chunk["status"] = "done"
-        note = f" (command returned {rcs[-1]} but every frame is present)" if rcs and rcs[-1] != 0 else ""
-        print(f"{TOOL}: {label}: rendered {chunk['frames_rendered']} frame(s) in {elapsed:.1f} s -> done{note}")
+        print(f"{TOOL}: {label}: rendered {chunk['frames_rendered']} frame(s) in {elapsed:.1f} s -> done")
         save_state(args.state, state)
     remaining = sum(1 for c in state["chunks"] if c["status"] != "done")
     if remaining == 0:
