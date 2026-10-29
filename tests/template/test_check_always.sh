@@ -192,7 +192,10 @@ for f in "${REQUIRED[@]}"; do
   [[ -e "$f" ]] && continue
   mkdir -p "$(dirname "$f")"
   case "$f" in
-    scripts/*.sh|tests/template/*.sh) printf '#!/usr/bin/env bash\nexit 0\n' > "$f" ;;
+    # Executable on disk, not only in the index: check.sh runs some of these
+    # stubs directly, and Linux refuses a file without the x bit (Git Bash on
+    # Windows does not, which hid this until CI).
+    scripts/*.sh|tests/template/*.sh) printf '#!/usr/bin/env bash\nexit 0\n' > "$f"; chmod +x "$f" ;;
     .claude/agents/*.md|.claude/skills/*/SKILL.md|.agents/skills/*/SKILL.md)
       printf -- '---\nname: x\ndescription: y\n---\n' > "$f" ;;
     .codex/agents/*.toml)
