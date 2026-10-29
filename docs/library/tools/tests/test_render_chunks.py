@@ -212,6 +212,18 @@ class RenderChunksTests(unittest.TestCase):
         self.assertEqual(self.call_lines(), [])
         self.assertEqual([f for f in os.listdir(self.jobs) if ".tmp" in f], [])
 
+    def test_run_rerenders_frames_deleted_from_a_done_chunk(self):
+        # Regression: frames of a done chunk were deleted (to re-render after a scene change); run skipped
+        # the chunk because its status was done, so nothing was rendered and the run still exited 0.
+        self.plan()
+        self.assertEqual(run_main(["run", "--state", self.state])[0], 0)
+        os.remove(os.path.join(self.out, "frame_0006.png"))
+        os.remove(self.calls)
+        code, out, err = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.call_lines(), [["6", "6", "0"]])
+        self.assertTrue(os.path.getsize(os.path.join(self.out, "frame_0006.png")) > 0)
+
     def test_run_never_renders_present_frames_and_replaces_zero_size(self):
         self.plan(first=1, last=8, chunk=8)
         self.put_frame(1)

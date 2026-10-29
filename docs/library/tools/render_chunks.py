@@ -280,7 +280,12 @@ def cmd_run(args) -> int:
     total, executed, failed = len(state["chunks"]), 0, 0
     for chunk in state["chunks"]:
         if chunk["status"] == "done":
-            continue
+            # A done chunk whose frames were deleted (for example to re-render after a scene change) runs
+            # again for exactly the missing frames; otherwise it is skipped.
+            if not missing_frames(out, pattern, chunk["first"], chunk["last"]):
+                continue
+            print(f"{TOOL}: chunk {chunk['index']} was done but frames are missing now; rendering them again")
+            chunk["status"] = "todo"
         if args.max_chunks is not None and executed >= args.max_chunks:
             break
         label = f"chunk {chunk['index']}/{total} frames {chunk['first']}-{chunk['last']}"
