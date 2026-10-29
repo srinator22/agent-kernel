@@ -158,7 +158,8 @@ class OverlayPlanTests(PlanCase):
         self.assertEqual((s["kind"], s["text"], s["channel"], s["frame_start"], s["length"]), ("text", "Lid", 2, 2, 4))
         self.assertEqual([k["frame"] for k in s["keys"]], [2, 3, 4, 5])
         k = s["keys"][0]
-        self.assertAlmostEqual(k["x"], (8 + 2) / W)
+        self.assertEqual(s["anchor_x"], "RIGHT")  # a left-side label anchors at its right edge
+        self.assertAlmostEqual(k["x"], (8 + 2 + 10) / W)
         self.assertAlmostEqual(k["y"], 1 - 4 / H)
         self.assertEqual(s["font_size"], 4)  # h 4.8 / 1.2
 
@@ -207,7 +208,33 @@ class OverlayPlanTests(PlanCase):
     def test_resolution_mismatch_scales_by_track_resolution(self):
         t = self.track({"resolution": [W * 2, H * 2], "items": [self.item(self.frames_list(1, 1, x=0, y=0))]})
         k = re_.plan_encode(self.args(overlay=t))["strips"][1]["keys"][0]
-        self.assertAlmostEqual(k["x"], 1 / (W * 2))
+        self.assertAlmostEqual(k["x"], (1 + 10) / (W * 2))  # right edge of a left-side label, track pixels
+
+    def test_font_size_scales_with_the_video_height(self):
+        # Regression: positions scaled to the video but the font stayed in track pixels, so a 2x track
+        # encoded at 1x drew text at twice its relative size (found on the sample-scene preview).
+        t = self.track({"resolution": [W * 2, H * 2], "font_px": 10,
+                        "items": [self.item(self.frames_list(1, 2))],
+                        "title": {"text": "T", "in": 1, "hold_s": 0.05}})
+        strips = re_.plan_encode(self.args(overlay=t))["strips"]
+        self.assertEqual([s["font_size"] for s in strips[1:]], [5, 5])
+
+    def test_title_uses_its_own_font_and_centre_anchor(self):
+        # Regression (sample-scene preview): the title ignored title.font_px (fell back to 48) and was
+        # anchored at its box's left edge, so a wider-than-estimated title drifted right of centre.
+        t = self.track({"resolution": [W, H], "items": [],
+                        "title": {"text": "T", "in": 1, "hold_s": 0.05, "font_px": 7, "x": 10, "w": 20, "y": 4}})
+        s = re_.plan_encode(self.args(overlay=t))["strips"][1]
+        self.assertEqual((s["font_size"], s["anchor_x"]), (7, "CENTER"))
+        self.assertAlmostEqual(s["keys"][0]["x"], (10 + 20 / 2) / W)
+
+    def test_label_anchor_is_the_side_away_from_the_subject(self):
+        # A wider-than-estimated label grows away from its subject, never across it.
+        for side, anchor, x in (("right", "LEFT", 8 + 1), ("left", "RIGHT", 8 + 1 + 10), ("above", "CENTER", 8 + 1 + 5)):
+            t = self.track({"resolution": [W, H], "items": [self.item(self.frames_list(1, 1), side=side)]})
+            s = re_.plan_encode(self.args(overlay=t))["strips"][1]
+            self.assertEqual(s["anchor_x"], anchor, side)
+            self.assertAlmostEqual(s["keys"][0]["x"], x / W, msg=side)
 
     def test_several_items_get_separate_channels(self):
         items = [self.item(self.frames_list(1, 3), id="a"), self.item(self.frames_list(2, 4), id="b")]

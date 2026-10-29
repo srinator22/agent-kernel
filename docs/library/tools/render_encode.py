@@ -70,7 +70,12 @@ def load_track(path) -> dict:
     return track
 
 
-def _keys_from_frames(frames, first, last, size, where):
+ANCHOR_FOR_SIDE = {"right": "LEFT", "left": "RIGHT", "above": "CENTER", "below": "CENTER"}
+
+
+def _keys_from_frames(frames, first, last, size, where, anchor="LEFT"):
+    """Keys with x at the box edge or centre the text is anchored to: text wider than the estimated box then
+    grows away from its subject (labels) or evenly about its centre (titles)."""
     keys = []
     for fr in frames:
         try:
@@ -80,15 +85,17 @@ def _keys_from_frames(frames, first, last, size, where):
         except (KeyError, TypeError, ValueError):
             raise rc.CannotRun(f"overlay {where}: each frame needs numeric frame, x, y, w, h (opacity optional)")
         if first <= n <= last:
-            keys.append({"frame": n - first + 1, "x": x / size[0], "y": 1.0 - y / size[1],
+            ax = x + w if anchor == "RIGHT" else (x + w / 2 if anchor == "CENTER" else x)
+            keys.append({"frame": n - first + 1, "x": ax / size[0], "y": 1.0 - y / size[1],
                          "opacity": min(1.0, max(0.0, op)), "h_px": h})
     keys.sort(key=lambda k: k["frame"])
     return keys
 
 
-def _text_strip(name, text, keys, font_px, channel):
+def _text_strip(name, text, keys, font_px, channel, anchor="LEFT"):
     return {"kind": "text", "name": name, "text": str(text), "channel": channel, "frame_start": keys[0]["frame"],
             "length": keys[-1]["frame"] - keys[0]["frame"] + 1, "font_size": int(round(font_px)),
+            "anchor_x": anchor,
             "keys": [{k: v for k, v in key.items() if k != "h_px"} for key in keys]}
 
 
@@ -102,13 +109,16 @@ def overlay_strips(track, first, last, fps, size) -> tuple:
         warnings.append(f"overlay resolution {res} differs from the video size {list(size)}; positions are "
                         "scaled by the track's own resolution")
     tsize = (float(res[0]), float(res[1])) if res else (float(size[0]), float(size[1]))
+    fscale = float(size[1]) / tsize[1]  # font sizes are track pixels; scale them like the positions
     for item in track.get("items", []):
-        keys = _keys_from_frames(item.get("frames", []), first, last, tsize, f"item {item.get('id')!r}")
+        anchor = ANCHOR_FOR_SIDE.get(item.get("side"), "LEFT")
+        keys = _keys_from_frames(item.get("frames", []), first, last, tsize, f"item {item.get('id')!r}", anchor)
         if not keys:
             warnings.append(f"overlay item {item.get('id')!r} has no frames inside {first}-{last}; skipped")
             continue
-        font = float(track.get("font_px") or keys[0]["h_px"] / 1.2)
-        strips.append(_text_strip(f"label_{item.get('id', len(strips))}", item.get("text", ""), keys, font, channel))
+        font = float(track.get("font_px") or keys[0]["h_px"] / 1.2) * fscale
+        strips.append(_text_strip(f"label_{item.get('id', len(strips))}", item.get("text", ""), keys, font, channel,
+                                  anchor))
         channel += 1
     title = track.get("title")
     if isinstance(title, dict) and title.get("text"):
@@ -121,12 +131,14 @@ def overlay_strips(track, first, last, fps, size) -> tuple:
                 raise rc.CannotRun("overlay title needs 'in' and either 'out' or 'hold_s'")
             x = float(title.get("x", tsize[0] * 0.1))
             y = float(title.get("y", tsize[1] * 0.45))
-            h = float(track.get("font_px", 48)) * 1.2
-            frames = [{"frame": f, "x": x, "y": y, "w": tsize[0] * 0.8, "h": h, "opacity": 1.0}
+            w = float(title.get("w", tsize[0] - 2 * x))
+            h = float(title.get("font_px") or track.get("font_px") or 48) * 1.2
+            frames = [{"frame": f, "x": x, "y": y, "w": w, "h": h, "opacity": 1.0}
                       for f in range(t_in, t_out + 1)]
-        keys = _keys_from_frames(frames, first, last, tsize, "title")
+        keys = _keys_from_frames(frames, first, last, tsize, "title", "CENTER")
         if keys:
-            strips.append(_text_strip("title", title["text"], keys, float(track.get("font_px") or keys[0]["h_px"] / 1.2), channel))
+            font = float(title.get("font_px") or track.get("font_px") or keys[0]["h_px"] / 1.2) * fscale
+            strips.append(_text_strip("title", title["text"], keys, font, channel, "CENTER"))
         else:
             warnings.append(f"overlay title has no frames inside {first}-{last}; skipped")
     return strips, warnings
@@ -204,7 +216,7 @@ def apply_plan(plan) -> None:
         strip.font_size = s["font_size"]
         strip.color = (1.0, 1.0, 1.0, 1.0)
         if hasattr(strip, "anchor_x"):
-            strip.anchor_x, strip.anchor_y = "LEFT", "TOP"
+            strip.anchor_x, strip.anchor_y = s.get("anchor_x", "LEFT"), "TOP"
         strip.use_shadow = True
         for k in s["keys"]:
             strip.location = (k["x"], k["y"])
