@@ -29,3 +29,4 @@ with a reason. Priorities P0-P3 per docs/procedures/audit.md.
 | Paper and roll simulation helper (Geometry Nodes simulation zones), when a project needs it | P3 | no maintained add-on found (recommendations 1b) | open |
 | Multi-machine rendering (Flamenco) and a rented-GPU container test, each behind an ADR and an owner cost approval | P3 | deferred in the recommendations; kernel rule 15 | open |
 | Extend twin parity and hand-off checks to library, profile and core agents (their Codex twins use a shortened style today) | P3 | lessons.sh checks only docs/roster since 2026-10-29; 17 non-roster pairs differ | open |
+| render_chunks: a failed_rc chunk whose frames were only partly deleted clears failed_rc and accepts the kept frames; add a frame-level guard (record the failed run's frame list and require all of them gone, or re-render the whole range) | P3 | independent review 2 note (non-blocking); the run message already says to delete them all | open |

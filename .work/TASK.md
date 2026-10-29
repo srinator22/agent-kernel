@@ -167,6 +167,13 @@ Node notes (pitfalls the workers get in their briefs):
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
+Reviewer (independent, fresh context), recorded verbatim by the advisor.
+
+Review 1 on c912812: FAIL - render_chunks marked a chunk done when every frame existed although blender_run exited non-zero (stage 7 gate hole, untested); the sample record lacked the stage 4 hold and a stage 5 row; A6 stage table had no inputs; A10 claimed film grain as a tool check. Non-blocking: malformed STATE exit 1 not 2, frame_audit chunks from 0, iCloudDrive missing in two cloud lists, N6b still doing, defect count.
+
+Review 2 on d98d60b992ac1f2eac1f4bc239e89a2125433167: PASS. "The fixes on HEAD d98d60b close all four findings from review 1. The verify output for d98d60b is complete and every stage is clean." Non-blocking edge left: if only some frames of a failed_rc chunk are deleted, failed_rc clears and the kept frames are accepted (the message says to delete all; a version mismatch is caught again on re-render) - BACKLOG row added.
+
+Evidence checked (review 2): verify output on d98d60b (kernel-hash, line-budget 79/180, lessons, taskgraph 16 nodes, adr 0001-0007, tasklint check and ship, doc-eval, selftest 17 passed 0 failed, template self-test OK; complete per scripts/check.sh lines 308-313); review2.diff read in full (8 files); render_chunks.py lines 279-358 on HEAD; blender_extract.py line 45; RECORD.md holds row by row and the stage 5 row; product-render.md stage table and lessons rows; .work/TASK.md N6b and the review 1 log entry.
 
 ## Retro
 <!-- filled by docs/procedures/retro.md -->
