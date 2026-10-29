@@ -16,7 +16,8 @@ Checks (all speeds use the real frame spacing and the scene fps):
             as stopped), in an interval outside the holds (needs a moving camera).
   spike     acceleration magnitude from the second difference of position above --spike times the median of
             the 5 frames on each side (a local reference, so an eased move of an object otherwise at rest
-            passes) and above --accel-floor (m/s^2): the camera and every tracked object in frames[].objects.
+            passes) and above --accel-floor (m/s^2): the camera and every tracked object in frames[].objects
+            except EMPTY objects (never visible; the meshes they drive are tracked themselves).
   overshoot camera position between two waypoint frames leaves the waypoints' [min, max] per axis by more
             than --overshoot-tol metres.
   label     for each label and each frame of its life (fade frames included) the box centre must stay on the
@@ -272,7 +273,12 @@ def run(args) -> int:
         findings.append({"kind": "spike", "message": (
             f"camera acceleration spike (> {args.spike:g} x median {med:.4g} m/s^2) at frames "
             f"{rc.format_ranges([x for x, _ in bad])}, peak {max(a for _, a in bad):.4g} m/s^2")})
+    # Empties are never seen; the visible meshes they drive are tracked by their own world positions.
+    types = {o.get("name"): o.get("type") for o in doc.get("objects") or [] if isinstance(o, dict)}
     for name, pts in sorted(object_tracks(frames).items()):
+        if types.get(name) == "EMPTY":
+            notes.append(f"object {name} (EMPTY) not checked: it is not visible")
+            continue
         if len(pts) < 3:
             notes.append(f"object {name}: fewer than 3 frames with a location (spike check skipped)")
             continue

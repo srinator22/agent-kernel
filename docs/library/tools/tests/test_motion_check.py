@@ -131,6 +131,18 @@ class SpikeTests(Base):
         code, out, _ = self.check(make_doc(n=120, objects=obj))
         self.assertEqual(code, 0, out)
 
+    def test_empty_objects_are_skipped_with_a_note(self):
+        # Regression: an invisible focus-target empty with a short eased move was reported as a spike;
+        # empties are never seen, and visible children are tracked by their own world positions.
+        obj = lambda i: {"Focus": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
+                                   "aabb_max": None, "samples": []}}
+        doc = make_doc(n=120, objects=obj)
+        doc["objects"] = [{"name": "Focus", "type": "EMPTY", "hide_render": False, "hide_viewport": False,
+                           "animated": True, "dimensions": None, "label": None}]
+        code, out, _ = self.check(doc)
+        self.assertEqual(code, 0, out)
+        self.assertIn("object Focus (EMPTY) not checked", out)
+
     def test_object_at_rest_with_a_pop_is_a_spike(self):
         obj = lambda i: {"Lid": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
                                  "aabb_max": None, "samples": []}}
