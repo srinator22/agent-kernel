@@ -1,7 +1,7 @@
 # Brief: sample scene (primitive shapes only)
 
-Version 2, 2026-10-29 (version 1 got art-director HOLD on 2026-10-29; the
-changes answer its findings, see RECORD.md). Recorded by the advisor;
+Version 3, 2026-10-29 (v1 art-director HOLD, v2 APPROVE WITH CHANGES; the
+changes answer both reviews, see RECORD.md). Recorded by the advisor;
 stage 0 of `docs/library/procedures/product-render.md`.
 
 | Field | Value | Source |
@@ -22,8 +22,8 @@ stage 0 of `docs/library/procedures/product-render.md`.
 | Look words | dark studio, clear acrylic, satin cut edges, matte black, brushed pin | lessons map |
 | Must show | the lid opening on its hinge; the ball seen through the clear lid | this brief |
 | Hard nos | no product, brand or person; no film grain; the camera never fully stops except on the closing title | lessons map |
-| Labels | "HINGE" right of the pin, frames 50 to 80, 6-frame fades (0.25 s); Blender's built-in text font (name and licence to record before any publication), regular, white #FFFFFF, no leader, 28 px (5.2 percent of frame height) | labels.json |
-| Title | "SAMPLE SCENE" in the lower third from frame 84 to 120 (1.5 s; read twice at 3 words/s needs 1.33 s), no fade | labels.json |
+| Labels | "HINGE" right of the pin, frames 50 to 80, 6-frame fades (0.25 s); Inter, Blender's bundled default font, SIL Open Font License 1.1 (per `license/license.md` in the Blender 5.2.3 portable; that the VSE text strip uses it when no font is set is unverified), regular, white #FFFFFF, no leader, 28 px (5.2 percent of frame height) | labels.json |
+| Title | "SAMPLE SCENE" in the lower third, over the matte black front wall of the box, from frame 84 to 120 (1.5 s; read twice at 3 words/s needs 1.33 s), no fade | labels.json |
 | Unverified figures | the 3 words/s reading rate and the 5 percent safe margin are tool defaults, UNVERIFIED; a researcher sources a reading rate and SMPTE ST 2046-1 before any real project | render_overlay --help |
 | Honesty label | CG render: carried by the bundle README and the file names (local review only, no publication); previews carry PREVIEW with resolution and samples | art-director check |
 | Known limits | primitive hinge: the lid meets a plain pin, with no knuckles, so the real-hinge cue is not shown | art-director finding |

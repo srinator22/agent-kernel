@@ -198,8 +198,14 @@ def build():
     cam_data.lens = 90.0
     cam_data.sensor_width = 36.0
     cam_data.clip_start = 0.01
+    # Focus follows the story: the ball in beats 1-2, the hinge pin from beat 3 on.
+    focus = bpy.data.objects.new("FocusTarget", None)
+    scene.collection.objects.link(focus)
+    for frame, where in ((50, ball.location), (62, pin.location)):
+        focus.location = where
+        focus.keyframe_insert("location", frame=frame)
     cam_data.dof.use_dof = True
-    cam_data.dof.focus_object = base
+    cam_data.dof.focus_object = focus
     cam_data.dof.aperture_fstop = 5.6
     cam = bpy.data.objects.new("Camera", cam_data)
     scene.collection.objects.link(cam)
