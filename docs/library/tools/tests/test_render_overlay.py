@@ -183,7 +183,7 @@ class Plan(OverlayCase):
         still = lambda f: {"Pin": [0.5, 0.5, 2.0]}
         code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0}), extract(still))
         self.assertEqual(code, 0, out)
-        self.assertIn("advisory: title box covers anchor 'Pin' at frames 5-", out)
+        self.assertIn("advisory: title box covers 'Pin' (anchor) at frames 5-", out)
         code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0, "position": "lower_third"}),
                                      extract(still))
         self.assertEqual(code, 0, out)
@@ -193,6 +193,20 @@ class Plan(OverlayCase):
         self.assertLessEqual(t["y"] + t["h"], H * 0.95)
         bad = spec([], {"text": "End", "in": 5, "hold_s": 2.0, "position": "top"})
         self.assertEqual(self.run_tool(bad, extract(still))[0], 2)
+
+    def test_title_cover_uses_screen_boxes(self):
+        # Regression (art-director finding): a ball whose centre is just below the frame still shows its top
+        # under a lower-third title; the anchor point alone missed it, its screen box does not.
+        ex = extract(lambda f: {"Ball": [0.5, -0.02, 0.4]})
+        for fr in ex["frames"]:
+            fr["screen_boxes"] = {"Ball": [0.4, -0.2, 0.6, 0.2]}
+        t = {"text": "End", "in": 5, "hold_s": 2.0, "position": "lower_third"}
+        code, out, _ = self.run_tool(spec([], t), ex)
+        self.assertEqual(code, 0, out)
+        self.assertIn("advisory: title box covers 'Ball' (screen box) at frames 5-", out)
+        for fr in ex["frames"]:
+            fr["screen_boxes"] = {"Ball": [0.4, 0.5, 0.6, 0.6, 0.7]}
+        self.assertEqual(self.run_tool(spec([], t), ex)[0], 2)
 
     def test_title_alone_and_overlong_title(self):
         code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0}), extract(moving))

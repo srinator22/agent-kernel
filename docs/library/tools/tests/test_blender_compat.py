@@ -376,6 +376,20 @@ class ExtractHelperTests(unittest.TestCase):
         d["scene"]["fps"] = None
         self.assertEqual(bx.validate_extract(d), [])
 
+    def test_screen_boxes_are_optional_and_checked(self):
+        d = good_doc()
+        d["frames"][0]["screen_boxes"] = {"Lid": [0.1, 0.2, 0.4, 0.5], "Pin": None}
+        self.assertEqual(bx.validate_extract(d), [])
+        for bad in ([0.1, 0.2, 0.4], [0.4, 0.2, 0.1, 0.5], "box"):
+            d["frames"][0]["screen_boxes"] = {"Lid": bad}
+            self.assertIn("screen_boxes", " ".join(bx.validate_extract(d)), bad)
+
+    def test_screen_box_projects_corners_and_drops_boxes_behind(self):
+        # A fake projection: u = x, v = z, depth = y (camera looking along +y).
+        proj = lambda p: (p[0], p[2], p[1])
+        self.assertEqual(bx.screen_box([0.1, 1.0, 0.2], [0.3, 2.0, 0.6], proj), [0.1, 0.2, 0.3, 0.6])
+        self.assertIsNone(bx.screen_box([0.1, -1.0, 0.2], [0.3, 2.0, 0.6], proj))
+
     def test_problems(self):
         cases = []
         d = good_doc(); d["schema"] = "render-extract/2"; cases.append(("schema", d))

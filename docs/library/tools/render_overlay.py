@@ -157,7 +157,7 @@ def validate_extract(doc):
     frames = doc.get("frames")
     if not isinstance(frames, list) or not frames:
         raise rc.CannotRun("extract has no frames list (or it is empty)")
-    index = {}
+    index, boxes = {}, {}
     for i, fr in enumerate(frames):
         if not isinstance(fr, dict) or isinstance(fr.get("frame"), bool) or not isinstance(fr.get("frame"), int) \
                 or not isinstance(fr.get("anchors"), dict):
@@ -169,12 +169,25 @@ def validate_extract(doc):
                     isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in a)):
                 raise rc.CannotRun(f"extract frame {fr['frame']} anchor {subj!r} must be [u, v, depth] or null")
         index[fr["frame"]] = fr["anchors"]
+        sb = fr.get("screen_boxes")  # optional: [umin, vmin, umax, vmax] per subject, v up
+        if sb is not None:
+            if not isinstance(sb, dict):
+                raise rc.CannotRun(f"extract frame {fr['frame']} screen_boxes must be a map")
+            for subj, b in sb.items():
+                if b is None:
+                    continue
+                if not (isinstance(b, list) and len(b) == 4 and all(
+                        isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in b)
+                        and b[0] <= b[2] and b[1] <= b[3]):
+                    raise rc.CannotRun(f"extract frame {fr['frame']} screen box {subj!r} must be "
+                                       f"[umin, vmin, umax, vmax] or null")
+            boxes[fr["frame"]] = sb
     scene = doc.get("scene") if isinstance(doc.get("scene"), dict) else {}
-    return index, scene
+    return index, scene, boxes
 
 
 # --------------------------------------------------------------------------------------- the plan
-def plan(fps, res, font, labels, title, index, scene, safe_frac, wps):
+def plan(fps, res, font, labels, title, index, scene, safe_frac, wps, screen_boxes=None):
     W, H = res
     safe = (safe_frac * W, safe_frac * H, W - safe_frac * W, H - safe_frac * H)
     findings, items, boxes = [], [], {}
@@ -256,13 +269,19 @@ def plan(fps, res, font, labels, title, index, scene, safe_frac, wps):
                      "hold_s": title["hold_s"], "hold_frames": hold_frames, "words": words,
                      "min_hold_s": need, "x": tx, "y": ty, "w": tw, "h": th, "font_px": title["font_px"],
                      "position": title["position"]}
-        covered = {}
+        covered = {}  # a subject's screen box when the extract has one (its centre may be off frame), else its anchor
         for f in range(title["in"], title["in"] + hold_frames + 1):
+            fboxes = (screen_boxes or {}).get(f) or {}
             for name, a in (index.get(f) or {}).items():
-                if a[2] > 0 and tx <= a[0] * W <= tx + tw and ty <= (1.0 - a[1]) * H <= ty + th:
-                    covered.setdefault(name, []).append(f)
-        out_title["advisories"] = [f"title box covers anchor {n!r} at frames {rc.format_ranges(fs)} "
-                                   f"(check contrast, or use position lower_third)" for n, fs in sorted(covered.items())]
+                b = fboxes.get(name)
+                if b is not None:
+                    bx0, bx1, by0, by1 = b[0] * W, b[2] * W, (1.0 - b[3]) * H, (1.0 - b[1]) * H
+                    if bx0 < tx + tw and tx < bx1 and by0 < ty + th and ty < by1:
+                        covered.setdefault((name, "screen box"), []).append(f)
+                elif a is not None and a[2] > 0 and tx <= a[0] * W <= tx + tw and ty <= (1.0 - a[1]) * H <= ty + th:
+                    covered.setdefault((name, "anchor"), []).append(f)
+        out_title["advisories"] = [f"title box covers {n!r} ({how}) at frames {rc.format_ranges(fs)} "
+                                   f"(check contrast, or move the title)" for (n, how), fs in sorted(covered.items())]
         if title["hold_s"] < need:
             add("title", f"title hold {title['hold_s']:g}s is shorter than the {need:.2f}s needed to read "
                          f"{words} word(s) twice at {wps:g} words/s")
@@ -292,8 +311,8 @@ def main(argv=None) -> int:
         if not 0 <= a.safe < 0.5 or a.wps <= 0:
             raise rc.CannotRun("--safe must be in [0, 0.5) and --wps must be positive")
         fps, res, font, labels, title = validate_spec(_load(a.spec, "spec"))
-        index, scene = validate_extract(_load(a.extract, "extract"))
-        findings, items, out_title = plan(fps, res, font, labels, title, index, scene, a.safe, a.wps)
+        index, scene, boxes = validate_extract(_load(a.extract, "extract"))
+        findings, items, out_title = plan(fps, res, font, labels, title, index, scene, a.safe, a.wps, boxes)
         track = {"fps": fps, "resolution": res, "items": items}
         if out_title:
             track["title"] = out_title

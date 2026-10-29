@@ -11,7 +11,8 @@ Inputs: an open .blend file; arguments after the bare "--".
 Outputs: one JSON file (schema "render-extract/1"; units metres, seconds; screen anchors u right, v up, depth
 in metres in front of the camera). A value that cannot be read is null, never invented. Per frame it records
 the camera (location, forward vector, lens, focus distance, f-stop), tracked objects (location, world-space
-bounds of the evaluated mesh, optional vertex samples) and anchors. Tracked objects are those with a `label`
+bounds of the evaluated mesh, optional vertex samples), anchors and screen_boxes ([umin, vmin, umax, vmax] of
+each tracked mesh's world bounds on screen; null when a corner is behind the camera). Tracked objects are those with a `label`
 custom property, those that are animated, and those named in --objects. An anchor is the world-space bounds
 centre of a mesh (the origin for other types) projected with world_to_camera_view. `--volume-objects` names
 closed meshes whose evaluated volume (m^3, unsigned) is recorded per frame; a name that is not a mesh object
@@ -100,6 +101,16 @@ def _need_keys(d, keys, where, problems):
     return True
 
 
+def screen_box(lo, hi, project):
+    """[umin, vmin, umax, vmax] of the 8 corners of a world box through `project` (point -> (u, v, depth)),
+    or None when any corner is at or behind the camera (the screen extent is then undefined)."""
+    pts = [project([x, y, z]) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+    if any(p[2] <= 0 for p in pts):
+        return None
+    us, vs = [p[0] for p in pts], [p[1] for p in pts]
+    return [min(us), min(vs), max(us), max(vs)]
+
+
 def validate_extract(doc) -> list:
     """Problems found in a render-extract/1 document (empty list = valid). Never raises."""
     problems: list = []
@@ -163,6 +174,19 @@ def validate_extract(doc) -> list:
                 p = _vec_problem(a, 3, f"{where}.anchors[{name}]")
                 if p:
                     problems.append(p)
+        boxes = fr.get("screen_boxes")  # optional: on-screen extent of each tracked mesh
+        if boxes is not None:
+            if not isinstance(boxes, dict):
+                problems.append(f"{where}.screen_boxes: expected an object")
+            else:
+                for name, b in boxes.items():
+                    if b is None:
+                        continue
+                    p = _vec_problem(b, 4, f"{where}.screen_boxes[{name}]")
+                    if p:
+                        problems.append(p)
+                    elif b[0] > b[2] or b[1] > b[3]:
+                        problems.append(f"{where}.screen_boxes[{name}]: min greater than max")
         if len(problems) > 50:
             return problems
     return problems
@@ -338,7 +362,7 @@ def _mesh_volume(oe, bmesh) -> float:
 
 
 def frame_record(sc, dg, bpy, bmesh, world_to_camera_view, tracked, volume_names, samples_every) -> dict:
-    rec = {"camera": None, "objects": {}, "anchors": {}, "volumes": {}}
+    rec = {"camera": None, "objects": {}, "anchors": {}, "volumes": {}, "screen_boxes": {}}
     cam = sc.camera
     if cam is not None:
         mw = cam.matrix_world
@@ -369,6 +393,10 @@ def frame_record(sc, dg, bpy, bmesh, world_to_camera_view, tracked, volume_names
             from mathutils import Vector
             uv = world_to_camera_view(sc, cam, Vector(centre))
             rec["anchors"][o.name] = _vec(uv)
+            if item["aabb_min"] is not None:
+                rec["screen_boxes"][o.name] = screen_box(
+                    item["aabb_min"], item["aabb_max"],
+                    lambda q: tuple(world_to_camera_view(sc, cam, Vector(q))))
     for name in volume_names:
         rec["volumes"][name] = _num(_mesh_volume(bpy.data.objects[name].evaluated_get(dg), bmesh))
     return rec
