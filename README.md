@@ -68,7 +68,8 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
 
 - Begin a task: `scripts/new-task.sh <slug> [standard|quick|autopilot]`
   creates the branch and `.work/TASK.md`.
-- While working run `./scripts/check.sh --quick`; before shipping run the
+- While working run `./scripts/check.sh --quick` (or `scripts/quickgate.sh`,
+  the same lane); before shipping run the
   full gauntlet (`./scripts/check.sh`). Shipping is a gated merge: the work
   goes through a branch and merges only after the gauntlet is green on CI.
 - At milestones run `docs/procedures/bughunt.md`; at the end of every task
@@ -102,11 +103,22 @@ Full contract: `docs/procedures/upstream.md`.
 `./scripts/check.sh` is the only gauntlet; CI runs the same script.
 
 - Always: kernel hash verify (`.kernel.hash`); AGENTS.md at most 180
-  lines; untracked-files report; the dash scan; the caps below; mirror
-  parity (`.claude/skills` and `.agents/skills` identical, every
-  `.claude/agents` file with a `.codex` counterpart or a recorded reason);
-  the task graph; ADR numbering and format (`scripts/adr.sh check`);
-  `scripts/selftest.sh` whenever `tests/template/` exists.
+  lines; untracked-files report; the dash and character scan (no em or en
+  dashes, curly quotes, ellipsis character, non-breaking space or mojibake);
+  the caps below; mirror parity (`.claude/skills` and `.agents/skills`
+  identical, every `.claude/agents` file with a `.codex` counterpart or a
+  recorded reason); the task graph; the task lint (`scripts/tasklint.sh
+  check`: ticked criteria name evidence, assumptions carry a status); ADR
+  numbering and format (`scripts/adr.sh check`); the documentation question
+  table (`scripts/doc-eval.sh check`); `scripts/selftest.sh` whenever
+  `tests/template/` exists. The full gate (not `--quick`) also runs
+  `scripts/tasklint.sh ship`: no open assumption, and an autopilot task has
+  a PASS plan verdict.
+- Claude Code hooks: `scripts/destructive-guard.sh` refuses destructive rm
+  and git forms before they run, in every session and subagent;
+  `scripts/stop-gate.sh` blocks a turn end on broken task state and runs the
+  quick gate once every criterion is ticked; `scripts/session-context.sh`
+  loads the mode, the branch, status, recent commits and the live task.
 - Template mode (before start): template integrity, including required
   files, placeholders, skill frontmatter, settings validity, executable
   bits, ADR references and BLUEPRINT tree parity.
@@ -119,9 +131,10 @@ Full contract: `docs/procedures/upstream.md`.
   archived on evidence, never deleted.
 - Self-tests: `scripts/selftest.sh` runs the fixtures in `tests/template/`
   against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`,
-  `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh` and
-  `worker-git-guard.sh`. `scripts/quickgate.sh` is the
-  fast in-work subset of the gauntlet.
+  `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`,
+  `worker-git-guard.sh`, `destructive-guard.sh`, `stop-gate.sh`,
+  `tasklint.sh`, `doc-eval.sh` and `session-context.sh`. `scripts/quickgate.sh` (it runs
+  `./scripts/check.sh --quick`) is the fast in-work subset of the gauntlet.
 
 ## Profiles
 
@@ -156,12 +169,13 @@ All in `docs/procedures/`, portable to any agent.
 - ship: done-gate, version, push, monitor CI to terminal state.
 - retro: end-of-task learning capture.
 - maintain: pruning, caps, freshness.
+- doc-eval: a fresh agent answers a question set by navigation; traps must be declined.
 - longjob: checkpointed background work.
 - upstream: lessons up, template sync down, adoption.
 
 ## Harness support
 
-- Claude Code: `CLAUDE.md` imports AGENTS.md; `.claude/` holds agents, skills and a SessionStart hook.
+- Claude Code: `CLAUDE.md` imports AGENTS.md; `.claude/` holds agents, skills and the SessionStart, PreToolUse and Stop hooks.
 - Codex: reads AGENTS.md; `.codex/agents/` and `.agents/skills/` carry the same accelerators.
 - Any other agent: AGENTS.md and `docs/procedures/` are sufficient; accelerators are optional.
 - Model choice: `docs/rules/models.md` defines tiers (cheap, standard, strong, inherit), never model names, with adapters per harness. Task decomposition and worker rules: `docs/rules/orchestration.md`.

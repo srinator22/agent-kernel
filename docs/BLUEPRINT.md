@@ -82,6 +82,7 @@ docs/
     tests.md                  # test harness and layers wired from day one
     upstream.md               # lessons up to the template, template sync down, adoption
     adr.md                    # record a decision: scripts/adr.sh new, format, superseding
+    doc-eval.md               # fresh agent answers tests/docs/questions.md by navigation; traps declined
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -138,6 +139,10 @@ scripts/
   selftest.sh                 # runs tests/template/ against the template's own scripts
   adr.sh                      # check (ADR numbering and format) | new <title>
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
+  destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
+  stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
+  tasklint.sh                 # check | ship: criteria evidence, assumption status, autopilot plan verdict
+  doc-eval.sh                 # check | brief: the documentation question table
 tests/
   template/                   # fixtures and tests for the scripts above; called from check.sh
     lib.sh                    # shared assertion helpers
@@ -153,8 +158,15 @@ tests/
     test_adr.sh
     test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
     test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
+    test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
+    test_stop_gate.sh         # Stop hook decisions against a fake quickgate
+    test_tasklint.sh
+    test_doc_eval.sh
+    test_session_context.sh   # mode line, git priming, task state
     fixtures/
       check.sh                # pristine template check.sh the tests run against
+  docs/
+    questions.md              # question set and answer key for docs/procedures/doc-eval.md
 .work/
   TASK.md                     # current-task state (template with placeholders); committed
   done/                       # archived task files; committed
@@ -162,7 +174,7 @@ tests/
   jobs/                       # background-job STATE files and logs; GITIGNORED
     .gitkeep
 .claude/
-  settings.json               # attribution off; SessionStart hook -> scripts/session-context.sh
+  settings.json               # attribution off; hooks: SessionStart, PreToolUse guard, Stop gate
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
@@ -427,8 +439,14 @@ Date: {{date}}
 - Retries per failing step: {{max, default 2}}
 - Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
 
+## Assumptions
+<!-- Amendment 4: [confirmed] the human said so, [verified] -> evidence, [open];
+     scripts/tasklint.sh ship fails while any line is [open], except in quick mode -->
+- [open] {{assumption}}
+
 ## Acceptance criteria
-<!-- each maps to an executable test where possible; list test paths -->
+<!-- each maps to an executable test where possible; list test paths; a ticked
+     line needs -> an existing path or -> judgment: reason (scripts/tasklint.sh) -->
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}
 
 ## Plan
@@ -436,6 +454,9 @@ Date: {{date}}
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
 | {{node}} | {{- or node names}} | {{paths}} | {{cheap/standard/strong/advisor}} | todo |
+
+## Plan verdict
+<!-- Amendment 4, autopilot only: the reviewer's plan review before any node starts -->
 
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
@@ -455,7 +476,7 @@ Date: {{date}}
 
 ### 3.13 .claude/ - accelerators only; the repo must function without this directory
 
-- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule).
+- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule); since Amendment 4 it also prints the branch, `git status --short` (capped at 20 lines) and the last 10 commits. Amendment 4 adds a `PreToolUse` hook (matcher `Bash|PowerShell`) running `scripts/destructive-guard.sh` and a `Stop` hook (timeout 1200 seconds) running `scripts/stop-gate.sh` (VERIFY 2026-10-29: Stop stdin carries `stop_hook_active`, exit 2 blocks with stderr fed back, project hooks also run inside subagents).
 - **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives the diff, `.work/TASK.md`, the verify output (Amendment 3), and files it chooses to read; must not receive implementer reasoning; returns FAIL when the verify output is missing, truncated or not clean at every stage; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled, the AGENTS.md rules index and the adopted profiles' rules; writes PASS/FAIL ending with an Evidence checked list with specifics into the Review verdict section; gains nothing by being agreeable.
 - **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns conclusions with file:line, quotes a few lines at most, skips vendored, build and dependency folders, never modifies.
 - **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push blocked by a PreToolUse hook (Amendment 3: matcher `Bash|PowerShell`, body `scripts/worker-git-guard.sh`, VERIFY 2026-10-23; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; replies with files touched, each check's command and verbatim result ("could not run" stated as such) and conflicts; no version bump unless briefed; if its instruction conflicts with observed evidence, follows the evidence and says so.
@@ -534,6 +555,7 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
 - `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
 - `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
+- `scripts/destructive-guard.sh`, `scripts/stop-gate.sh`, `scripts/tasklint.sh`, `scripts/doc-eval.sh` (Amendment 4): see the Amendment 4 entry below.
 - `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
 
 ---
@@ -603,3 +625,7 @@ Why: four real projects exposed gaps that the original template could not catch.
 ## Amendment 3 (2026-10-23)
 
 Ten lessons approved by the owner on 2026-10-23 (L001 to L010 in `docs/lessons/INDEX.md`) applied to the core. The reviewer takes the verify output as input and fails without it, ends its verdict with an Evidence checked list, and checks the rules index and adopted profiles' rules. The worker replies in a fixed format with verbatim check results; its commit and push block moved into `scripts/worker-git-guard.sh` under matcher `Bash|PowerShell`. The monitor stays in the foreground and re-runs on timeout; `scripts/ci-watch.sh` derives the expected workflows from the changed files and path filters, with `--expect` and `--plan`. Explore returns conclusions. The retro records time-costing traps and routes durable decisions to ADRs; bugfix requires every regression test to fail first for the stated root cause. The library adr skill graduated to a core procedure, skill and `scripts/adr.sh`, wired into check.sh's always section (core skills: 5 of 8). Kernel untouched.
+
+## Amendment 4 (2026-10-29)
+
+Nine process ideas from a public knowledge base on agentic coding (coleam00/cole-medin-knowledge-base, no license, so ideas re-expressed and no text copied), approved by the owner on 2026-10-29. Hooks: `scripts/destructive-guard.sh` (PreToolUse, every session) refuses recursive removal of roots, home, the workspace, bare globs and unresolved variables, and destructive git forms (force push, `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, whole-tree checkout and restore, `stash drop` and `clear`), mechanizing kernel rules 6 and 11; `scripts/stop-gate.sh` (Stop) blocks a turn end on broken task state and runs `scripts/quickgate.sh` once every criterion is ticked, cached by working-tree state, because the quick lane takes minutes where template self-tests exist; `scripts/session-context.sh` primes the session with branch, status and the last 10 commits. Task state: TASK.md gains Assumptions and Plan verdict sections, and `scripts/tasklint.sh` (check in the always section, ship in the full gate only) requires evidence for ticked criteria, a status per assumption, no open assumption at ship, and a PASS plan verdict for an autopilot task that has started; the reviewer documents the plan review. Documentation: `docs/procedures/doc-eval.md` with `tests/docs/questions.md` and `scripts/doc-eval.sh` test that a fresh agent finds answers by navigation and declines trap questions; maintain runs it. Style: check.sh also fails on curly quotes, the ellipsis character, non-breaking space, the replacement character and mojibake. The hardware-pcb profile ships `tools/check_quotes.py`, which verifies a cited quote against the stored document and page. Upgrade note: a project that syncs this while an autopilot task is already running (a node doing or done) adds a `## Plan verdict` section with the reviewer's plan review, or `scripts/tasklint.sh check` fails. Kernel untouched.
