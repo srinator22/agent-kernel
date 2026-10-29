@@ -135,8 +135,9 @@ def build():
     ball.name = "Ball"
     # Deliberate cheat, recorded in RECORD.md: in the open lid the ball's internal reflection (the ray leaves
     # the acrylic as a transmission ray) read as a second ball (adversarial review of the preview). The ball
-    # stays visible through the closed lid, then is hidden from transmission rays from frame 50, when the lid
-    # is open and the ball is seen directly; frame 50 shows no reflection, so the switch is not visible.
+    # stays visible through the closed lid, then is hidden from transmission and glossy rays from frame 50,
+    # when the lid is open and the ball is seen directly (it also drops out of the floor and pin reflections);
+    # frame 50 shows no reflection, so the switch is not visible.
     for frame, seen in ((49, True), (50, False)):
         ball.visible_transmission = ball.visible_glossy = seen
         ball.keyframe_insert("visible_transmission", frame=frame)
