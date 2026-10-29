@@ -19,7 +19,9 @@
     "scene.cycles.seed": 0,
     "scene.cycles.use_animated_seed": false,
     "scene.cycles.filter_width": 1.75,
-    "scene.cycles.sample_clamp_indirect": 10.0
+    "scene.cycles.sample_clamp_indirect": 10.0,
+    "scene.cycles.denoising_quality": "HIGH",
+    "scene.cycles.denoising_use_gpu": true
   },
   "transparent_min_samples": 128,
   "allow_units": [
