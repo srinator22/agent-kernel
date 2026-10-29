@@ -66,3 +66,18 @@ Entry format (all four fields required):
   limits; ADR 0006 records the fail-toward-refusing policy.
 - retire-when: two more guard-type tasks pass review in one round with a
   form list in their criteria.
+
+### A Windows-green gate can hide a Linux exec-bit failure
+
+- what happened: the kb-adaptations change merged straight to main on the
+  owner's request after the full gate passed on Windows Git Bash; CI on
+  Linux failed (run 40819768925) because a self-test fixture stub lacked
+  the executable bit, which Git Bash ignores. Fixed in ee4ffdb, CI green.
+- what check should have caught it: CI on the branch before the merge (the
+  default gated merge), or a self-test assertion that every script the
+  fixture writes is executable on disk.
+- what was added: the fixture now runs chmod +x on each stub; the CI run
+  that failed is the regression evidence.
+- retire-when: scripts/selftest.sh runs in a CI matrix that includes
+  Windows and Linux before merge (BACKLOG P2), or merges always wait for
+  branch CI.
