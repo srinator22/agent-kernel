@@ -32,7 +32,7 @@ AG
 
 # ---- project mode ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 echo "src" > src.txt
@@ -56,6 +56,63 @@ run ./scripts/check.sh --quick
 assert_rc "--quick does not skip the dash check" 1
 assert_contains "--quick reports the dash failure" "em or en dash found"
 git rm -q -f notes.txt && git commit -q -m "remove notes" >/dev/null 2>&1
+
+# Typographic and mis-encoded characters fail like dashes, --quick included.
+# Each spec is label:bytes with the bytes written as escapes, so this file
+# stays plain ASCII and passes the gate it tests.
+for spec in 'curly quote:\xe2\x80\x9c' 'ellipsis:\xe2\x80\xa6' 'non-breaking space:\xc2\xa0' \
+            'replacement character:\xef\xbf\xbd' 'mojibake A-tilde:\xc3\x83\xc2\xa9' 'mojibake a-circumflex-euro:\xc3\xa2\xe2\x82\xac'; do
+  label="${spec%%:*}"
+  printf 'bad %b char\n' "${spec#*:}" > notes.txt
+  commit_fixture
+  run ./scripts/check.sh --quick
+  assert_rc "a $label in a tracked file fails, even with --quick" 1
+  assert_contains "the $label failure is reported" "typographic or mis-encoded character found"
+  git rm -q -f notes.txt && git commit -q -m "remove notes" >/dev/null 2>&1
+done
+printf 'plain ASCII "quotes" and ... dots and e-acute written as an escape
+' > notes.txt
+commit_fixture
+run ./scripts/check.sh --quick
+assert_not_contains "plain ASCII punctuation passes the character check" "typographic or mis-encoded"
+git rm -q -f notes.txt && git commit -q -m "remove notes" >/dev/null 2>&1
+
+# The task lint runs in the always section; its ship half only in the full gate.
+mkdir -p .work
+printf '# Task: fixture
+
+## Assumptions
+- [open] not settled
+
+## Acceptance criteria
+- [x] done -> diff inspection
+' > .work/TASK.md
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "a ticked criterion without evidence fails, even with --quick" 1
+assert_contains "the tasklint check failure is reported" "scripts/tasklint.sh check failed"
+assert_not_contains "--quick skips the ship half" "scripts/tasklint.sh ship failed"
+printf '# Task: fixture
+
+## Assumptions
+- [open] not settled
+' > .work/TASK.md
+commit_fixture
+run ./scripts/check.sh --quick
+assert_not_contains "an open assumption passes --quick" "tasklint.sh"
+run ./scripts/check.sh
+assert_rc "an open assumption fails the full gate" 1
+assert_contains "the ship failure is reported" "scripts/tasklint.sh ship failed"
+write_task
+commit_fixture
+
+# The doc question table is validated in the always section.
+mkdir -p tests/docs && echo "no table" > tests/docs/questions.md
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "a malformed question table fails, even with --quick" 1
+assert_contains "the doc-eval failure is reported" "scripts/doc-eval.sh check failed"
+git rm -q -r -f tests/docs && git commit -q -m "remove questions" >/dev/null 2>&1
 
 mkdir -p docs/rules
 seq 1 41 > docs/rules/big.md
@@ -96,7 +153,7 @@ t_cleanup
 
 # ---- project mode with tests/template present: selftest runs in the always section ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh selftest.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 touch .start-done
@@ -115,7 +172,7 @@ t_cleanup
 
 # ---- template mode: a clean fixture still exits 0 ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh tasklint.sh
 # The required list is read from the real check.sh so the fixture cannot drift.
 mapfile -t REQUIRED < <(sed -n '/^  required=(/,/^  )/p' "$T_CHECK" | sed '1d;$d' | tr -s ' ' '\n' | sed '/^$/d')
 BP="docs/BLUEPRINT.md"
@@ -135,7 +192,10 @@ for f in "${REQUIRED[@]}"; do
   [[ -e "$f" ]] && continue
   mkdir -p "$(dirname "$f")"
   case "$f" in
-    scripts/*.sh|tests/template/*.sh) printf '#!/usr/bin/env bash\nexit 0\n' > "$f" ;;
+    # Executable on disk, not only in the index: check.sh runs some of these
+    # stubs directly, and Linux refuses a file without the x bit (Git Bash on
+    # Windows does not, which hid this until CI).
+    scripts/*.sh|tests/template/*.sh) printf '#!/usr/bin/env bash\nexit 0\n' > "$f"; chmod +x "$f" ;;
     .claude/agents/*.md|.claude/skills/*/SKILL.md|.agents/skills/*/SKILL.md)
       printf -- '---\nname: x\ndescription: y\n---\n' > "$f" ;;
     .codex/agents/*.toml)

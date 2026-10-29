@@ -1,4 +1,4 @@
-# 0006 - Product render, animation and film capability as roster roles and library items
+# 0007 - Product render, animation and film capability as roster roles and library items
 
 Date: 2026-10-29
 Status: Accepted

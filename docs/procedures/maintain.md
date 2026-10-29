@@ -18,6 +18,8 @@ rule 10): archival happens on evidence, never on vibes.
    dependencies; review lockfile drift.
 5. Verify the kernel hash; regenerate CHANGELOG.md if a release is pending;
    confirm README.md is still present-tense truthful.
+5a. Run the doc evaluation (`docs/procedures/doc-eval.md`) and put its counts
+   in the step 7 summary.
 6. Open an issue or PR on the template repository carrying the
    `docs/lessons/UPSTREAM.md` entries (`docs/procedures/upstream.md`), then
    clear them from the file, noting the link in the summary below.

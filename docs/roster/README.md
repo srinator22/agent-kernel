@@ -9,7 +9,7 @@ them by hand (ADR 0005).
 
 - New roles with no project evidence yet, except where a role's Evidence
   line says it carries one product film project's evidence (the CG render
-  department and the CG additions to the creative roles, ADR 0006). Each
+  department and the CG additions to the creative roles, ADR 0007). Each
   checklist is senior judgment, not learned practice; the first project
   that uses a role revises it and records what it caught. A role graduates
   to a profile or the library by the rules in `docs/library/README.md`.
@@ -106,7 +106,7 @@ them by hand (ADR 0005).
 ### CG render (product stills, animation and film)
 
 Run with the library `product-render` procedure and tools
-(`docs/library/procedures/product-render.md`, ADR 0006). Render job state
+(`docs/library/procedures/product-render.md`, ADR 0007). Render job state
 lives in `.work/jobs/render/` (gitignored, `docs/procedures/longjob.md`);
 frames, caches and videos live outside the repo and outside cloud-synced
 folders. Evidence: one product film project for the roles marked one-project.

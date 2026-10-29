@@ -155,7 +155,7 @@ one that proved unhelpful is archived with its reason.
 | fixture-guard | tool | Fails a commit that changes a golden fixture and the code it pins without a marker line (SC-3) | a hardware R&D journal project |
 | check-project-readmes | tool | Requires a README with the required headings in every project folder | a CAD add-in project |
 | product-render | skill | Drives the staged CAD-to-film pipeline with four hold points and verified output | a product film project |
-| product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0006) | a product film project |
+| product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0007) | a product film project |
 | render tools | tools | The 19 render tools above, with tests | a product film project (ports where marked in each header; the rest new) |
 | product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
 

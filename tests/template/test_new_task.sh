@@ -36,11 +36,21 @@ assert_file_has "Budget wall-clock line" .work/TASK.md "- Wall-clock:"
 assert_file_has "Plan section" .work/TASK.md "## Plan"
 assert_file_has "task-graph header" .work/TASK.md "| node | depends on | owner files | worker tier | status |"
 assert_file_has "task-graph example row" .work/TASK.md "| N1 | - | path/one, path/two | standard | todo |"
+assert_file_has "Assumptions section" .work/TASK.md "## Assumptions"
+assert_file_has "assumption placeholder starts open" .work/TASK.md "- [open] {{assumption}}"
+assert_file_has "Plan verdict section" .work/TASK.md "## Plan verdict"
+assert_contains "next steps name the autopilot plan review" "Plan verdict section"
 assert_file_has "Acceptance criteria kept" .work/TASK.md "## Acceptance criteria"
 assert_file_has "Progress log kept" .work/TASK.md "## Progress log"
 assert_file_has "Review verdict kept" .work/TASK.md "## Review verdict"
 assert_file_has "Retro kept" .work/TASK.md "## Retro"
 assert_file_lacks "old flat plan step is gone" .work/TASK.md "1. {{step}}"
+cp_script tasklint.sh
+run ./scripts/tasklint.sh check
+assert_rc "a fresh scaffold passes tasklint check" 0
+run ./scripts/tasklint.sh ship
+assert_rc "a fresh scaffold is not ship-ready: its assumption is still open" 1
+assert_contains "the open assumption is named" "open assumption"
 
 run ./scripts/new-task.sh another-task
 assert_rc "refuses while a task is in progress" 1

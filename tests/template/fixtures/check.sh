@@ -2,7 +2,8 @@
 # check.sh - the single gauntlet. CI runs this exact script, so local and CI
 # cannot diverge. Usage: ./scripts/check.sh [--full-mutation] [--quick]
 # --quick is the working lane: the wired stack block skips mutation and the
-# production build when QUICK=1; the always section (step 4) never skips.
+# production build when QUICK=1; the always section (step 4) never skips,
+# except the ship-readiness half of the task lint (4e), which is full-gate only.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -107,7 +108,8 @@ fi
 gfail=0
 gerr() { echo "CHECK FAILED: $*" >&2; gfail=1; }
 
-# 4a. Style: plain hyphens only (kernel rule 20). Tracked files only.
+# 4a. Style: plain hyphens only (kernel rule 20), and no typographic or
+# mis-encoded characters. Tracked files only.
 # Needs grep with PCRE (GNU); where unavailable this defers to CI.
 rc=0
 dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
@@ -116,6 +118,18 @@ if (( rc == 0 )); then
   gerr "em or en dash found; plain hyphens only"
 elif (( rc > 1 )); then
   echo "WARNING: git grep -P unavailable; dash check deferred to CI."
+fi
+# Typographic and mis-encoded characters: curly quotes, the ellipsis
+# character, non-breaking space, the replacement character, and UTF-8 that
+# was decoded as Latin-1 or Windows-1252 (an A-tilde or a-circumflex-euro
+# pair). They break greps and diffs and usually mean pasted or mangled text.
+rc=0
+chars="$(git grep -IPn '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' 2>/dev/null)" || rc=$?
+if (( rc == 0 )); then
+  printf '%s\n' "$chars" | head -20
+  gerr "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
+elif (( rc > 1 )); then
+  echo "WARNING: git grep -P unavailable; character check deferred to CI."
 fi
 
 # 4b. Memory caps and mirror parity are mechanized (kernel rules 8 to 10):
@@ -129,7 +143,20 @@ fi
 # 4d. Decision records are numbered and formatted (docs/procedures/adr.md).
 ./scripts/adr.sh check || gerr "scripts/adr.sh check failed"
 
-# 4e. The template's own scripts are tested (docs/procedures/tests.md), in
+# 4e. Task state: ticked criteria name evidence, assumptions carry a status,
+# an autopilot task that started has a plan verdict. The full gate (not
+# --quick) also requires every assumption settled: an open one means the task
+# is not ready to ship.
+./scripts/tasklint.sh check || gerr "scripts/tasklint.sh check failed"
+if (( ! QUICK )); then
+  ./scripts/tasklint.sh ship || gerr "scripts/tasklint.sh ship failed (settle open assumptions; autopilot needs a PASS plan verdict)"
+fi
+
+# 4f. The documentation question set is well formed and its sources exist
+# (docs/procedures/doc-eval.md).
+./scripts/doc-eval.sh check || gerr "scripts/doc-eval.sh check failed"
+
+# 4g. The template's own scripts are tested (docs/procedures/tests.md), in
 # every mode, whenever the tests exist.
 if [[ -d tests/template ]]; then
   ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
@@ -203,10 +230,16 @@ if [[ ! -f .start-done ]]; then
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
+    docs/decisions/0006-claude-code-hooks-enforce-the-destructive-action-rule-and-th.md
     docs/procedures/adr.md scripts/adr.sh scripts/worker-git-guard.sh
     .claude/skills/adr/SKILL.md .agents/skills/adr/SKILL.md
     tests/template/test_adr.sh tests/template/test_ci_watch.sh
     tests/template/test_worker_git_guard.sh
+    scripts/destructive-guard.sh scripts/stop-gate.sh scripts/tasklint.sh
+    scripts/doc-eval.sh docs/procedures/doc-eval.md tests/docs/questions.md
+    tests/template/test_destructive_guard.sh tests/template/test_stop_gate.sh
+    tests/template/test_tasklint.sh tests/template/test_doc_eval.sh
+    tests/template/test_session_context.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -275,7 +308,7 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style, memory caps, task graph, ADR format, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
   exit 0
 fi
 
