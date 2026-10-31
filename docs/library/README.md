@@ -26,6 +26,7 @@ asks for it.
     docs/library/tools/<tool>           generic tool; tests in tools/tests/
     docs/library/hooks/<hook>           harness hook; tests in hooks/tests/
     docs/library/examples/<name>/       worked example of a procedure (records, no outputs)
+    docs/library/toolchains/<name>.md   checked set of external tools for an activity
     docs/library/README.md              this file
 
 Every tools/ and hooks/ test runs in the template self-test
@@ -158,6 +159,7 @@ one that proved unhelpful is archived with its reason.
 | product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0007) | a product film project |
 | render tools | tools | The 19 render tools above, with tests | a product film project (ports where marked in each header; the rest new) |
 | product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
+| engineering-media | toolchain | Free tools checked together for structural FEA, flow, mechanisms, people and results-to-render, with licences, install sources, the check each passed and install pitfalls; read at discover step 2 | a consumer hardware product project |
 
 ## Considered and not ported
 
