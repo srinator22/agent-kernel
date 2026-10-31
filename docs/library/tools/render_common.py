@@ -8,6 +8,7 @@ Outputs: Python values only; `--self-test` writes and reads one PNG in a tempora
 Exit codes (module constants PASS, FAIL, CANNOT): 0 pass, 1 check failed, 2 could not run.
 Dependencies: Python 3.10+ standard library. Optional fast paths: Pillow (PNG decode) and numpy (luma);
 setting RENDER_TOOLS_PURE=1 forces the stdlib path. Both paths return identical Image values.
+require_blender() imports bpy on call only, so the module itself never needs Blender.
 Assumptions: pixels are held as rows of ints (row-major, channels interleaved); 16-bit PNGs other than
 gray are always decoded by the stdlib path because Pillow reduces them to 8 bit.
 Origin: new (no prior source).
@@ -39,6 +40,23 @@ class CannotRun(Exception):
 
 def pure_mode() -> bool:
     return os.environ.get("RENDER_TOOLS_PURE", "") not in ("", "0")
+
+
+def require_blender():
+    """Return `bpy` when this process is Blender itself; raise CannotRun otherwise.
+
+    A pip-installed `bpy` (Blender built as a Python module, pulled in by tools such as PyVista-Blender)
+    imports in plain Python, but it is not the Blender that blender_run starts: no .blend is loaded and
+    the scene is the empty default. Blender leaves `bpy.app.binary_path` empty in that build, so an
+    empty path means "not a Blender process"."""
+    try:
+        import bpy
+    except ImportError:
+        raise CannotRun("bpy is not available: run this script inside Blender (see blender_run)")
+    if not getattr(getattr(bpy, "app", None), "binary_path", ""):
+        raise CannotRun("bpy imports but this is not a Blender process (pip bpy module, empty "
+                        "bpy.app.binary_path): run this script inside Blender (see blender_run)")
+    return bpy
 
 
 def _numpy():

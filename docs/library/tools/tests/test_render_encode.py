@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import render_common as rc  # noqa: E402
@@ -276,6 +277,16 @@ class CliTests(PlanCase):
         r = self.run_cli(*self.base())
         self.assertEqual(r.returncode, 2)
         self.assertIn("render_encode: ERROR", r.stderr)
+
+    def test_pip_bpy_module_exit_2(self):
+        # A pip-installed bpy imports in plain Python but is not Blender (empty binary_path).
+        pip_bpy = types.ModuleType("bpy")
+        pip_bpy.app = types.SimpleNamespace(binary_path="")
+        err = io.StringIO()
+        with mock.patch.dict(sys.modules, {"bpy": pip_bpy}), contextlib.redirect_stderr(err):
+            self.assertEqual(re_.main(["render_encode.py"] + self.base()), 2)
+        self.assertIn("not a Blender process", err.getvalue())
+        self.assertFalse(os.path.exists(self.out))
 
     def test_missing_frames_exit_2_and_help_0(self):
         os.remove(os.path.join(self.frames, "frame_0002.png"))

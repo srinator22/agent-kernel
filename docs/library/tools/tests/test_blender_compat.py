@@ -13,6 +13,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import blender_compat as bc  # noqa: E402
@@ -445,6 +446,19 @@ class ExtractHelperTests(unittest.TestCase):
         self.assertEqual(bx.script_args(["blender_extract.py", "--out", "/x"]), ["--out", "/x"])
         a = bx.make_parser().parse_args(["--out", "/x", "--step", "3", "--volume-objects", "A,B"])
         self.assertEqual((a.step, a.samples_every, a.volume_objects), (3, 0, "A,B"))
+
+    def test_main_with_pip_bpy_module_exits_2(self):
+        # A pip-installed bpy imports in plain Python but is not Blender (empty binary_path): extracting
+        # would read an empty default scene, so main must refuse and write nothing.
+        pip_bpy = types.ModuleType("bpy")
+        pip_bpy.app = types.SimpleNamespace(binary_path="")
+        with tempfile.TemporaryDirectory() as td:
+            out = os.path.join(td, "x.json")
+            err = io.StringIO()
+            with mock.patch.dict(sys.modules, {"bpy": pip_bpy}), contextlib.redirect_stderr(err):
+                self.assertEqual(bx.main(["blender_extract.py", "--out", out]), 2)
+            self.assertIn("not a Blender process", err.getvalue())
+            self.assertEqual(os.listdir(td), [])
 
     def test_main_outside_blender_exits_2_and_help_0(self):
         tool = os.path.join(HERE, "..", "blender_extract.py")

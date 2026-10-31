@@ -10,8 +10,10 @@ import struct
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 import zlib
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import render_common as rc  # noqa: E402
@@ -339,6 +341,33 @@ class PathsAndFiles(TmpCase):
         lines = buf.getvalue().splitlines()
         self.assertEqual(lines, ["t: PASS (ok)", "k: m", "t: FAIL 1 finding(s) (x)"])
         self.assertTrue(os.path.exists(self.path("f.json")))
+
+
+def fake_bpy(binary_path):
+    mod = types.ModuleType("bpy")
+    mod.app = types.SimpleNamespace(binary_path=binary_path)
+    return mod
+
+
+class RequireBlender(unittest.TestCase):
+    # Fake modules in sys.modules make the result the same whether or not a pip bpy is installed.
+    def test_no_bpy_cannot_run(self):
+        with mock.patch.dict(sys.modules, {"bpy": None}):
+            with self.assertRaises(rc.CannotRun) as cm:
+                rc.require_blender()
+        self.assertIn("bpy is not available", str(cm.exception))
+
+    def test_pip_bpy_module_cannot_run(self):
+        # The pip bpy module imports in plain Python; Blender leaves binary_path empty in that build.
+        with mock.patch.dict(sys.modules, {"bpy": fake_bpy("")}):
+            with self.assertRaises(rc.CannotRun) as cm:
+                rc.require_blender()
+        self.assertIn("not a Blender process", str(cm.exception))
+
+    def test_blender_process_returns_bpy(self):
+        bpy = fake_bpy("/opt/blender/blender")
+        with mock.patch.dict(sys.modules, {"bpy": bpy}):
+            self.assertIs(rc.require_blender(), bpy)
 
 
 class Cli(unittest.TestCase):

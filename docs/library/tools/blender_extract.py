@@ -462,10 +462,7 @@ def main(argv=None) -> int:
         rc.require_abs(args.out, "--out")
         if args.samples_every < 0:
             raise rc.CannotRun("--samples-every must be >= 0")
-        try:
-            import bpy  # noqa: F401
-        except ImportError:
-            raise rc.CannotRun("bpy is not available: run this script inside Blender (see blender_run)")
+        rc.require_blender()
         doc = run_extract(args)
         write_extract(args.out, doc)
     except rc.CannotRun as e:
