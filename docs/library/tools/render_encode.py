@@ -23,7 +23,7 @@ Quality: HIGH and MEDIUM are the constant-rate-factor presets of the same name; 
 perceptually lossless preset (true lossless H.264 is poorly supported by players).
 Exit codes: 0 encoded (or dry run), 2 could not run (missing frames, bad arguments, not inside Blender).
 An uncaught Python error exits 1 through --python-exit-code.
-Dependencies: Python 3.10+ standard library; bpy inside Blender (imported only in apply_plan).
+Dependencies: Python 3.10+ standard library; bpy inside Blender (imported only after planning, via rc.require_blender and apply_plan).
 Assumptions: PNG size is read from the first frame's IHDR; other formats need --size. Audio is off.
 Origin: generic port of the encode script of a product film project (view transform made a parameter).
 """
@@ -271,10 +271,7 @@ def main(argv=None) -> int:
         if args.dry_run:
             print(json.dumps(plan, indent=2))
             return rc.PASS
-        try:
-            import bpy  # noqa: F401
-        except ImportError:
-            raise rc.CannotRun("bpy is not available: run this script inside Blender (see blender_run)")
+        rc.require_blender()
         apply_plan(plan)
     except rc.CannotRun as e:
         rc.error(TOOL, str(e))
