@@ -78,7 +78,12 @@ last), so check.sh itself stays the template's and syncs cleanly.
    `template-update` skill then runs these steps:
    1. Stop if the working tree is not clean; the owner commits or stashes
       first.
-   2. Branch `chore/template-sync-<tag>` from the default branch.
+   2. Branch `chore/template-sync-<tag>` from the default branch. Bootstrap:
+      when `scripts/template-sync.sh --help` does not list `--latest` (the
+      script predates template-v0.3.0), first replace it with the newest
+      tag's copy (for example `git clone --depth 1 --branch <tag> <url>` into
+      a temporary folder, then copy its `scripts/template-sync.sh`) and
+      commit that alone; the sync then finds the script unchanged.
    3. Dry run: `scripts/template-sync.sh --latest --dry-run`. When the
       project has no usable sync record (NO-BASE, or a recorded base that is
       wrong), run `--suggest-baseline`, pick the merge-base or the best match
