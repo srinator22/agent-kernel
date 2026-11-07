@@ -26,6 +26,7 @@ asks for it.
     docs/library/tools/<tool>           generic tool; tests in tools/tests/
     docs/library/hooks/<hook>           harness hook; tests in hooks/tests/
     docs/library/examples/<name>/       worked example of a procedure (records, no outputs)
+    docs/library/toolchains/<name>.md   checked set of external tools for an activity
     docs/library/README.md              this file
 
 Every tools/ and hooks/ test runs in the template self-test
@@ -113,6 +114,19 @@ path, so CI needs neither. Tools marked (Blender) run inside Blender through
 | `render_overlay.py` | Label track with side consistency, safe area, overlap and title hold; writes the track `render_encode` consumes. |
 | `fit_check.py` | Box-level collisions, clearances and real-dimension scale checks at every keyframe state. |
 
+Mesh-to-CAD tools (`mesh-to-cad` procedure; copy the set with
+`tests/mesh_fixtures.py`). `mesh_core` is stdlib and runs in the self-test;
+`mesh_brep` and `mesh_verify` need CadQuery (OpenCascade) and their tests are
+skipped without it; `inventor_build` plans in stdlib and builds through
+Inventor COM.
+
+| Tool | Use |
+|---|---|
+| `mesh_core.py` | STL read and write, body segmentation by triangle order (or connectivity), twin-sheet removal, planar crack filling, plane sections, line, arc and circle loop fitting with design-value snapping, stacked-prism and revolve plans with their chord bounds, polygon triangulation with holes, exact point-to-mesh distances. |
+| `mesh_brep.py` | Builds every body as a closed valid solid (exact plan, merged faceted, or faceted) behind vertex and chord gates; repairs pinched faces; imprints patches that lie on a part as coloured faces; writes named, coloured solids and surfaces STEP files, per-part STEP files, plans and a report. |
+| `mesh_verify.py` | Checks STEP files against the STL using only those files: closed and valid per body, bounding box, volume, STL vertices to CAD and CAD to STL distances, with gates. |
+| `inventor_build.py` | Rebuilds a `mesh_brep` output as a parametric Inventor part (sketches with arcs and circles, extrudes with named heights, revolves, per-part imports, appearances, hidden patches) and exports a solids-only STEP; `--dry-run` prints the plan. |
+
 ## Graduating to a profile
 
 An item graduates when a second project has used it and its evidence is
@@ -158,6 +172,10 @@ one that proved unhelpful is archived with its reason.
 | product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0007) | a product film project |
 | render tools | tools | The 19 render tools above, with tests | a product film project (ports where marked in each header; the rest new) |
 | product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
+| mesh-to-cad | skill | Drives a mesh (CAD export or cleaned scan) to verified closed STEP solids and a parametric part, with independent checks before delivery | a sensor circuit board conversion |
+| mesh-to-cad | procedure | Stages 1 to 8 (inventory, names and colours, build, verify, independent checks, parametric part, design parameters, deliver), gates and the pitfalls found | a sensor circuit board conversion |
+| mesh tools | tools | `mesh_core`, `mesh_brep`, `mesh_verify`, `inventor_build`, with tests | a sensor circuit board conversion (ported and generalised) |
+| mesh-to-cad | toolchain | CadQuery and OpenCascade, trimesh, Inventor; commercial and learned alternatives considered, with licences and why not used | a sensor circuit board conversion |
 
 ## Considered and not ported
 
