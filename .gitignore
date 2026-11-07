@@ -31,6 +31,8 @@ __pycache__/
 .ruff_cache/
 target/
 .work/template-sync/
+# Dream digest, offsets and reports: local only, they quote session transcripts
+.work/dream/
 
 # Render outputs and caches stay outside git (docs/library/procedures/product-render.md);
 # these catch accidental copies inside a project tree.

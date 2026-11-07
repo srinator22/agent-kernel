@@ -84,6 +84,7 @@ docs/
     upstream.md               # lessons up to the template, template sync down, adoption
     adr.md                    # record a decision: scripts/adr.sh new, format, superseding
     doc-eval.md               # fresh agent answers tests/docs/questions.md by navigation; traps declined
+    dream.md                  # consolidate memory against session transcripts; proposals approved by number
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -139,6 +140,8 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
+  dream.sh                    # dream digest, due, done, status, hygiene (wrapper for dream.py)
+  dream.py                    # stdlib: transcript signals read once per line, byte offsets, due by file stats
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
   adr.sh                      # check (ADR numbering and format) | new <title>
@@ -169,6 +172,7 @@ tests/
     test_session_context.sh   # mode line, git priming, task state, template update notice
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
+    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
     fixtures/
       check.sh                # pristine template check.sh the tests run against
   docs/
@@ -186,6 +190,7 @@ tests/
     explore.md                # read-only codebase search; model haiku
     worker.md                 # mechanical execution; model sonnet; Bash|PowerShell hook blocks git commit/push
     monitor.md                # post-push CI watcher; model haiku; runs scripts/ci-watch.sh
+    dreamer.md                # read-only dream: digest and memory files in, numbered proposals out; model sonnet
   skills/
     start/SKILL.md            # thin wrapper -> docs/procedures/start.md
     ship/SKILL.md             # thin wrapper -> docs/procedures/ship.md
@@ -193,10 +198,11 @@ tests/
     maintain/SKILL.md         # thin wrapper -> docs/procedures/maintain.md
     adr/SKILL.md              # thin wrapper -> docs/procedures/adr.md
     template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
+    dream/SKILL.md            # thin wrapper -> docs/procedures/dream.md
 .codex/
-  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml
+  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml
 .agents/
-  skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update (same wrappers)
+  skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
 ```
