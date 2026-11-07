@@ -137,6 +137,8 @@ scripts/
   lessons.sh                  # lessons caps, counters and expiry, enforced mechanically
   taskgraph.sh                # validates the .work/TASK.md task graph
   template-sync.sh            # pull template updates into a project, never touching Project decisions
+  template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
+  fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
   adr.sh                      # check (ADR numbering and format) | new <title>
@@ -164,7 +166,9 @@ tests/
     test_stop_gate.sh         # Stop hook decisions against a fake quickgate
     test_tasklint.sh
     test_doc_eval.sh
-    test_session_context.sh   # mode line, git priming, task state
+    test_session_context.sh   # mode line, git priming, task state, template update notice
+    test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
+    test_fleet.sh             # status rows against fixture projects
     fixtures/
       check.sh                # pristine template check.sh the tests run against
   docs/
@@ -188,10 +192,11 @@ tests/
     retro/SKILL.md            # thin wrapper -> docs/procedures/retro.md
     maintain/SKILL.md         # thin wrapper -> docs/procedures/maintain.md
     adr/SKILL.md              # thin wrapper -> docs/procedures/adr.md
+    template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
 .codex/
   agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml
 .agents/
-  skills/                     # Codex skills: start, ship, retro, maintain, adr (same wrappers)
+  skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
 ```
@@ -303,7 +308,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
 - Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
 - Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
-- Steps 6+ ({{FILLED_BY_START}}), each a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
+- The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
 
@@ -344,11 +349,11 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
    8. Default task mode: spec-approval or autopilot?
    9. Any hard invariants I should never violate (UX, performance, compliance, compatibility)?
    10. Is there confidential context that must not appear in the committed repo? (If yes: create a gitignored local instruction file, add the ignore line first, and never reference its existence in committed files.)
-3. Wire the stack: fill every `{{...}}` in `scripts/check.sh` and `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
+3. Wire the stack: write the stack steps into `scripts/stack-check.sh` and fill every `{{...}}` in `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
 4. Fill the Project decisions section of AGENTS.md; append stack-specific lines to Standards if needed (respect the 180-line budget).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write the next-numbered ADR under docs/decisions/ (stack choice, with rejected alternatives).
 6. Rewrite `README.md` for the project, present tense. Set repo description, homepage, and topics (gh) so the sidebar reads properly. Scaffold BACKLOG.md with the first milestones from the interview.
-7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into check.sh); branch protection if gated workflow.
+7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into `scripts/stack-check.sh`); branch protection if gated workflow.
 8. Verify a clean state: `./scripts/check.sh` passes for real (not template mode). Fix until it does. Completion rule: start may not declare itself complete if format/lint/typecheck/tests cannot actually execute.
 9. Write `.start-done` (date + summary), write `START_REPORT.md` (detected, wired, missing, degraded, manual steps), commit with conventional commits, tag `v0.1.0`, and if the workflow is gated, confirm CI on that SHA via `scripts/ci-watch.sh`.
 10. Never touch the kernel or `.kernel.hash`.
@@ -529,7 +534,7 @@ Search: prefer rg for repository text search. Edits: patch-based, scoped, review
 
 ### 3.16 docs/profiles/ - project-type bundles (Amendment 2)
 
-A profile carries what a project type needs beyond the software baseline: rules to promote into the AGENTS.md rules index, gates to wire into `scripts/check.sh` and CI, tools to install or build, playbooks and defect-pattern checklists, an agent and skill set, parameters and record conventions, and additions to the definition of done. `docs/profiles/README.md` holds the index and the selection procedure; each profile is `docs/profiles/<name>/PROFILE.md`.
+A profile carries what a project type needs beyond the software baseline: rules to promote into the AGENTS.md rules index, gates to wire into `scripts/stack-check.sh` and CI, tools to install or build, playbooks and defect-pattern checklists, an agent and skill set, parameters and record conventions, and additions to the definition of done. `docs/profiles/README.md` holds the index and the selection procedure; each profile is `docs/profiles/<name>/PROFILE.md`.
 
 - `software`: always on; the baseline every project gets.
 - `scientific`: reference fixtures, golden masters, deterministic seeds, documented tolerances, validation status.
@@ -562,7 +567,7 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 
 ---
 
-## 4. Stack reference table (start fills check.sh from this; verify tool currency at start time)
+## 4. Stack reference table (start fills stack-check.sh from this; verify tool currency at start time)
 
 | Role | Python | TypeScript/Node | Go | Rust |
 |---|---|---|---|---|

@@ -40,7 +40,7 @@ Follow docs/procedures/discover.md and then docs/procedures/start.md with one ba
 4. What happens next: discover writes `docs/CAPABILITY_MAP.md` (what the
    agent automates, which CLI and MCP tools exist, which tools to build);
    start asks one batched interview, selects profiles, wires the stack
-   into `scripts/check.sh` and `.github/workflows/ci.yml`, fills the
+   into `scripts/stack-check.sh` and `.github/workflows/ci.yml`, fills the
    Project decisions in AGENTS.md, writes ARCHITECTURE and the first ADR,
    scaffolds tests, and rewrites this README for your project.
 5. The first commit and the `v0.1.0` tag are made by start once
@@ -55,7 +55,7 @@ Follow docs/procedures/discover.md and then docs/procedures/start.md with one ba
    URL and the latest `template-v` tag:
 
 ```
-Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository. Read its AGENTS.md and docs/procedures/upstream.md. First list every file you would add or change and stop for my approval. Then copy the core file set without overwriting existing files, run docs/procedures/discover.md and docs/procedures/start.md in existing-project mode with one batched interview, wire scripts/check.sh to this project's existing commands, quarantine any test that already fails with an owner task, and record the adoption as an ADR with the template tag. Do not touch CI, branch protection or tags without asking.
+Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository. Read its AGENTS.md and docs/procedures/upstream.md. First list every file you would add or change and stop for my approval. Then copy the core file set without overwriting existing files, run docs/procedures/discover.md and docs/procedures/start.md in existing-project mode with one batched interview, wire scripts/stack-check.sh to this project's existing commands, quarantine any test that already fails with an owner task, and record the adoption as an ADR with the template tag. Do not touch CI, branch protection or tags without asking.
 ```
 
 3. An existing AGENTS.md or CLAUDE.md is merged by hand, never replaced;
@@ -74,21 +74,26 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
   goes through a branch and merges only after the gauntlet is green on CI.
 - At milestones run `docs/procedures/bughunt.md`; at the end of every task
   run `docs/procedures/retro.md`; run `docs/procedures/maintain.md` monthly.
-- Tags: the template is tagged `template-vX.Y.Z`; a project built from it is
-  tagged `vX.Y.Z`. Sync to the latest `template-v` tag.
+- Tags: the template is tagged `template-vX.Y.Z` by
+  `scripts/template-release.sh`; a project built from it is tagged
+  `vX.Y.Z`. Projects sync to the latest `template-v` tag.
 
 ## Keep a project in sync with the template
 
-Run `scripts/template-sync.sh` on a branch with a clean working tree, dry run
-first: it fetches the template at a tag, reports the diff, and writes nothing
-until you apply it (`--help` lists the flags). The core file set is listed in
+A project's session start says `Template update available` when a newer
+`template-v` tag exists than its last sync; the `template-update` skill takes
+it from there: a branch, a dry run, `scripts/template-sync.sh --latest`,
+conflicts merged by hand, kernel changes stopped for the owner,
+`./scripts/check.sh`, and a PR. The core file set is listed in
 `docs/procedures/upstream.md`. Adopted profiles, the AGENTS.md kernel block
 and the rules index are shown as diffs and never applied; the rest of the
 core set applies only when the project's copy is untouched since the last
-sync. The Project decisions section is never touched. The script
-re-verifies the kernel hash afterwards and logs the run to
-`docs/lessons/MAINTENANCE.log`. Review the diff, run `./scripts/check.sh`,
-then commit.
+sync, and `docs/library/` and `docs/roster/` sync only where the project
+carries them. The Project decisions section and the project's own stack
+steps in `scripts/stack-check.sh` are never touched. A project with no
+usable sync record gets candidates from `--suggest-baseline`. In the
+template, `scripts/fleet.sh` lists every local project's version and status
+from a gitignored `fleet.local.list`.
 
 ## Send lessons back
 

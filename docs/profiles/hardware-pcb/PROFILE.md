@@ -37,7 +37,7 @@ Detail files: `LAYOUT_PROCESS.md` (order of layout work), `CHECKS.md` (ledger).
 
 Exit codes for every command: 0 pass, 1 check failed, 2 could not run (never a pass). Results are recorded in `analysis/<date>_GATE.md`. Commands are placeholders the project supplies.
 
-| Gate | Command (wire in check.sh and CI) | Pass | Rule |
+| Gate | Command (wire in stack-check.sh and CI) | Pass | Rule |
 |---|---|---|---|
 | Quick gate (during work, no CAD application) | `<pcb-gate> --quick` | exit 0; not a release pass | PCB-6 |
 | Full gate (before commit of design files and before any order) | `<pcb-gate>` (adds ERC, DRC with zones refilled, analyzers) | exit 0, result recorded | PCB-6 |

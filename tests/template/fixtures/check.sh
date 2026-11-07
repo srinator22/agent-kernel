@@ -162,6 +162,13 @@ if [[ -d tests/template ]]; then
   ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
 fi
 
+# 4h. The "- Template: <url> <ref>" line names the last recorded template
+# sync (docs/procedures/upstream.md). Offline; nothing to check in template
+# mode; skipped where the project does not carry the sync script.
+if [[ -f scripts/template-sync.sh ]]; then
+  ./scripts/template-sync.sh --status || gerr "scripts/template-sync.sh --status failed (fix the - Template: line in AGENTS.md)"
+fi
+
 # Step 5: template-mode gate. Before start runs there is no stack to
 # check, so the gauntlet checks the template itself: a green badge means
 # the template is intact, not merely that nothing executed.
@@ -221,6 +228,9 @@ if [[ ! -f .start-done ]]; then
     docs/profiles/hardware-pcb/CHECKS.md
     docs/profiles/data-analysis/PROFILE.md
     scripts/lessons.sh scripts/taskgraph.sh scripts/template-sync.sh
+    scripts/template-release.sh scripts/fleet.sh
+    .claude/skills/template-update/SKILL.md .agents/skills/template-update/SKILL.md
+    tests/template/test_template_release.sh tests/template/test_fleet.sh
     scripts/quickgate.sh scripts/selftest.sh
     tests/template/lib.sh tests/template/test_kernel_hash.sh
     tests/template/test_new_task.sh tests/template/test_lessons.sh
@@ -251,8 +261,10 @@ if [[ ! -f .start-done ]]; then
   # 5d. Template placeholders intact; nothing pretends to be started.
   grep -q '{{FILLED_BY_START}}' AGENTS.md || terr "AGENTS.md lost its {{FILLED_BY_START}} placeholders"
   grep -q 'Status: TEMPLATE' AGENTS.md || terr "AGENTS.md lost its template status line"
-  # Escaped regex so this line cannot match itself, only the real placeholder.
-  grep -Eq '\{\{FORMAT_CHECK_FILLED_BY_START\}\}' scripts/check.sh || terr "check.sh lost its stack placeholders"
+  # The stack steps belong to each project's own scripts/stack-check.sh, so
+  # the template carries the hand-off and never a stack-check.sh of its own.
+  grep -q '\./scripts/stack-check\.sh ' scripts/check.sh || terr "check.sh lost its hand-off to scripts/stack-check.sh"
+  [[ ! -e scripts/stack-check.sh ]] || terr "scripts/stack-check.sh is project-owned; the template must not ship one"
   # TASK.md is valid in two states: the pristine template, or a live
   # in-progress task file. Both must carry a declared Budget (ADR-0002).
   grep -q '^## Budget' .work/TASK.md || terr ".work/TASK.md lost its Budget section"
@@ -317,22 +329,32 @@ if (( gfail )); then
   fail "the always checks found the problems listed above"
 fi
 
-# Stack gauntlet. The start procedure (docs/procedures/start.md,
-# step 3) replaces this block with real commands from the stack reference
-# table in docs/BLUEPRINT.md section 4. Every role is filled or the gap is
-# logged in START_REPORT.md with a reason. FULL_MUTATION=1 selects the full
-# mutation run instead of changed-files-only; QUICK=1 (the --quick lane) skips
-# steps 10 and 11 and must be honoured by the filled block. The start
-# procedure also deletes the final fail line below once the block is wired.
+# Stack gauntlet. The project's own steps live in scripts/stack-check.sh,
+# which the project owns and template-sync never touches, so this file stays
+# the template's and syncs without conflicts. The start procedure
+# (docs/procedures/start.md, step 3) writes stack-check.sh from the stack
+# reference table in docs/BLUEPRINT.md section 4, one role per step below;
+# every role is filled or its gap is logged in START_REPORT.md with a reason.
+# It receives --full-mutation (the full mutation run instead of changed files
+# only) and --quick (skip the build and the mutation run) and must honour
+# both. It runs under bash, so it needs no executable bit: a bit set on a
+# Windows checkout never reaches git, and CI would then refuse the file.
 #
-#  5. Format check           {{FORMAT_CHECK_FILLED_BY_START}}
-#  6. Typecheck              {{TYPECHECK_FILLED_BY_START}}
-#  7. Lint + boundary rules  {{LINT_FILLED_BY_START}}
-#  8. Tests                  {{TESTS_FILLED_BY_START}}
-#  9. Secret scan (gitleaks) {{GITLEAKS_FILLED_BY_START}}
-# 10. Production build       {{BUILD_FILLED_BY_START, or remove if no build}}
-# 11. Mutation testing       {{MUTATION_FILLED_BY_START, honor FULL_MUTATION}}
-# 12. CHANGELOG freshness    {{CHANGELOG_FRESHNESS_FILLED_BY_START:
-#     regenerate with git-cliff to a temp path and diff; fail on drift}}
+#   - Format check
+#   - Typecheck
+#   - Lint + boundary rules
+#   - Tests (with each adopted profile's gates and each installed tool's tests)
+#   - Secret scan (gitleaks)
+#   - Production build (when the project has one)
+#   - Mutation testing
+#   - CHANGELOG freshness: regenerate with git-cliff to a temp path and diff;
+#     fail on drift
 
-fail ".start-done exists but the stack gauntlet is not wired. Complete docs/procedures/start.md step 3, or remove .start-done."
+if [[ ! -f scripts/stack-check.sh ]]; then
+  fail ".start-done exists but scripts/stack-check.sh is missing. Write the stack steps there (docs/procedures/start.md step 3), or remove .start-done."
+fi
+stack_args=()
+if (( FULL_MUTATION )); then stack_args+=(--full-mutation); fi
+if (( QUICK )); then stack_args+=(--quick); fi
+bash ./scripts/stack-check.sh ${stack_args[@]+"${stack_args[@]}"} || fail "scripts/stack-check.sh failed"
+echo "check: OK (always section and scripts/stack-check.sh)"

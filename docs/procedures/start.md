@@ -12,8 +12,8 @@ point in this procedure.
    repository already holds code, read the code, the build files and any
    existing AGENTS.md or CLAUDE.md to fill every interview answer the code
    can give, ask only the rest, merge an existing agent file by hand into
-   Project decisions, wire check.sh to the commands that already exist and
-   make it pass on the unmodified code. Failures already present go to
+   Project decisions, wire `scripts/stack-check.sh` to the commands that
+   already exist and make `./scripts/check.sh` pass on the unmodified code. Failures already present go to
    BACKLOG.md, never fixed during adoption. Tests that already fail go to
    `tests/quarantine.list` with an owner task and date (protocol in
    `docs/procedures/tests.md`), never deleted or weakened; the gate is green
@@ -56,25 +56,30 @@ point in this procedure.
    11. Consent for the first push, the v0.1.0 tag, repo description and
        topics, and branch protection: given now for this run, or ask per
        action?
-3. Wire the stack: fill every `{{...}}` in `scripts/check.sh` and
-   `.github/workflows/ci.yml` from the reference table, and DELETE the final
-   `fail ".start-done exists ..."` line of `check.sh`; add
+3. Wire the stack: write the stack steps listed in the stack gauntlet
+   comment of `scripts/check.sh` into a new `scripts/stack-check.sh`
+   (project-owned; check.sh runs it with bash, so it needs no executable
+   bit; it takes `--full-mutation` and `--quick` and honours both;
+   template-sync never touches it), leave
+   `scripts/check.sh` itself unchanged so later template syncs apply
+   cleanly, and fill every `{{...}}` in `.github/workflows/ci.yml` from the
+   reference table; add
    linter/formatter/test/mutation/gitleaks configs; pin runtime and
    package-manager versions; commit the lockfile; wire mechanical boundary
    rules per the architecture in `docs/rules/architecture.md`. All gauntlet
    roles filled or the gap logged with a reason. The ci.yml deploy job fires
    on `v*` tags: keep it only when a deploy target exists (Q5), otherwise
-   delete the job here. Keep the always-on block of check.sh (memory caps,
-   task graph, dash scan) untouched. Keep `tests/template/` and
+   delete the job here. Keep `tests/template/` and
    `scripts/selftest.sh` only if the project keeps the template scripts
    (default: keep; they run in the always-on block).
 4. Fill the Project decisions section of `AGENTS.md` including the Profiles
-   and Capability map lines; record `- Template: <url> <tag>` and
-   `- Profiles:` there and append `template-sync: <tag> <date>` to
+   and Capability map lines; record exactly `- Template: <url> <tag>`
+   (two tokens, no notes; `./scripts/check.sh` checks it against the sync
+   record) and `- Profiles:` there and append `template-sync: <tag> <date>` to
    `docs/lessons/MAINTENANCE.log` (create it) so a later sync has its base.
    Promote each adopted profile's rules into the rules index; append
    stack-specific lines to Standards if needed (respect the 180-line
-   budget). Wire each adopted profile's gates into check.sh
+   budget). Wire each adopted profile's gates into `scripts/stack-check.sh`
    (`docs/profiles/<name>/PROFILE.md`, Gates) and scaffold the test layout of
    `docs/procedures/tests.md` with one passing example per layer.
    Install each adopted profile's shipped set, copying, never moving, so the
@@ -82,7 +87,7 @@ point in this procedure.
    `.claude/agents/`, `agents/<n>.toml` to `.codex/agents/`,
    `skills/<n>/` to both `.claude/skills/` and `.agents/skills/`, and
    `tools/` (with `tools/tests/`) to the project's tool folder, recorded in
-   Project decisions; wire each tool's tests into check.sh. A name that
+   Project decisions; wire each tool's tests into `scripts/stack-check.sh`. A name that
    already exists is merged by hand, never overwritten. Library items and
    roster agents chosen in Q7 install the same way (a roster agent's
    specialist folder is created when its first artifact is written); a library procedure is copied to
@@ -103,7 +108,7 @@ point in this procedure.
 7. Configure the harness: attribution/trailers off in settings (verify
    current key names at run time); seed the permissions allowlist with
    the stack's safe verification commands (the same format, lint,
-   typecheck, and test commands wired into check.sh); branch protection
+   typecheck, and test commands wired into `scripts/stack-check.sh`); branch protection
    if gated workflow (per Q11).
 8. Write `.start-done` (date + summary) so `check.sh` leaves template mode and
    runs the stack gauntlet.
