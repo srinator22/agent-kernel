@@ -162,3 +162,39 @@ Entry format (all four fields required):
 - what was added: the sample's RECORD.md holds the numbers.
 - retire-when: a second project confirms or corrects them, and the
   lookdev-artist or cinematographer agent carries the confirmed defaults.
+
+### Test clones on Windows set core.autocrlf themselves
+
+- what happened: a template-sync test cloned its fixture template, and the
+  clone took the machine's global core.autocrlf=true; the checked-out files
+  differed from the index, so the real apply refused a "dirty" tree and
+  three assertions failed until the cause was found (2026-11-07,
+  template-updates).
+- what check should have caught it: a tests/template/lib.sh clone helper
+  that always passes -c core.autocrlf=false, used by every test that
+  clones.
+- what was added: the test clones with -c core.autocrlf=false.
+- retire-when: lib.sh has the helper and no test calls git clone directly.
+
+### Counting carriage returns in Git Bash
+
+- what happened: grep -c $'' reported a CR on every line of every file,
+  because Git Bash passed the pattern without its CR; the files were LF
+  (2026-11-07, template-updates).
+- what check should have caught it: none, this note is the guard: count
+  CR bytes with tr -cd '' | wc -c or read git ls-files --eol.
+- what was added: none.
+- retire-when: check.sh reports line endings itself.
+
+### The auto-mode check blocks a merge the owner has not asked for in words
+
+- what happened: after green CI and a PASS review, gh pr merge was refused
+  as "merge without review" although the owner had said "do it"; it went
+  through once the owner wrote "merge into main" (2026-11-07,
+  template-updates).
+- what check should have caught it: none, this note is the guard: ask the
+  owner for the merge explicitly when the PR is ready, and offer the merge
+  action.
+- what was added: none.
+- retire-when: Project decisions records a standing override for merging
+  green, reviewed PRs.
