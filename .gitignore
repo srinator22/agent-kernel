@@ -37,3 +37,5 @@ target/
 *.blend1
 render/**/frames/
 render/**/cache/
+# Local fleet registry: private project paths (scripts/fleet.sh)
+fleet.local.list

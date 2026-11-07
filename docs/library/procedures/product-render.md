@@ -82,8 +82,8 @@ Rules for every render:
 ## Gates that need Blender or a GPU
 
 These run from the skill and their verbatim output goes in the stage
-record; they are never wired into `scripts/check.sh` (a gate that cannot run
-is reported, never a no-op). `check.sh` runs the tools' unit tests, which
+record; they are never wired into `scripts/stack-check.sh` (a gate that cannot run
+is reported, never a no-op). `stack-check.sh` runs the tools' unit tests, which
 need neither.
 
 | Gate | Command (from the repo root) |

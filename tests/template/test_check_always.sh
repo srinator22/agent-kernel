@@ -8,7 +8,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 EM="$(printf '\xe2\x80\x94')"
-STACK_MSG="the stack gauntlet is not wired"
+STACK_MSG="scripts/stack-check.sh is missing"
 
 write_task() { mkdir -p .work; printf '# Task: fixture
 
@@ -45,6 +45,44 @@ assert_rc "a clean project reaches the unwired stack block and fails there" 1
 assert_contains "the always section ran: lessons" "lessons: OK"
 assert_contains "the always section ran: task graph" "taskgraph:"
 assert_contains "the stack block is what failed" "$STACK_MSG"
+
+# ---- 4h: the Template line names the last recorded sync ----
+cp_script template-sync.sh
+commit_fixture
+run ./scripts/check.sh
+assert_rc "a project without a Template line fails" 1
+assert_contains "the Template status failure is named" "template-sync.sh --status failed"
+printf -- '- Template: https://example.invalid/template.git template-v0.1.0\n' >> AGENTS.md
+mkdir -p docs/lessons
+echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
+commit_fixture
+run ./scripts/check.sh
+assert_not_contains "a matching Template line passes 4h" "template-sync.sh --status failed"
+assert_contains "the always section then reaches the stack block" "$STACK_MSG"
+
+# ---- the stack steps live in the project-owned scripts/stack-check.sh ----
+printf '#!/usr/bin/env bash\necho "stack args: $*"\nexit "${STACK_RC:-0}"\n' > scripts/stack-check.sh
+commit_fixture
+# commit_fixture marks scripts/*.sh executable; a Windows checkout often has
+# no bit at all, so prove check.sh runs the file without one.
+git update-index --chmod=-x scripts/stack-check.sh && chmod -x scripts/stack-check.sh
+git commit -q -m "stack-check.sh without the executable bit" >/dev/null 2>&1
+assert_eq "the fixture's stack-check.sh has no executable bit in git" "100644" "$(git ls-files -s scripts/stack-check.sh | cut -d' ' -f1)"
+run ./scripts/check.sh
+assert_rc "a project whose stack-check.sh passes is green, executable bit or not" 0
+assert_contains "stack-check.sh ran" "stack args:"
+assert_contains "the green run says so" "check: OK (always section and scripts/stack-check.sh)"
+run ./scripts/check.sh --quick
+assert_contains "--quick is passed to stack-check.sh" "stack args: --quick"
+run ./scripts/check.sh --full-mutation
+assert_contains "--full-mutation is passed to stack-check.sh" "stack args: --full-mutation"
+STACK_RC=3 run ./scripts/check.sh
+assert_rc "a failing stack-check.sh fails check.sh" 1
+assert_contains "the stack failure is named" "scripts/stack-check.sh failed"
+git rm -q -f scripts/stack-check.sh scripts/template-sync.sh docs/lessons/MAINTENANCE.log
+write_agents
+./scripts/kernel-hash.sh --update >/dev/null
+commit_fixture
 
 printf 'bad %s dash\n' "$EM" > notes.txt
 commit_fixture
@@ -252,10 +290,12 @@ if [[ -z "${T_NESTED:-}" ]]; then
   make_fixture
   (cd "$T_ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^[.]work/template-sync/' | tar --null -T - -cf -) | tar -xf -
   cp "$T_CHECK" scripts/check.sh
-  # start.md step 3: fill the stack placeholders and delete the final fail line.
-  sed -i.bak -e 's/^#  *[0-9]*[.] .*{{[A-Z_]*FILLED_BY_START.*$/true  # stack step wired by the fixture/' -e '/^fail ".start-done exists but the stack gauntlet is not wired/d' scripts/check.sh && rm -f scripts/check.sh.bak
-  # start.md step 4: the Profiles line and the template status line.
-  sed -i.bak -e 's/^- Profiles: {{FILLED_BY_START.*$/- Profiles: software/' -e '/^Status: TEMPLATE/d' AGENTS.md && rm -f AGENTS.md.bak
+  # start.md step 3: the stack steps go into the project-owned stack-check.sh.
+  printf '#!/usr/bin/env bash\necho "stack steps wired by the fixture"\n' > scripts/stack-check.sh
+  chmod +x scripts/stack-check.sh
+  # start.md step 4: the Profiles, Template and status lines, and the sync record.
+  sed -i.bak -e 's/^- Profiles: {{FILLED_BY_START.*$/- Profiles: software\n- Template: https:\/\/example.invalid\/template.git template-v0.1.0/' -e '/^Status: TEMPLATE/d' AGENTS.md && rm -f AGENTS.md.bak
+  echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
   ./scripts/kernel-hash.sh --update >/dev/null
   touch .start-done
   commit_fixture
