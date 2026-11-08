@@ -489,30 +489,30 @@ assert_no_file "scorecard: no state folder is created" "$FIX/nostate"
 printf '%s\n' '# Backlog' '| item | priority | why | status |' '|---|---|---|---|' \
   '| Alpha guard (matcher Bash\|PowerShell) with a test | P2 | recurs | done 2026-11-01 |' \
   '| `Delta` row in backticks | P3 | x | open |' > "$FIX/BACKLOG.md"
-ST11="$FIX/state11"
-mkdir -p "$ST11"
+SCST11="$FIX/scstate11"
+mkdir -p "$SCST11"
 printf '%s\n' '# Dream report 2026-10-01' '## Proposals' \
   '1. [Mechanize] Wire the guard' '   Evidence: s1' \
   '   Change: BACKLOG.md rows "Alpha guard (matcher Bash|PowerShell) with a test | P2 | recurs | open" and "Beta missing | P3 | x | open", plus "Delta row in backticks | P3 | x | open"' \
   '2. [pending:approve] Move a lesson' '   Change: docs/lessons/INDEX.md add "[L002] Guarding commits", note L001 and L099; docs/lessons/PENDING.md add "Gamma | not a row"' \
   '3. Untagged idea' '   Change: BACKLOG.md row "Epsilon declined | P3 | x | open"; INDEX.md L077' \
   '## Considered and dropped' '- nothing' \
-  '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: 3' 'Files: BACKLOG.md' > "$ST11/2026-10-01-report.md"
-printf '%s\n' '# Dream report 2026-10-02' '## Proposals' '1. [stale] a' '2. [stale] b' > "$ST11/2026-10-02-report.md"
+  '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: 3' 'Files: BACKLOG.md' > "$SCST11/2026-10-01-report.md"
+printf '%s\n' '# Dream report 2026-10-02' '## Proposals' '1. [stale] a' '2. [stale] b' > "$SCST11/2026-10-02-report.md"
 printf '%s\n' '# Dream report 2026-10-03' '## Proposals' '1. [stale] only' \
   '## Outcome 2026-10-03' 'Applied: 1' 'Declined: none' \
-  '## Outcome 2026-10-04' 'Applied: none' 'Declined: 1' > "$ST11/2026-10-03-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] one' '1. [stale] two' > "$ST11/2026-10-04-report.md"
-printf '# r\n## Proposals\n1. [stale] bad \xff\xfe bytes\n' > "$ST11/2026-10-05-report.md"
-mkdir -p "$ST11/2026-10-06-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-07' 'Applied: 1, x' 'Declined: none' > "$ST11/2026-10-07-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-08' 'Applied: 1' > "$ST11/2026-10-08-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-09' 'Applied: 5' 'Declined: 1' > "$ST11/2026-10-09-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] a' '2. [stale] b' '## Outcome 2026-10-10' 'Applied: 1, 2' 'Declined: 2' > "$ST11/2026-10-10-report.md"
-printf '%s\n' '# r' '## Proposals' '1. [stale] ignored' '## Outcome x' 'Applied: 1' 'Declined: none' > "$ST11/notes-report.md"
-snap() { (cd "$ST11" && find . -type f -exec cksum {} + | sort); }
+  '## Outcome 2026-10-04' 'Applied: none' 'Declined: 1' > "$SCST11/2026-10-03-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] one' '1. [stale] two' > "$SCST11/2026-10-04-report.md"
+printf '# r\n## Proposals\n1. [stale] bad \xff\xfe bytes\n' > "$SCST11/2026-10-05-report.md"
+mkdir -p "$SCST11/2026-10-06-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-07' 'Applied: 1, x' 'Declined: none' > "$SCST11/2026-10-07-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-08' 'Applied: 1' > "$SCST11/2026-10-08-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-09' 'Applied: 5' 'Declined: 1' > "$SCST11/2026-10-09-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '2. [stale] b' '## Outcome 2026-10-10' 'Applied: 1, 2' 'Declined: 2' > "$SCST11/2026-10-10-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] ignored' '## Outcome x' 'Applied: 1' 'Declined: none' > "$SCST11/notes-report.md"
+snap() { (cd "$SCST11" && find . -type f -exec cksum {} + | sort); }
 SNAP_BEFORE="$(snap)"
-run bash scripts/dream.sh scorecard --state-dir "$ST11"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
 assert_rc "scorecard: command exits 0 with skipped reports" 0
 SC="$OUT"
 assert_eq "scorecard: the command changes no file in the state folder" "$SNAP_BEFORE" "$(snap)"
@@ -547,34 +547,34 @@ case "$SC" in *Gamma*) t_bad "scorecard: a quote outside a BACKLOG.md change is 
 case "$SC" in *Epsilon*) t_bad "scorecard: a declined proposal's row is not listed" "$SC" ;; *) t_ok "scorecard: a declined proposal's row is not listed" ;; esac
 
 NOGIT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.nogit.XXXXXX")"
-run bash scripts/dream.sh scorecard --state-dir "$ST11" --root "$NOGIT"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$NOGIT"
 assert_contains "scorecard: outside git the branch is N/A" "(branch N/A - not a git checkout)"
 rm -rf "$NOGIT"
 git -C "$FIX" checkout -q --detach
-run bash scripts/dream.sh scorecard --state-dir "$ST11"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
 assert_contains "scorecard: a detached HEAD is named" "(branch detached)"
 git -C "$FIX" checkout -q -
 
 # In a digest the section sits between Impact and Signals and counts candidates
 # with the Impact section's word matcher.
-PROJ11="$FIX/projects11"
-mkdir -p "$PROJ11/$SLUG"
-mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" err 2026-11-07T09:00:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
-dg --projects-dir "$PROJ11" --state-dir "$ST11"
+SCPROJ11="$FIX/scprojects11"
+mkdir -p "$SCPROJ11/$SLUG"
+mk "$SCPROJ11/$SLUG/kkkkkkkk11.jsonl" err 2026-11-07T09:00:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
+dg --projects-dir "$SCPROJ11" --state-dir "$SCST11"
 assert_rc "scorecard: a digest with skipped reports still completes" 0
-D11="$ST11/digest.md"
-assert_file_has "scorecard: the digest carries the section" "$D11" "## Scorecard"
-ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Signals\)$' "$D11" | cut -d: -f2 | tr '\n' ',')"
+SCD11="$SCST11/digest.md"
+assert_file_has "scorecard: the digest carries the section" "$SCD11" "## Scorecard"
+ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Signals\)$' "$SCD11" | cut -d: -f2 | tr '\n' ',')"
 assert_eq "scorecard: section order Impact, Scorecard, Signals" "## Impact since the last dream,## Scorecard,## Signals," "$ORDER"
-assert_file_has "scorecard: candidates in a digest come from its signals" "$D11" "  L002: used 2, last 2026-11-01; candidates 1"
-assert_file_has "scorecard: and the Impact section agrees" "$D11" "L002 shares words with s1"
+assert_file_has "scorecard: candidates in a digest come from its signals" "$SCD11" "  L002: used 2, last 2026-11-01; candidates 1"
+assert_file_has "scorecard: and the Impact section agrees" "$SCD11" "L002 shares words with s1"
 
 # Size: 15 reports of 12 approved proposals, two lessons and two long rows each.
-ST12="$FIX/state12"
-mkdir -p "$ST12"
+SCST12="$FIX/scstate12"
+mkdir -p "$SCST12"
 LONG="$(printf 'x%.0s' $(seq 1 90))"
 for d in $(seq 1 15); do
-  f="$ST12/2026-09-$(printf '%02d' "$d")-report.md"
+  f="$SCST12/2026-09-$(printf '%02d' "$d")-report.md"
   { echo "# r"; echo "## Proposals"
     for p in $(seq 1 12); do
       echo "$p. [mechanize] p$p"
@@ -583,7 +583,7 @@ for d in $(seq 1 15); do
     echo "## Outcome 2026-09-$(printf '%02d' "$d")"; echo "Applied: $(seq -s ', ' 1 12)"; echo "Declined: none"
   } > "$f"
 done
-run bash scripts/dream.sh scorecard --state-dir "$ST12"
+run bash scripts/dream.sh scorecard --state-dir "$SCST12"
 assert_rc "scorecard: the size fixture exits 0" 0
 BYTES="$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
 if (( BYTES < 6000 )); then t_ok "scorecard: 15 heavy reports stay under 6000 bytes ($BYTES)"; else t_bad "scorecard: 15 heavy reports stay under 6000 bytes" "$BYTES bytes"; fi
@@ -596,33 +596,44 @@ case "$OUT" in *"$LONG$LONG"*) t_bad "scorecard: cells are cut to 80 characters"
 
 # Each lesson id and row prints once: repeated in one Change line, across
 # reports, and a row cell differing only in case or backticks.
-ST13="$FIX/state13"
-mkdir -p "$ST13"
+SCST13="$FIX/scstate13"
+mkdir -p "$SCST13"
 printf '%s\n' '# r' '## Proposals' '1. [counter] twice in one line' \
   '   Change: INDEX.md add [L404] and set L404 last; BACKLOG.md row "Zeta repeated row | P2 | x | open"' \
-  '## Outcome 2026-08-01' 'Applied: 1' 'Declined: none' > "$ST13/2026-08-01-report.md"
+  '## Outcome 2026-08-01' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-01-report.md"
 printf '%s\n' '# r' '## Proposals' '1. [counter] again in a later report' \
   '   Change: INDEX.md L404; BACKLOG.md row "`zeta REPEATED row` | P2 | y | open"' \
-  '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$ST13/2026-08-02-report.md"
-run bash scripts/dream.sh scorecard --state-dir "$ST13"
+  '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-02-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13"
 assert_eq "scorecard: a lesson repeated across reports prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
-# The repeat inside one Change line alone (an earlier report would hide it).
-ST13B="$FIX/state13b"
-mkdir -p "$ST13B"
-cp "$ST13/2026-08-01-report.md" "$ST13B/"
-run bash scripts/dream.sh scorecard --state-dir "$ST13B"
-assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
 assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
+# The repeat inside one Change line alone (an earlier report would hide it).
+SCST13B="$FIX/scstate13b"
+mkdir -p "$SCST13B"
+cp "$SCST13/2026-08-01-report.md" "$SCST13B/"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13B"
+assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+
+# A long used or last value in INDEX.md is cut, so a lesson line stays short.
+LR="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.longlast.XXXXXX")"
+mkdir -p "$LR/docs/lessons"
+printf '%s\n' "- [L404] Long values - x (used: $(printf '9%.0s' $(seq 1 60)), last: $(printf 'z%.0s' $(seq 1 200)), retire-when: y)" \
+  > "$LR/docs/lessons/INDEX.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13" --root "$LR"
+LINE="$(printf '%s\n' "$OUT" | grep '^  L404: ')"
+assert_contains "scorecard: the long lesson is listed" "  L404: used "
+if (( ${#LINE} <= 100 )); then t_ok "scorecard: long used and last values are cut (${#LINE} characters)"; else t_bad "scorecard: long used and last values are cut" "$LINE"; fi
+rm -rf "$LR"
 
 # Kind rows and skipped lines are capped too: 30 kinds and 30 bad reports.
-ST14="$FIX/state14"
-mkdir -p "$ST14"
+SCST14="$FIX/scstate14"
+mkdir -p "$SCST14"
 for k in $(seq 1 30); do
   printf '%s\n' '# r' '## Proposals' "1. [kind-$k] one" '## Outcome 2026-07-01' 'Applied: 1' 'Declined: none' \
-    > "$ST14/2026-07-$(printf '%02d' "$k")-report.md"
-  printf '%s\n' '# r' '## Proposals' '1. [x] a' '1. [x] b' > "$ST14/2026-06-$(printf '%02d' "$k")-report.md"
+    > "$SCST14/2026-07-$(printf '%02d' "$k")-report.md"
+  printf '%s\n' '# r' '## Proposals' '1. [x] a' '1. [x] b' > "$SCST14/2026-06-$(printf '%02d' "$k")-report.md"
 done
-run bash scripts/dream.sh scorecard --state-dir "$ST14"
+run bash scripts/dream.sh scorecard --state-dir "$SCST14"
 assert_eq "scorecard: at most 20 kind rows" 20 "$(printf '%s\n' "$OUT" | grep -c '^  kind-[0-9]*: approved')"
 assert_eq "scorecard: at most 20 skipped lines" 20 "$(printf '%s\n' "$OUT" | grep -c '^skipped ')"
 assert_contains "scorecard: the remaining kinds are counted" "  ... 10 more kinds not shown"
@@ -632,7 +643,7 @@ assert_contains "scorecard: the remaining skipped reports are counted" "... 10 m
 UNBORN="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.unborn.XXXXXX")"
 git -C "$UNBORN" init -q -b fresh >/dev/null 2>&1 || git -C "$UNBORN" init -q >/dev/null 2>&1
 UB="$(git -C "$UNBORN" symbolic-ref --short HEAD 2>/dev/null)"
-run bash scripts/dream.sh scorecard --state-dir "$ST11" --root "$UNBORN"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$UNBORN"
 assert_contains "scorecard: an unborn branch is named" "(branch $UB)"
 rm -rf "$UNBORN"
 
@@ -825,5 +836,83 @@ for f in .claude/agents/dreamer.md .codex/agents/dreamer.toml; do
     assert_file_has "dreamer: $f names $w" "$T_ROOT/$f" "$w"
   done
 done
+
+# --- outcome files are checked against what changed; memory from a worktree ---
+# Files lists a named file only when git (against the digest's commit) or the
+# auto-memory folder shows it changed; the memory folder is the main checkout's.
+# BACKLOG.md is tracked and its change is committed before done (the usual
+# path: edits land on a branch); UPSTREAM.md stays untracked (a change shows
+# by stat); untracked fixture files stay untouched and must not be claimed.
+# The projects folder sits outside the fixture repository, as ~/.claude does,
+# so memory notes are decided by the memory stat alone, never by git.
+git add -u >/dev/null 2>&1
+git add BACKLOG.md >/dev/null 2>&1
+git commit -q -m before-dream11 >/dev/null 2>&1
+PROJ11="$FIX-p11"
+ST11="$FIX/state11"
+MEM11="$PROJ11/$SLUG/memory"
+mkdir -p "$MEM11"
+printf '%s\n' '---' 'name: note-a' '---' 'waiting on a merge' > "$MEM11/note-a.md"
+printf '%s\n' '---' 'name: note-b' '---' 'still true' > "$MEM11/note-b.md"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-09T08:00:00.000Z "the outcome named files nobody touched"
+DREAM_NOW="2026-11-09T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST11"
+assert_rc "files: digest exits 0" 0
+printf '%s\n' '| A new row | P3 | test | open |' >> "$FIX/BACKLOG.md"
+printf '%s\n' '' '### New upstream entry' >> "$FIX/docs/lessons/UPSTREAM.md"
+printf '%s\n' 'merged now' >> "$MEM11/note-a.md"
+git add BACKLOG.md >/dev/null 2>&1
+git commit -q -m dream-row >/dev/null 2>&1
+R11="$ST11/2026-11-09-report.md"
+printf '%s\n' '# Dream report 2026-11-09' '## Proposals' \
+  '1. [mechanize] Two rows' \
+  '   Change: BACKLOG.md row "Wire the hook into .claude/settings.json | P2 | open"; add the entry to UPSTREAM.md; separately the owner decides whether AGENTS.md records an override' \
+  '2. [stale] Memory notes' '   Change: in note-a.md replace the waiting line, and note-b.md likewise' \
+  '3. [mechanize] Declined' '   Change: edit README.md' > "$R11"
+DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST11" --report "$R11" --applied 1 2
+assert_rc "files: done exits 0" 0
+if grep -qx -- "Files: BACKLOG.md, UPSTREAM.md, note-a.md" "$R11"; then
+  t_ok "files: only the named files that changed, a bare name matched by its last components"
+else
+  t_bad "files: expected exactly 'Files: BACKLOG.md, UPSTREAM.md, note-a.md'"; grep -- "^Files" "$R11" | sed 's/^/       | /'
+fi
+grep -- "^Files" "$R11" > "$ST11/files-line"
+assert_file_lacks "files: a name quoted inside row text is not claimed" "$ST11/files-line" "settings.json"
+assert_file_lacks "files: an owner decision is not claimed" "$ST11/files-line" "AGENTS.md"
+assert_file_lacks "files: an untouched memory note is not claimed" "$ST11/files-line" "note-b.md"
+
+ST12="$FIX/state12"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-10T08:00:00.000Z "an older digest state"
+DREAM_NOW="2026-11-10T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST12"
+assert_rc "files: second digest exits 0" 0
+"$PY" -c 'import json,sys;p=sys.argv[1];s=json.load(open(p));s.pop("head",None);s.pop("memory",None);json.dump(s,open(p,"w"))' "$ST12/state.next.json"
+R12="$ST12/2026-11-10-report.md"
+printf '%s\n' '# Dream report 2026-11-10' '## Proposals' '1. [stale] One' '   Change: edit BACKLOG.md' > "$R12"
+DREAM_NOW="2026-11-10T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST12" --report "$R12" --applied 1
+assert_rc "files: done on an older digest state exits 0" 0
+assert_file_has "files: an older digest state says the files were not checked" "$R12" "Files: BACKLOG.md (named in the Change lines; not checked: the digest recorded no commit)"
+
+git add -u >/dev/null 2>&1
+git commit -q -m dream11 >/dev/null 2>&1
+WT3="$FIX-wt3"
+git worktree add -q --detach "$WT3" >/dev/null 2>&1
+run bash "$WT3/scripts/dream.sh" hygiene --projects-dir "$PROJ11"
+assert_rc "worktree memory: hygiene exits 0" 0
+assert_contains "worktree memory: a linked worktree reads the main checkout's memory folder" "auto-memory: 2 files"
+git worktree remove --force "$WT3" >/dev/null 2>&1
+
+# done in a checkout whose history lacks the digest's commit cannot compare.
+ST13="$FIX/state13"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-11T08:00:00.000Z "a digest on a later commit"
+DREAM_NOW="2026-11-11T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST13"
+assert_rc "files: third digest exits 0" 0
+WT4="$FIX-wt4"
+git worktree add -q --detach "$WT4" HEAD~1 >/dev/null 2>&1
+R13="$ST13/2026-11-11-report.md"
+printf '%s\n' '# Dream report 2026-11-11' '## Proposals' '1. [stale] One' '   Change: edit BACKLOG.md' > "$R13"
+DREAM_NOW="2026-11-11T12:00:00Z" run bash "$WT4/scripts/dream.sh" done --projects-dir "$PROJ11" --state-dir "$ST13" --report "$R13" --applied 1
+assert_rc "files: done on another history exits 0" 0
+assert_file_has "files: another history says the files were not checked" "$R13" "not checked: the digest's commit is not in this checkout's history"
+git worktree remove --force "$WT4" >/dev/null 2>&1
+case "$PROJ11" in */template-selftest.*-p11) rm -rf "$PROJ11" ;; esac
 
 t_finish

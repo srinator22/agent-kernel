@@ -43,3 +43,28 @@ Entry format (all five fields required):
 - retire-when: the stdin hook is wired with its test and the shell tool
   runs long commands or reports its length limit.
 - applies to: core
+
+### A fixture for an outside folder sits outside the fixture repository
+
+- what happened: a test faked the per-user projects folder inside its fixture
+  git repository; git listed the fake memory notes as untracked files, so
+  the check passed through git and the memory comparison it meant to cover
+  could be deleted with every check green (2026-11-08, dream outcome fixes;
+  found by review round 1).
+- what check should have caught it: a mutation run that removes the code
+  path a new test is meant to cover; this one did, once run.
+- what was added: the fake folder moved next to the fixture, not inside it.
+- retire-when: the test helpers create outside-repo folders through one
+  function that places them outside the fixture.
+- applies to: core
+
+### Each parallel agent gets its own scratch file names
+
+- what happened: several agents ran at once with the same scratchpad log and
+  commit message file names; one repo's check log and one commit message
+  were overwritten by another agent's (2026-11-08, three project dreams).
+- what check should have caught it: none, this note is the guard.
+- what was added: briefs name a log and message file unique to the agent
+  and repository.
+- retire-when: a helper hands each agent its own scratch folder.
+- applies to: core

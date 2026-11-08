@@ -139,6 +139,63 @@ class BuildAndSearch(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("ERROR: datasheets/sheet.pdf: ValueError: bad pdf", out)
 
+    def build_with_fake_pdf(self, available, *extra, extractor=None):
+        """Build with a stub PDF extractor (the file's text is its single page) instead of pymupdf."""
+        def fake_pdf(source):
+            return kb_index.Extracted([(1, source.path.stem, source.path.read_text(encoding="utf-8"))], 1)
+        with mock.patch.object(kb_index, "pymupdf_available", return_value=available), \
+                mock.patch.dict(kb_index.EXTRACTORS, {"pdf": extractor or fake_pdf}):
+            return self.build(*extra)
+
+    def search_text(self, query):
+        _, out, _ = cli("search", "--root", str(self.root), query)
+        return out
+
+    def index_old_pdf_then_change_it(self):
+        self.write("datasheets/sheet.pdf", "Old limit obsoletevalue forty volts.\n")
+        code, out, err = self.build_with_fake_pdf(True)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("datasheets/sheet.pdf", self.search_text("obsoletevalue"))
+        self.write("datasheets/sheet.pdf", "New limit currentvalue sixty volts.\n")
+
+    def test_changed_pdf_without_library_drops_stale_rows(self):
+        self.index_old_pdf_then_change_it()
+        code, out, err = self.build_with_fake_pdf(False)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("no matches", self.search_text("obsoletevalue"))
+        self.assertIn("STALE DROPPED: datasheets/sheet.pdf: changed since it was indexed and pymupdf is not installed",
+                      out)
+        # The digest went too, so the next build with the library indexes the new text.
+        code, out, err = self.build_with_fake_pdf(True)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("datasheets/sheet.pdf", self.search_text("currentvalue"))
+
+    def test_changed_pdf_with_require_pdf_exits_2_and_drops_stale_rows(self):
+        self.index_old_pdf_then_change_it()
+        code, out, err = self.build_with_fake_pdf(False, "--require-pdf")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("no matches", self.search_text("obsoletevalue"))
+        self.assertIn("--require-pdf", err)
+        self.assertIn("1 stale indexed PDF(s) were removed", err)
+
+    def test_changed_pdf_that_fails_extraction_drops_stale_rows(self):
+        self.index_old_pdf_then_change_it()
+
+        def broken(_source):
+            raise ValueError("bad pdf")
+        code, out, err = self.build_with_fake_pdf(True, extractor=broken)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("ERROR: datasheets/sheet.pdf: ValueError: bad pdf", out)
+        self.assertIn("no matches", self.search_text("obsoletevalue"))
+
+    def test_deleted_pdf_is_removed_without_library(self):
+        self.index_old_pdf_then_change_it()
+        (self.root / "datasheets" / "sheet.pdf").unlink()
+        code, out, err = self.build_with_fake_pdf(False)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("removed: datasheets/sheet.pdf", out)
+        self.assertIn("no matches", self.search_text("obsoletevalue"))
+
     def test_search_without_index_exits_2(self):
         code, _, err = cli("search", "--root", str(self.root), "fuse")
         self.assertEqual(code, 2)
