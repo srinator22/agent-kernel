@@ -24,9 +24,11 @@
 #      differs between <sha>^ and <sha>, CR stripped.
 #   2. else it touches a catalog path -> "Library and roster".
 #   3. else "Not synced".
-# Output: the notes on stdout. Without --tag it is a dry run.
+# Output: the notes on stdout. Without --tag it is a dry run; it warns when
+# .work/TASK.md at HEAD is a live task.
 # --tag guards (exit 2 on failure): branch is main, clean tree, origin/main
-# exists and equals HEAD, the tag does not exist. It creates an annotated tag
+# exists and equals HEAD, .work/TASK.md at HEAD is absent or pristine (holds
+# the title placeholder), the tag does not exist. It creates an annotated tag
 # (version on line 1, blank line, notes) and NEVER pushes.
 # Dependencies: bash 3.2+, git, sort -V, scripts/template-sync.sh.
 # Exit codes: 0 ok or dry run; 1 nothing to release with --tag;
@@ -143,10 +145,10 @@ HEADER_LINES=12
 header_differs() {
   local sha="$1" path="$2" a b
   if git cat-file -e "$sha^:$path" 2>/dev/null; then
-    a="P$(git show "$sha^:$path" | head -n "$HEADER_LINES")"
+    a="P$(git show "$sha^:$path" | sed -n "1,${HEADER_LINES}p")"
   else a="absent"; fi
   if git cat-file -e "$sha:$path" 2>/dev/null; then
-    b="P$(git show "$sha:$path" | head -n "$HEADER_LINES")"
+    b="P$(git show "$sha:$path" | sed -n "1,${HEADER_LINES}p")"
   else b="absent"; fi
   [ "$a" != "$b" ]
 }
@@ -209,6 +211,20 @@ echo
 printf '%s\n' "$notes"
 echo
 
+# A live task record at HEAD would ship inside the tag (template-v0.3.0
+# carried one). Pristine means the file is absent or still holds the title
+# placeholder, the test scripts/new-task.sh and scripts/stop-gate.sh use.
+live_task=0
+if git cat-file -e "HEAD:.work/TASK.md" 2>/dev/null; then
+  case "$(git show "HEAD:.work/TASK.md")" in
+    *'{{title}}'*) ;;
+    *) live_task=1 ;;
+  esac
+fi
+if [ "$live_task" = 1 ]; then
+  echo "template-release: WARNING: .work/TASK.md at HEAD is a live task; a tag now would ship it"
+fi
+
 if [ "$dotag" = 0 ]; then
   echo "template-release: dry run; no tag created (rerun with --tag)"
   exit 0
@@ -229,6 +245,10 @@ if ! git rev-parse -q --verify refs/remotes/origin/main >/dev/null; then
 fi
 if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
   echo "template-release: refusing to tag: origin/main is not equal to HEAD; push or fetch first" >&2
+  exit 2
+fi
+if [ "$live_task" = 1 ]; then
+  echo "template-release: refusing to tag: .work/TASK.md at HEAD is a live task; finish the task with docs/procedures/retro.md (it archives the record to .work/done/), merge, then tag" >&2
   exit 2
 fi
 if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then

@@ -95,6 +95,22 @@ assert_rc "--quick does not skip the dash check" 1
 assert_contains "--quick reports the dash failure" "em or en dash found"
 git rm -q -f notes.txt && git commit -q -m "remove notes" >/dev/null 2>&1
 
+# A long match list (well over 1 MiB of git grep output) still ends in the
+# named failure: a pipe into head under pipefail used to end check.sh with 141
+# once the list outgrew the pipe buffer.
+# long_list LABEL BYTES NEEDLE: 45000 tracked lines holding BYTES, then --quick.
+long_list() {
+  seq 1 45000 | sed "s/\$/ bad $2 line/" > notes.txt
+  commit_fixture
+  run ./scripts/check.sh --quick
+  assert_rc "a long $1 list fails with exit 1, not 141" 1
+  assert_contains "the long $1 list failure is named" "$3"
+  assert_eq "at most 20 $1 match lines are printed" "20" "$(printf '%s\n' "$OUT" | grep -c '^notes\.txt:')"
+  git rm -q -f notes.txt && git commit -q -m "remove notes" >/dev/null 2>&1
+}
+long_list dash "$EM" "em or en dash found"
+long_list "curly quote" "$(printf '\xe2\x80\x9c')" "typographic or mis-encoded character found"
+
 # Typographic and mis-encoded characters fail like dashes, --quick included.
 # Each spec is label:bytes with the bytes written as escapes, so this file
 # stays plain ASCII and passes the gate it tests.
@@ -200,7 +216,7 @@ mkdir -p tests/template
 printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
 commit_fixture
 run ./scripts/check.sh
-assert_contains "selftest runs in project mode when tests/template exists" "selftest: 1 passed, 0 failed"
+assert_contains "selftest runs in project mode when tests/template exists" "selftest: 1 passed, 0 failed, 0 quarantined (1 test files)"
 printf '#!/usr/bin/env bash\nexit 1\n' > tests/template/test_ok.sh
 commit_fixture
 run ./scripts/check.sh --quick
@@ -266,8 +282,45 @@ run ./scripts/check.sh
 assert_rc "template mode exits 0 on a clean fixture" 0
 assert_contains "template mode reports success" "template self-test: OK"
 assert_contains "template mode ran the always section" "lessons: OK"
+# No self-test may reach a real ruff runner or the network (lib.sh exports the fake).
+assert_contains "the ruff step names the fake runner and its version" "template ruff: TEMPLATE_RUFF ($TEMPLATE_RUFF), ruff 0.16.10 (fake-ruff.sh)"
 run ./scripts/check.sh --quick
 assert_rc "template mode with --quick exits 0" 0
+
+# ---- 5k: template Python, under a folder ruff.toml, passes the pinned ruff ----
+RLOG="$FIX/ruff.log"
+FAKE_RUFF_LOG="$RLOG" run ./scripts/check.sh --quick
+assert_file_has "ruff check runs on the folders with a ruff.toml" "$RLOG" "|check --no-cache --quiet docs/library docs/profiles scripts/dream"
+assert_file_has "ruff format --check guards the format exclusion" "$RLOG" "|format --no-cache --check --quiet docs/library docs/profiles scripts/dream"
+assert_eq "both also run from a scratch root with a strict config" "2" "$(grep -c '/template-ruff\.[^|]*|' "$RLOG")"
+FAKE_RUFF_CHECK_RC=1 run ./scripts/check.sh --quick
+assert_rc "a ruff finding fails template mode" 1
+assert_contains "the ruff check failure is named" "ruff check failed on the template's Python"
+FAKE_RUFF_FORMAT_RC=2 run ./scripts/check.sh --quick
+assert_rc "a ruff config error fails template mode" 1
+assert_contains "the ruff format failure is named" "ruff format --check failed on the template's Python"
+FAKE_RUFF_SCRATCH_RC=1 run ./scripts/check.sh --quick
+assert_rc "a strict root config that wins over the folder config fails" 1
+assert_contains "the override failure is named" "a strict project-root ruff config overrides a folder ruff.toml"
+FAKE_RUFF_VERSION_RC=1 run ./scripts/check.sh --quick
+assert_rc "a runner that fails fails the step" 1
+assert_contains "the runner failure is named" "could not run ruff 0.16.10 through TEMPLATE_RUFF"
+mkdir -p tools && echo "x = 1" > tools/loose.py && echo "x = 1" > top.py && echo "stub" > ruff.toml
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "template Python outside a folder ruff.toml fails" 1
+assert_contains "the uncovered file is named" "tools/loose.py is template Python outside a folder with its own ruff.toml"
+assert_contains "a root ruff.toml does not cover a root file" "top.py is template Python outside a folder with its own ruff.toml"
+git rm -q -f tools/loose.py top.py ruff.toml && git commit -q -m "remove loose python" >/dev/null 2>&1
+
+# ---- 5l: no script pipes into head (exit 141 once the writer outlives head) ----
+printf '#!/usr/bin/env bash\nset -o pipefail\nls | head -n 1\n# a comment | head is fine\n' > scripts/pipes.sh
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "a script that pipes into head fails template mode" 1
+assert_contains "the script and line are named" "scripts/pipes.sh:3:"
+assert_not_contains "a comment that mentions it is not flagged" "scripts/pipes.sh:4:"
+git rm -q -f scripts/pipes.sh && git commit -q -m "remove pipes" >/dev/null 2>&1
 
 printf 'bad %s dash\n' "$EM" > notes.txt
 commit_fixture
@@ -283,12 +336,22 @@ assert_rc "a drifted check.sh fixture fails template mode" 1
 assert_contains "the drift is named" "tests/template/fixtures/check.sh is not identical to scripts/check.sh"
 t_cleanup
 
-# ---- a started project: the real tree, check.sh wired to a stack, passes ----
-# This scenario copies the whole repository, so the nested selftest must not
-# recurse into it again: T_NESTED marks the inner run.
-if [[ -z "${T_NESTED:-}" ]]; then
+# ---- a started project: the template tree, check.sh wired to a stack, passes ----
+# A fact about the template's own tree, so it runs only in template mode. In a
+# started project this repository IS the started project, and its own
+# ./scripts/check.sh run is the proof; copying it again would recurse and test
+# the project's tree against the template's expectations.
+if [[ -f "$T_ROOT/.start-done" ]]; then
+  t_na "a started project passes check.sh with tests/template kept: this repository is a started project (.start-done); covered by its own ./scripts/check.sh run"
+else
+  # Both branches of the real-tree parity case are asserted: here, on the
+  # template tree, it runs; in the started copy below it prints n/a.
+  run bash "$T_ROOT/tests/template/test_blueprint_parity.sh"
+  assert_contains "on the template tree the real parity case runs" "ok   the real blueprint and required list agree"
+  assert_not_contains "on the template tree no case is n/a" "n/a  "
   make_fixture
-  (cd "$T_ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^[.]work/template-sync/' | tar --null -T - -cf -) | tar -xf -
+  # Real started projects lack the template's catalogs and question file.
+  (cd "$T_ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^[.]work/template-sync/\|^docs/library/\|^docs/roster/\|^tests/docs/questions\.md$' | tar --null -T - -cf -) | tar -xf -
   cp "$T_CHECK" scripts/check.sh
   # start.md step 3: the stack steps go into the project-owned stack-check.sh.
   printf '#!/usr/bin/env bash\necho "stack steps wired by the fixture"\n' > scripts/stack-check.sh
@@ -299,13 +362,13 @@ if [[ -z "${T_NESTED:-}" ]]; then
   ./scripts/kernel-hash.sh --update >/dev/null
   touch .start-done
   commit_fixture
-  export T_NESTED=1
   run ./scripts/check.sh --quick
-  unset T_NESTED
   assert_rc "a started project passes check.sh with tests/template kept" 0
-  assert_contains "the nested selftest ran and passed" " passed, 0 failed ("
+  assert_contains "the nested selftest ran and passed" " passed, 0 failed, 0 quarantined ("
   assert_not_contains "no nested test file failed" "FAIL  tests/template/"
   assert_not_contains "the stack block is wired" "$STACK_MSG"
+  assert_contains "the nested parity test says its real-tree case does not apply" "n/a  the real blueprint and required list agree: this repository is a started project"
+  assert_contains "the nested check-always test says its started-project case does not apply" "n/a  a started project passes check.sh with tests/template kept: this repository is a started project"
   t_cleanup
 fi
 

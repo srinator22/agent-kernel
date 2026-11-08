@@ -393,24 +393,50 @@ class ExtractHelperTests(unittest.TestCase):
 
     def test_screen_box_projects_corners_and_drops_boxes_behind(self):
         # A fake projection: u = x, v = z, depth = y (camera looking along +y).
-        proj = lambda p: (p[0], p[2], p[1])
+        def proj(p):
+            return (p[0], p[2], p[1])
+
         self.assertEqual(bx.screen_box([0.1, 1.0, 0.2], [0.3, 2.0, 0.6], proj), [0.1, 0.2, 0.3, 0.6])
         self.assertIsNone(bx.screen_box([0.1, -1.0, 0.2], [0.3, 2.0, 0.6], proj))
 
     def test_problems(self):
         cases = []
-        d = good_doc(); d["schema"] = "render-extract/2"; cases.append(("schema", d))
-        d = good_doc(); del d["frames"]; cases.append(("frames", d))
-        d = good_doc(); del d["scene"]["gamma"]; cases.append(("gamma", d))
-        d = good_doc(); del d["scene"]["cycles"]["seed"]; cases.append(("seed", d))
-        d = good_doc(); d["frames"][0]["camera"]["location"] = [1, 2]; cases.append(("location", d))
-        d = good_doc(); d["frames"][0]["frame"] = "1"; cases.append(("integer", d))
-        d = good_doc(); d["frames"].append(copy.deepcopy(d["frames"][0])); cases.append(("duplicate", d))
-        d = good_doc(); d["frames"][0]["anchors"]["Lid"] = [0.5, float("nan"), 1]; cases.append(("anchors", d))
-        d = good_doc(); d["frames"][0]["objects"]["Lid"].pop("samples"); cases.append(("samples", d))
-        d = good_doc(); d["lights"] = [{"name": "k"}]; cases.append(("lights", d))
-        d = good_doc(); d["scene"]["resolution"] = [1, 2, 3]; cases.append(("resolution", d))
-        d = good_doc(); d["scene"]["fps"] = 0; cases.append(("fps", d))
+        d = good_doc()
+        d["schema"] = "render-extract/2"
+        cases.append(("schema", d))
+        d = good_doc()
+        del d["frames"]
+        cases.append(("frames", d))
+        d = good_doc()
+        del d["scene"]["gamma"]
+        cases.append(("gamma", d))
+        d = good_doc()
+        del d["scene"]["cycles"]["seed"]
+        cases.append(("seed", d))
+        d = good_doc()
+        d["frames"][0]["camera"]["location"] = [1, 2]
+        cases.append(("location", d))
+        d = good_doc()
+        d["frames"][0]["frame"] = "1"
+        cases.append(("integer", d))
+        d = good_doc()
+        d["frames"].append(copy.deepcopy(d["frames"][0]))
+        cases.append(("duplicate", d))
+        d = good_doc()
+        d["frames"][0]["anchors"]["Lid"] = [0.5, float("nan"), 1]
+        cases.append(("anchors", d))
+        d = good_doc()
+        d["frames"][0]["objects"]["Lid"].pop("samples")
+        cases.append(("samples", d))
+        d = good_doc()
+        d["lights"] = [{"name": "k"}]
+        cases.append(("lights", d))
+        d = good_doc()
+        d["scene"]["resolution"] = [1, 2, 3]
+        cases.append(("resolution", d))
+        d = good_doc()
+        d["scene"]["fps"] = 0
+        cases.append(("fps", d))
         for word, doc in cases:
             problems = bx.validate_extract(doc)
             self.assertTrue(problems, word)

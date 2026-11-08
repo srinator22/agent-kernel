@@ -57,4 +57,42 @@ assert_rc "refuses while a task is in progress" 1
 assert_contains "refusal names the cause" "already in progress"
 assert_file_has "TASK.md left untouched" .work/TASK.md "# Task: good-slug"
 
+# The recorded workflow (start.md item 4): new-task.sh stays on the current
+# branch only when the "- Git workflow:" value starts with direct-to-main
+# followed by end of value, or by optional spaces then ; . : , or (, or by
+# " - ". Anything else, a negation included, reads as gated (the safe side).
+git checkout -q -b workflow-base
+# wf_case NAME VALUE EXPECT: EXPECT is "stay" or "branch".
+n=0
+wf_case() {
+  n=$((n + 1))
+  git checkout -q workflow-base
+  printf '## Project decisions\n- Git workflow: %s\n' "$2" > AGENTS.md
+  echo "# Task: {{title}}" > .work/TASK.md
+  git add -A >/dev/null 2>&1 && git commit -q -m "wf $n" >/dev/null 2>&1
+  run ./scripts/new-task.sh "wf-$n"
+  assert_rc "$1: scaffolds" 0
+  if [[ "$3" == stay ]]; then
+    assert_eq "$1: stays on the current branch" "workflow-base" "$(git symbolic-ref --short HEAD)"
+    assert_contains "$1: says it read direct-to-main" "recorded workflow is direct-to-main"
+  else
+    assert_eq "$1: creates task/wf-$n" "task/wf-$n" "$(git symbolic-ref --short HEAD)"
+    assert_contains "$1: says it read branch + gated merge" "recorded workflow is branch + gated merge"
+  fi
+  git checkout -q -f workflow-base
+}
+wf_case "plain with a comma" "direct-to-main, no pull requests (owner standing choice, 2026-10-13)." stay
+wf_case "alone" "direct-to-main" stay
+wf_case "backticked" '`direct-to-main` (explicit standing choice)' stay
+wf_case "bold" "**direct-to-main**; push after the full gate" stay
+wf_case "with a parenthesis after a space" "direct-to-main (solo)" stay
+wf_case "with a spaced hyphen" "direct-to-main - every push gated locally" stay
+wf_case "placeholder" "{{branch+gated merge (default) OR direct-to-main, recorded as an explicit choice}}" branch
+wf_case "Branch first, negation later" "Branch plus pull request with gated merge to main; direct-to-main is not a standing choice." branch
+wf_case "branch lowercase" "branch + gated merge" branch
+wf_case "negated value starting with the token" "direct-to-main is not allowed; use branches" branch
+assert_contains "a value starting with the token that fails the rule warns" "WARNING: the - Git workflow: value starts with direct-to-main but reads as branch + gated merge"
+wf_case "token followed by a word" "direct-to-main on master" branch
+assert_contains "the warning names the accepted form" "direct-to-main, <details>"
+
 t_finish

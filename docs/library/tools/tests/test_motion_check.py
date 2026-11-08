@@ -66,14 +66,16 @@ class StopTests(Base):
 
     def test_stop_found_with_frame_range(self):
         # move, stand still on frames 21-30, move again
-        pos = lambda i: [0.02 * (i if i < 20 else (20 if i < 30 else i - 10)), -1.0, 0.3]
+        def pos(i):
+            return [0.02 * (i if i < 20 else (20 if i < 30 else i - 10)), -1.0, 0.3]
         code, out, _ = self.check(make_doc(pos=pos), "--accel-floor", "1e6")
         self.assertEqual(code, 1)
         self.assertIn("stop: camera stops", out)
         self.assertRegex(out, r"frames 2\d-3\d")
 
     def test_declared_hold_is_not_a_finding(self):
-        pos = lambda i: [0.02 * (i if i < 20 else (20 if i < 30 else i - 10)), -1.0, 0.3]
+        def pos(i):
+            return [0.02 * (i if i < 20 else (20 if i < 30 else i - 10)), -1.0, 0.3]
         code, out, _ = self.check(make_doc(pos=pos), "--holds", "19-32", "--accel-floor", "1e6")
         self.assertEqual(code, 0, out)
 
@@ -83,8 +85,12 @@ class StopTests(Base):
         self.assertIn("does not move", out)
 
     def test_pure_rotation_is_not_a_stop(self):
-        pos = lambda i: [0, -1, 0.3]
-        fwd = lambda i: [math.sin(0.02 * i), math.cos(0.02 * i), 0.0]
+        def pos(i):
+            return [0, -1, 0.3]
+
+        def fwd(i):
+            return [math.sin(0.02 * i), math.cos(0.02 * i), 0.0]
+
         code, out, _ = self.check(make_doc(pos=pos, fwd=fwd))
         self.assertEqual(code, 0, out)
 
@@ -99,19 +105,26 @@ class StopTests(Base):
 
 class SpikeTests(Base):
     def test_camera_spike_found(self):
-        pos = lambda i: [0.02 * i + (0.05 if i == 30 else 0.0), -1.0, 0.3]
+        def pos(i):
+            return [0.02 * i + (0.05 if i == 30 else 0.0), -1.0, 0.3]
+
         code, out, _ = self.check(make_doc(pos=pos))
         self.assertEqual(code, 1)
         self.assertRegex(out, r"spike: camera acceleration spike .* at frames 30-32")
 
     def test_smooth_ease_has_no_spike(self):
-        pos = lambda i: [1.0 * (0.5 - 0.5 * math.cos(math.pi * i / 59)) + 0.0, -1.0, 0.3]
-        pos2 = lambda i: [pos(i)[0] + 0.01 * i, -1.0, 0.3]
+        def pos(i):
+            return [1.0 * (0.5 - 0.5 * math.cos(math.pi * i / 59)) + 0.0, -1.0, 0.3]
+
+        def pos2(i):
+            return [pos(i)[0] + 0.01 * i, -1.0, 0.3]
+
         self.assertEqual(self.check(make_doc(pos=pos2))[0], 0)
 
     def test_object_spike_found_by_name(self):
-        obj = lambda i: {"Lid": {"location": [0.0, 0.0, 0.01 * i + (0.08 if i == 20 else 0)],
-                                 "aabb_min": None, "aabb_max": None, "samples": []}}
+        def obj(i):
+            return {"Lid": {"location": [0.0, 0.0, 0.01 * i + (0.08 if i == 20 else 0)],
+                            "aabb_min": None, "aabb_max": None, "samples": []}}
         code, out, _ = self.check(make_doc(objects=obj))
         self.assertEqual(code, 1)
         self.assertIn("object Lid acceleration spike", out)
@@ -126,16 +139,18 @@ class SpikeTests(Base):
                 return 0.05
             s = (i - 30) / 30
             return 0.05 * (3 * s * s - 2 * s * s * s)  # smoothstep: zero speed at both ends
-        obj = lambda i: {"Lid": {"location": [0.0, 0.0, z(i)], "aabb_min": None, "aabb_max": None,
-                                 "samples": []}}
+        def obj(i):
+            return {"Lid": {"location": [0.0, 0.0, z(i)], "aabb_min": None, "aabb_max": None,
+                            "samples": []}}
         code, out, _ = self.check(make_doc(n=120, objects=obj))
         self.assertEqual(code, 0, out)
 
     def test_empty_objects_are_skipped_with_a_note(self):
         # Regression: an invisible focus-target empty with a short eased move was reported as a spike;
         # empties are never seen, and visible children are tracked by their own world positions.
-        obj = lambda i: {"Focus": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
-                                   "aabb_max": None, "samples": []}}
+        def obj(i):
+            return {"Focus": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
+                              "aabb_max": None, "samples": []}}
         doc = make_doc(n=120, objects=obj)
         doc["objects"] = [{"name": "Focus", "type": "EMPTY", "hide_render": False, "hide_viewport": False,
                            "animated": True, "dimensions": None, "label": None}]
@@ -144,21 +159,25 @@ class SpikeTests(Base):
         self.assertIn("object Focus (EMPTY) not checked", out)
 
     def test_object_at_rest_with_a_pop_is_a_spike(self):
-        obj = lambda i: {"Lid": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
-                                 "aabb_max": None, "samples": []}}
+        def obj(i):
+            return {"Lid": {"location": [0.0, 0.0, 0.03 if i >= 50 else 0.0], "aabb_min": None,
+                            "aabb_max": None, "samples": []}}
         code, out, _ = self.check(make_doc(n=120, objects=obj))
         self.assertEqual(code, 1, out)
         self.assertIn("object Lid acceleration spike", out)
 
     def test_object_with_few_frames_is_noted(self):
-        obj = lambda i: {"Lid": {"location": [0, 0, 0], "aabb_min": None, "aabb_max": None, "samples": []}} \
-            if i < 2 else {}
+        def obj(i):
+            return {"Lid": {"location": [0, 0, 0], "aabb_min": None, "aabb_max": None, "samples": []}} \
+                if i < 2 else {}
         code, out, _ = self.check(make_doc(objects=obj))
         self.assertEqual(code, 0, out)
         self.assertIn("fewer than 3 frames", out)
 
     def test_accel_floor_suppresses_tiny_noise(self):
-        pos = lambda i: [0.02 * i + (1e-7 if i % 2 else 0.0), -1.0, 0.3]
+        def pos(i):
+            return [0.02 * i + (1e-7 if i % 2 else 0.0), -1.0, 0.3]
+
         self.assertEqual(self.check(make_doc(pos=pos))[0], 0)
 
 
@@ -170,7 +189,9 @@ class OvershootTests(Base):
         # path overshoots waypoint 2 at x=1.0 by 5 cm between frames 20 and 40
         def x_of(i):
             return 0.05 * i if i <= 20 else 1.0 + 0.05 * math.sin(math.pi * (i - 20) / 20)
-        pos = lambda i: [x_of(i), -1.0, 0.3]
+        def pos(i):
+            return [x_of(i), -1.0, 0.3]
+
         wp = self.wp_file([(1, 0.0), (21, 1.0), (41, 1.0)])
         code, out, _ = self.check(make_doc(pos=pos), "--waypoints", wp)
         self.assertEqual(code, 1)
@@ -178,7 +199,9 @@ class OvershootTests(Base):
 
     def test_within_tolerance_passes(self):
         wp = self.wp_file([(1, 0.0), (60, 1.18)])
-        pos = lambda i: [0.02 * i, -1.0, 0.3]
+        def pos(i):
+            return [0.02 * i, -1.0, 0.3]
+
         self.assertEqual(self.check(make_doc(pos=pos), "--waypoints", wp)[0], 0)
 
     def test_bad_waypoints_exit_2(self):

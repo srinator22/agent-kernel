@@ -96,6 +96,7 @@ docs/
     models.md                 # model tiers (cheap/standard/strong/inherit), harness adapters, parity
   profiles/                   # project-type bundles selected at start
     README.md                 # index and the selection procedure
+    ruff.toml                 # ruff contract for the profiles' Python: default rules, no format (synced)
     software/PROFILE.md       # always on
     scientific/PROFILE.md
     scientific/skills/        # shipped skill set, installed by start (ADR 0004)
@@ -112,6 +113,7 @@ docs/
     data-analysis/skills/     # shipped skill set
   library/                    # opt-in single-project items (ADR 0004)
     README.md                 # one-project-evidence rule, adoption, graduation, item table
+    ruff.toml                 # ruff contract for the library's Python: default rules, no format
     agents/                   # agents with Codex twins
     skills/                   # skills a project may adopt into free core slots
     procedures/               # procedures the library skills follow
@@ -140,8 +142,10 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
-  dream.sh                    # dream digest, due, done, status, hygiene (wrapper for dream.py)
-  dream.py                    # stdlib: transcript signals read once per line, byte offsets, due by file stats
+  dream.sh                    # dream digest, due, done, status, hygiene (wrapper for dream/dream.py)
+  dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
+    dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
+    ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
   adr.sh                      # check (ADR numbering and format) | new <title>
@@ -173,8 +177,10 @@ tests/
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
+    test_selftest.sh          # quarantine list, n/a lines, summary counts
     fixtures/
       check.sh                # pristine template check.sh the tests run against
+      fake-ruff.sh            # ruff stand-in so no self-test reaches the network
   docs/
     questions.md              # question set and answer key for docs/procedures/doc-eval.md
 .work/
@@ -313,7 +319,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
 - Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
-- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
+- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
@@ -348,7 +354,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
    1. What is the project? Purpose, users, non-goals, system boundary (a paragraph is fine).
    2. Stack preference, or should I propose one from the reference table?
    3. Repo host and visibility (private/public), solo or team?
-   4. Git workflow: branch + gated merge (default), or direct-to-main as an explicit standing choice?
+   4. Git workflow: branch + gated merge (default), or direct-to-main as an explicit standing choice? (Recorded starting with the choice, such as "direct-to-main, <details>"; scripts/new-task.sh reads direct-to-main only before the end of the value or ; . : , ( or " - ".)
    5. Deploy target, or none for now? If deploying: private or public exposure, auth approach?
    6. Does it ship data or assets? (If yes: local-first data, self-hosted assets, and version-stamped caches become project defaults, recorded as an ADR - external sources are justified fallbacks with a written reason.)
    7. Risk profile: ordinary, scientific/numerical, safety-sensitive, or embedded? (Scientific wires golden-master fixtures, deterministic seeds, and promotes docs/rules/scientific-integrity.md in the index.)

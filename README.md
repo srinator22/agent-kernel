@@ -23,6 +23,10 @@ build before the first feature.
   changelog is written by hand.
 - python (python3 or python): validates `.claude/settings.json`. Without it
   that check is skipped locally and CI runs it.
+- ruff 0.16.10, template repository only: `check.sh` in template mode lints
+  the template's own Python with exactly this version, from `ruff` on PATH or
+  fetched through `uvx` or `pipx` (network on first use). Without any of them
+  that check fails. Started projects do not need it.
 - GNU grep or git grep with PCRE (`-P`): the no-dash scan. Without it the scan
   is deferred to CI.
 

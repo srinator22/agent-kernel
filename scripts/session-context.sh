@@ -29,7 +29,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   else
     total="$(printf '%s\n' "$status" | wc -l | tr -d ' ')"
     echo "[session-context] Working tree ($total changed or untracked):"
-    printf '%s\n' "$status" | head -n 20
+    printf '%s\n' "$status" | sed -n '1,20p'
     if (( total > 20 )); then echo "  ... $((total - 20)) more (git status --short)"; fi
   fi
   log="$(git log --oneline -10 2>/dev/null || true)"
@@ -97,7 +97,7 @@ template_update_block() {
       echo "[session-context] Template update available: $tag (synced $last). Run /template-update."
       return 0
     fi
-    lowest="$(printf '%s\n%s\n' "$last" "$tag" | sort -V | head -n 1 || true)"
+    lowest="$(printf '%s\n%s\n' "$last" "$tag" | sort -V | sed -n 1p || true)"
     if [[ "$lowest" == "$last" ]]; then
       echo "[session-context] Template update available: $tag (synced $last). Run /template-update."
     fi
