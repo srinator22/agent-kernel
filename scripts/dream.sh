@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dream.sh - wrapper for scripts/dream/dream.py, the offline memory-dream helper.
 #   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines to signals
-#   done                                      commit the digest's offsets
+#   done [--report R [--applied N...]]        commit the digest's offsets; append the outcome to R
 #   due [--offer] [--quiet]                   is a dream due (file stats only)
 #   status                                    last dream, due state, pending files
 #   hygiene [--memory-dir DIR]                memory file sizes, ages, dangling links

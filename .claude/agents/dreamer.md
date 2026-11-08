@@ -11,7 +11,12 @@ did. You propose; the human decides; you never edit a file.
 Inputs (paths in your brief):
 - `.work/dream/digest.md`: numbered signals (s1, s2, ...) extracted from the
   session transcripts since the last dream, plus hygiene numbers. It is your
-  only view of the transcripts; never open a transcript.
+  only view of the transcripts; never open a transcript. Its "Impact since
+  the last dream" section gives a trend of signal counts by kind per dream,
+  approved lessons with used: 0 older than 45 days (retire candidates for
+  item 3) and lessons that share words with new corrections, denials,
+  blocks or failures (each may be a recurrence worth mechanizing, item 4,
+  or a coincidence: judge it).
 - The memory files: `docs/lessons/INDEX.md`, `PENDING.md`, `UPSTREAM.md`,
   `QUARANTINE.md`, `docs/DEFECT_MEMORY.md`, `BACKLOG.md`, the task records in
   `.work/done/` newer than the digest's "since" date, the Claude auto-memory

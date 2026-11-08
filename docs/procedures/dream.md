@@ -52,10 +52,14 @@ Taste pass below. Prefer the gap between tasks.
    `scripts/lessons.sh use <Lnnn>` for counters. Tracked files follow the
    git workflow: on the live task branch, or on `chore/dream-<date>`
    shipped per `docs/procedures/ship.md`.
-6. Run `scripts/dream.sh done`, also when nothing was approved, so the same
-   lines are not read again. It records the offsets and the dream date in
-   the gitignored state only, so a dream with nothing approved leaves no
-   tracked change.
+6. Run `scripts/dream.sh done --report <report> --applied <numbers>` (leave
+   out `--applied` when nothing was approved), so the same lines are not
+   read again. It records the offsets, the dream date and the signal counts
+   in the gitignored state only, so a dream with nothing approved leaves no
+   tracked change, and appends "## Outcome <date>" to the report: the
+   applied and declined numbers, the files named in the applied Change
+   lines, and the hygiene numbers at the digest against now. The next
+   digest's "Impact since the last dream" section starts from this record.
 7. Run the Taste pass below.
 
 ## Taste pass

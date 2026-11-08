@@ -76,6 +76,7 @@ AREAS = [
 BEGIN = "<!-- taste:begin - managed by scripts/dream.sh taste; edit the files in ~/.claude/taste -->"
 BEGIN_KEY = "<!-- taste:begin"
 END = "<!-- taste:end -->"
+KIND_ORDER = "POCDARTF"
 KINDS = ("Kinds: P stated preference, O own words in an answer, C correction, D rejected action and "
          "the next message, A picked option, R reaction (re: the reply), T taste topic, "
          "F memory note (model-written).")
@@ -576,15 +577,7 @@ def write_profile(c, before, after):
 
 # ---------------------------------------------------------------- impact and outcome
 
-STOP = {"about", "after", "again", "always", "never", "their", "there", "these", "those", "which",
-        "while", "would", "should", "could", "where", "every", "other", "being", "prefer", "instead",
-        "without", "using", "really", "think", "thing", "things", "something", "because", "before",
-        "still", "first", "owner"}
 VERB = {"add": "added", "revise": "revised", "remove": "removed"}
-
-
-def words(s):
-    return {w for w in re.findall(r"[a-z]{5,}", s.lower()) if w not in STOP}
 
 
 def change_text(h):
@@ -596,10 +589,6 @@ def kind_counts(entries):
     for _, e in entries:
         out[e["kind"]] = out.get(e["kind"], 0) + 1
     return out
-
-
-def fmt_counts(counts):
-    return ", ".join("%s %d" % (k, counts[k]) for k in "POCDARTF" if counts.get(k)) or "none"
 
 
 def snapshot(prof):
@@ -624,18 +613,18 @@ def impact_lines(state, ledger, prof, new):
     for t in sorted(again):
         out.append("%s seen again since applied: %s" % (t, ", ".join(again[t])))
     for t, area, i in sorted(profile_ids(prof)):
-        w = words(ID_LINE.match(prof[area][i]).group(2))
+        w = D.words(ID_LINE.match(prof[area][i]).group(2))
         hits = []
         for sid, e in new:
-            common = w & words(e["text"])
+            common = w & D.words(e["text"])
             if len(common) >= 2:
                 hits.append("%s (%s)" % (sid, " ".join(sorted(common))))
         if hits:
             out.append("%s shares words with %s" % (t, ", ".join(hits[:3])))
     out.append("trend, fresh signals by kind per pass:")
     for p in state.get("passes", [])[-10:]:
-        out.append("  %s: %s" % (p["date"][:10], fmt_counts(p["counts"])))
-    out.append("  this pass: %s" % fmt_counts(kind_counts(new)))
+        out.append("  %s: %s" % (p["date"][:10], D.fmt_counts(p["counts"], KIND_ORDER)))
+    out.append("  this pass: %s" % D.fmt_counts(kind_counts(new), KIND_ORDER))
     return out
 
 

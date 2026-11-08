@@ -148,23 +148,23 @@ Builder's calls (the owner checks these when approving):
 <!-- each maps to an executable test where possible; list test paths. A ticked
      line needs "-> <existing path>" or "-> judgment: <reason>"
      (scripts/tasklint.sh check) -->
-- [ ] Owner filter: human and legacy owner lines kept; peer, task notification, another session's brief, scheduled prompts and skill bodies dropped, in the taste digest and the project digest -> tests/template/test_taste.sh, tests/template/test_dream.sh
-- [ ] The taste digest reads every project folder and each extra `--projects-dir`, emits kinds P O C D A R T F with stable ids, project, session and `re:` context, merges duplicates across sessions and projects with counts, and keeps the priority order under `--max-bytes` -> tests/template/test_taste.sh
-- [ ] Pool: a signal the cap cut appears in the next digest; an older unused signal plus a new one from another session meet the two-session rule; shown, unused signals unseen for 180 days are pruned at `done` -> tests/template/test_taste.sh
-- [ ] Stop early: fewer than `--min-signals` never-shown signals, or under `--min-days` since the last pass, exits 3 with no digest and no model, keeping the new signals in the pool; `--force` skips the day rule -> tests/template/test_taste.sh
-- [ ] Once only: `done` commits offsets and pool; a second digest with no new lines finds no new signal; a partial last line is read on the next run -> tests/template/test_taste.sh
-- [ ] `apply` writes only the approved numbers (add, revise, remove), assigns unique global ids, and refuses unknown numbers, malformed proposals, evidence ids missing from the pool, and an inferred proposal whose signals come from one session -> tests/template/test_taste.sh
-- [ ] `apply` keeps the import block in CLAUDE.md and the profile block in Codex AGENTS.md current, creates them when missing, leaves every byte outside the markers unchanged, and a second identical run changes nothing -> tests/template/test_taste.sh
-- [ ] Caps: `check` and `apply` fail above 160 characters a line or 6000 bytes in total, naming the file and line -> tests/template/test_taste.sh
-- [ ] Safety: `apply` refuses a taste folder inside a git work tree; a state with a newer format version is refused with "update the template"; the tests write only under a temporary `TASTE_HOME` -> tests/template/test_taste.sh
-- [ ] Agent and Codex twin, procedure section, ADR 0010, check.sh required list, BLUEPRINT tree and BACKLOG rows are in place -> scripts/check.sh
+- [x] Owner filter: human and legacy owner lines kept; peer, task notification, another session's brief, scheduled prompts and skill bodies dropped, in the taste digest and the project digest -> tests/template/test_taste.sh, tests/template/test_dream.sh
+- [x] The taste digest reads every project folder and each extra `--projects-dir`, emits kinds P O C D A R T F with stable ids, project, session and `re:` context, merges duplicates across sessions and projects with counts, and keeps the priority order under `--max-bytes` -> tests/template/test_taste.sh
+- [x] Pool: a signal the cap cut appears in the next digest; an older unused signal plus a new one from another session meet the two-session rule; shown, unused signals unseen for 180 days are pruned at `done` -> tests/template/test_taste.sh
+- [x] Stop early: fewer than `--min-signals` never-shown signals, or under `--min-days` since the last pass, exits 3 with no digest and no model, keeping the new signals in the pool; `--force` skips the day rule -> tests/template/test_taste.sh
+- [x] Once only: `done` commits offsets and pool; a second digest with no new lines finds no new signal; a partial last line is read on the next run -> tests/template/test_taste.sh
+- [x] `apply` writes only the approved numbers (add, revise, remove), assigns unique global ids, and refuses unknown numbers, malformed proposals, evidence ids missing from the pool, and an inferred proposal whose signals come from one session -> tests/template/test_taste.sh
+- [x] `apply` keeps the import block in CLAUDE.md and the profile block in Codex AGENTS.md current, creates them when missing, leaves every byte outside the markers unchanged, and a second identical run changes nothing -> tests/template/test_taste.sh
+- [x] Caps: `check` and `apply` fail above 160 characters a line or 6000 bytes in total, naming the file and line -> tests/template/test_taste.sh
+- [x] Safety: `apply` refuses a taste folder inside a git work tree; a state with a newer format version is refused with "update the template"; the tests write only under a temporary `TASTE_HOME` -> tests/template/test_taste.sh
+- [x] Agent and Codex twin, procedure section, ADR 0010, check.sh required list, BLUEPRINT tree and BACKLOG rows are in place -> scripts/check.sh
 - [ ] No tracked file holds a profile line, a real quote or a private project name -> judgment: reviewer reads the diff
 - [ ] `./scripts/check.sh` green and the reviewer's PASS recorded below -> judgment: verify output and Review verdict
-- [ ] Taste outcome: `taste done --report` appends applied and declined numbers, the changes and files touched, and profile lines and bytes before and after -> tests/template/test_taste.sh
-- [ ] Taste impact: the next digest lists profile changes since the last pass, lines seen again, word-overlap candidates and a trend of fresh signals by kind per pass -> tests/template/test_taste.sh
-- [ ] Project outcome: `dream.sh done --report R --applied N...` appends applied and declined numbers, files named in the applied Change lines and hygiene numbers before and after -> tests/template/test_dream.sh
-- [ ] Project impact: the digest lists a trend of signal counts by kind per dream, approved lessons unused for more than 45 days by git date, and lessons whose words recur in new signals -> tests/template/test_dream.sh
-- [ ] First real run: a digest over every local project and a taste-dreamer report of numbered proposals, saved under `~/.claude/taste/.dream/reports/` and shown to the owner, with digest time, bytes read and agent tokens in the Progress log -> judgment: the owner reads the report
+- [x] Taste outcome: `taste done --report` appends applied and declined numbers, the changes and files touched, and profile lines and bytes before and after -> tests/template/test_taste.sh
+- [x] Taste impact: the next digest lists profile changes since the last pass, lines seen again, word-overlap candidates and a trend of fresh signals by kind per pass -> tests/template/test_taste.sh
+- [x] Project outcome: `dream.sh done --report R --applied N...` appends applied and declined numbers, files named in the applied Change lines and hygiene numbers before and after -> tests/template/test_dream.sh
+- [x] Project impact: the digest lists a trend of signal counts by kind per dream, approved lessons unused for more than 45 days by git date, and lessons whose words recur in new signals -> tests/template/test_dream.sh
+- [x] First real run: a digest over every local project and a taste-dreamer report of numbered proposals, saved under `~/.claude/taste/.dream/reports/` and shown to the owner, with digest time, bytes read and agent tokens in the Progress log -> judgment: the owner reads the report
 - [x] First real apply (owner approved this scope 2026-11-08): the owner's approved numbers written by `apply`, `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` blocks created, `taste check` OK, `taste done` run, and a fresh session shows the profile loaded -> judgment: command output and the fresh session's answer
 
 ## Plan
@@ -202,6 +202,10 @@ Builder's calls (the owner checks these when approving):
 - 2026-11-08 taste check reported a stale block for a user with no profile and their own CLAUDE.md; failing test first (124/125), fixed (125/125); `l` names renamed ahead of the move under scripts/dream/ruff.toml (E741)
 - 2026-11-08 scope addition relayed by the parent session: an end-of-dream outcome and impact report; the owner approved the design here; dream.py edits paused until fleet-sync-fixes moves it to scripts/dream/
 - 2026-11-08 taste outcome and impact: 15 new checks failed first (126/141), pass after the change (141/141); agent and procedure point at the Impact section; the project-dream half waits for the dream.py move
+- 2026-11-08 merged task/fleet-sync-fixes 9f9bd28 (dream.py now scripts/dream/dream.py); taste.py moved beside it under scripts/dream/ruff.toml; ruff 0.16.10 check clean; test_taste 141/141, test_dream 126/126 after the merge
+- 2026-11-08 project outcome and impact: 17 new checks failed first (136/153), pass after the change (153/153); words, STOP and fmt_counts shared from dream.py, taste.py reuses them (141/141); mutation check: plain messages as mechanize evidence -> 1 fail, trend dropped on an exit-3 digest -> 1, used lessons as retire candidates -> 1, declined Change files listed -> 1
+- 2026-11-08 real project digest (scratch state): 258573 lines in 3.1 s, 102 signals; impact lists 5 lessons sharing words with new failures, no retire candidate (no approved used: 0 line older than 45 days)
+- 2026-11-08 ./scripts/check.sh exit 0: selftest 22/22, template self-test OK (146 required files, ruff 0.16.10 contract, blueprint parity)
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
