@@ -121,7 +121,7 @@ The dreamer definitions (.claude/agents/dreamer.md and .codex/agents/dreamer.tom
 - [ ] A12 session-context prints the register summary line and the unwired-hook warning, and exits 0 on a malformed register and with registers present but no Python -> tests/template/test_session_context.sh
 - [ ] A13 .claude/settings.json wires the hook for UserPromptSubmit with timeout 5; docs/rules/models.md (still at most 40 lines) names the Codex capture gap with a VERIFY date after checking current Codex hook support -> tests/template/test_check_always.sh
 - [ ] A14 docs/procedures/preferences.md, dream.md, upstream.md step 9, BLUEPRINT, README and the rules index describe the loop -> judgment: documentation completeness, read in review
-- [ ] A15 real data: the hook run on one real prompt and transcript of this session logs the right kind and files; only the kind and file list go in the Progress log -> judgment: real-data check, kernel rules 3 and 14
+- [x] A15 real data: the hook run on one real prompt and transcript of this session logs the right kind and files; only the kind and file list go in the Progress log -> judgment: real-data check, kernel rules 3 and 14
 - [ ] A16 ./scripts/check.sh exits 0 on the committed tree -> scripts/check.sh
 
 ## Plan
@@ -130,8 +130,8 @@ The dreamer definitions (.claude/agents/dreamer.md and .codex/agents/dreamer.tom
 | N1 | - | scripts/dream/feedback.py, scripts/feedback-log.sh, tests/template/test_feedback.sh, .claude/settings.json, docs/rules/models.md | standard | done |
 | N2 | - | scripts/preferences.sh, scripts/dream/preferences.py, docs/preferences/README.md, tests/template/test_preferences.sh, scripts/template-sync.sh, tests/template/test_template_sync.sh | standard | done |
 | N3 | N1 | scripts/dream/dream.py, scripts/dream.sh, tests/template/test_dream.sh, .claude/agents/dreamer.md, .codex/agents/dreamer.toml, docs/procedures/dream.md | strong | done |
-| N4 | N1, N2, N3 | scripts/check.sh, tests/template/fixtures/check.sh, tests/template/test_check_always.sh, scripts/new-task.sh, tests/template/test_new_task.sh, scripts/session-context.sh, tests/template/test_session_context.sh, docs/procedures/preferences.md, docs/procedures/upstream.md, docs/BLUEPRINT.md, README.md, AGENTS.md | standard | doing |
-| N5 | N4 | .work/TASK.md | reviewer | todo |
+| N4 | N1, N2, N3 | scripts/check.sh, tests/template/fixtures/check.sh, tests/template/test_check_always.sh, scripts/new-task.sh, tests/template/test_new_task.sh, scripts/session-context.sh, tests/template/test_session_context.sh, docs/procedures/preferences.md, docs/procedures/upstream.md, docs/BLUEPRINT.md, README.md, AGENTS.md | standard | done |
+| N5 | N4 | .work/TASK.md | reviewer | doing |
 
 ## Plan verdict
 PASS. Reviewer plan review, round 2, 2026-11-08: all nine round-1 blocking findings are resolved, each with a criterion. Applied after the verdict:
@@ -143,6 +143,12 @@ Round 1: FAIL with nine blocking findings: B1 latency, B2 classifier order, B3 d
 
 ## Progress log
 - 2026-11-08 branch task/feedback-loop from task/dream-scorecard d31a3a6 (the scorecard is not merged yet) in worktree C:/dev/work/New-Project-feedback
+- 2026-11-08 N1: test_feedback.sh 92 passed, 0 failed
+- 2026-11-08 N2: test_preferences.sh 47 passed, 0 failed (after the shared register reader moved into dream.py; the escaped-pipe case was added with the move and was not run against the old reader)
+- 2026-11-08 N3: test_dream.sh 279 passed, 0 failed
+- 2026-11-09 N4: test_new_task.sh fail-first 76 passed, 5 failed, then 81 passed, 0 failed; test_session_context.sh 64 passed, 0 failed (no clean fail-first run); test_blueprint_parity.sh 11 passed; test_template_sync.sh 155 passed; test_check_always.sh did not finish on the loaded machine (111 ok, 0 FAIL before the nested case), covered by the full check.sh below
+- 2026-11-09 commit 3076532; merged task/dream-scorecard 9724587 (test_dream.sh conflict, both blocks kept) and origin/main af63c7a; test_dream.sh 287 passed, 0 failed on the merge
+- 2026-11-09 A15 real data: the hook on this session's transcript (27 MB, last 512 KB read) with a correction and a deferral prompt logged kind correction and deferral; files [] while the tail held only scratchpad edits (outside the repo, correctly dropped), then ['.work/TASK.md'] after a real Edit; each run about 1 s; the two test lines were moved out of the real log so no dream reads them
 
 ## Review verdict
 
