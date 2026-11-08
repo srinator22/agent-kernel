@@ -25,7 +25,11 @@ parameters.toml tables read
       name = "MAIN_IN"                  # required
       i_a = 20.0                        # design current, A (a number, or
                                         # "pending": a WARN, net not sized)
-      layer = "outer"                   # "outer" (default) or "inner"
+      layer = "outer"                   # exactly "outer" (default) or "inner";
+                                        # any other value, a case or spacing
+                                        # variant included, is an error
+                                        # (exit 2), checked on every net,
+                                        # pending ones too
       temp_rise_c = 20                  # optional per-net override
       netclass = "Power"                # optional, for class widths
       i_source = "item:loads:fan:i_a"   # optional: the current this net must
@@ -70,7 +74,9 @@ Model
 
 Outputs
     A table of nets, then one line per finding. Exit 0 no FAIL, 1 at least
-    one FAIL, 2 the tool could not run.
+    one FAIL, 2 the tool could not run (a [[traces.nets]] layer that is not
+    "outer" or "inner" included). The layer of an [impedance] row is a
+    different field, a [stackup] layer name, checked against layer_names.
 
 Dependencies
     Python 3.11+ standard library only.
@@ -106,6 +112,8 @@ POUR_THRESHOLD_MM = 6.0   # wider than this, use a pour or plane
 IPC_NOTE = "confirm against IPC-2152 before layout freeze"
 CLASS_STEP_DEFAULT_MM = 0.1
 MODEL_BAND_DEFAULT_PCT = 8.0
+LAYERS = ("outer", "inner")   # the only [[traces.nets]] layer values; no synonyms
+LAYER_DEFAULT = "outer"
 
 
 class ToolError(Exception):
@@ -198,7 +206,19 @@ def _traces(params: dict) -> dict:
             raise ToolError(f"[traces] {key} must be a positive number")
     if not isinstance(traces.get("nets"), list):
         raise ToolError("[traces] needs a [[traces.nets]] array")
+    for net in traces["nets"]:
+        net_layer(net)
     return traces
+
+
+def net_layer(net: dict) -> str:
+    """The net's layer, "outer" when omitted. Anything but exactly "outer" or "inner" is an error: a misspelling
+    once fell through to the outer coefficient, which is twice the inner one, and understated an inner width."""
+    layer = net.get("layer", LAYER_DEFAULT) if isinstance(net, dict) else None
+    if layer not in LAYERS:
+        name = net.get("name") if isinstance(net, dict) else net
+        raise ToolError(f"net {name}: layer {layer!r} is not {' or '.join(repr(v) for v in LAYERS)}")
+    return layer
 
 
 # ---------------------------------------------------------------- design currents
@@ -240,7 +260,7 @@ def compute_nets(params: dict) -> list[NetResult]:
     for net in traces["nets"]:
         if not is_number(net.get("i_a")):
             continue
-        internal = net.get("layer", "outer") == "inner"
+        internal = net_layer(net) == "inner"
         oz = traces["copper_oz_inner" if internal else "copper_oz_outer"]
         finished = inner_mm if internal else outer_mm
         thickness = finished if finished is not None else nominal_thickness_mm(oz)

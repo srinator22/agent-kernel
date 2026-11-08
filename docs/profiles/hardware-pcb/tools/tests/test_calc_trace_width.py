@@ -183,6 +183,27 @@ class NetTests(unittest.TestCase):
         wrong = STACK.replace("finished_thickness_sum_mm = 1.4004", "finished_thickness_sum_mm = 1.6")
         self.assertIn("finished_thickness_sum_mm says 1.6", joined(of_level(ct.run(params(wrong)), "FAIL")))
 
+    def test_layer_outside_the_enum_is_an_error_not_an_outer_net(self):
+        # "internal" once took the outer coefficient (k 0.048, twice the inner one) and the outer copper,
+        # understating the width of an inner net; every spelling but outer and inner is refused.
+        for value in ('"internal"', '"Inner"', '"outer "', '""', "1"):
+            bad = tomllib.loads(BASE.replace('layer = "inner"', f"layer = {value}"))
+            with self.assertRaises(ct.ToolError, msg=value) as raised:
+                ct.run(bad)
+            self.assertIn("net CORE: layer", str(raised.exception))
+            self.assertIn("'outer' or 'inner'", str(raised.exception))
+
+    def test_layer_is_checked_on_a_pending_net_too(self):
+        bad = tomllib.loads(BASE.replace('i_a = "pending"', 'i_a = "pending"\nlayer = "internal"'))
+        with self.assertRaises(ct.ToolError):
+            ct.run(bad)
+
+    def test_outer_spelt_out_and_omitted_layer_are_the_same(self):
+        spelt = tomllib.loads(BASE.replace('name = "MAIN"\n', 'name = "MAIN"\nlayer = "outer"\n'))
+        rows = {r.name: r for r in ct.compute_nets(spelt)}
+        self.assertEqual(rows["MAIN"].layer, "outer")
+        self.assertAlmostEqual(rows["MAIN"].width_mm, {r.name: r for r in ct.compute_nets(params())}["MAIN"].width_mm)
+
     def test_missing_traces_table_or_bad_copper_is_an_error(self):
         with self.assertRaises(ct.ToolError):
             ct.run({})
@@ -246,6 +267,12 @@ class CommandLineTests(TempDirTestCase):
         low = self.write("low.toml", BASE.replace("i_a = 6.0", "i_a = 1.0"))
         self.assertEqual(run_main(ct, ["--params", str(low)])[0], 1)
         self.assertEqual(run_main(ct, ["--params", str(self.root / "none.toml")])[0], 2)
+
+    def test_misspelt_layer_exits_2(self):
+        path = self.write("typo.toml", BASE.replace('layer = "inner"', 'layer = "internal"'))
+        code, out = run_main(ct, ["--params", str(path)])
+        self.assertEqual(code, 2, out)
+        self.assertIn("could not run: net CORE: layer 'internal'", out)
 
     def test_kicad_project_file(self):
         path = self.write("parameters.toml", BASE)

@@ -114,7 +114,9 @@ push_filters() {
           if (v == "") { inon = 1; ci = -1; next }
           if (v ~ /^\{/) { print "UNKNOWN\ton: is a flow mapping"; next }
           gsub(/[\[\]]/, "", v)
-          print (("," v ",") ~ /,[ \t]*push[ \t]*,/) ? "TRIGGER\tpush" : "TRIGGER\tnone"
+          n = split(v, ev, ","); hit = 0
+          for (i = 1; i <= n; i++) if (unq(ev[i]) == "push") hit = 1
+          print hit ? "TRIGGER\tpush" : "TRIGGER\tnone"
           trig = 1
         }
         next

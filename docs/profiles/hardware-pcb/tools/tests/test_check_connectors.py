@@ -1,10 +1,14 @@
+import tempfile
 import tomllib
 import unittest
+from pathlib import Path
 
 from support import TempDirTestCase, joined, load_tool, of_level, run_main
 
 cc = load_tool("check_connectors")
 
+# 12V and 5V are named by the hazard table but used only by ports that single tests add, so the table
+# declares them; every other class it names must be a pin class of some port.
 BASE = """
 [connector_matability]
 round4 = ["round4"]
@@ -15,6 +19,7 @@ usb = ["usb"]
 damaging_if_socket_drives = ["24V"]
 onto_plug_classes = ["5V", "SIG", "GND"]
 damaging_pairs = [["12V", "5V"]]
+declared_classes = ["12V", "5V"]
 
 [derating]
 current_continuous_factor = 0.7
@@ -106,6 +111,121 @@ class CrossPlugTests(unittest.TestCase):
 
     def test_duplicate_port_id_fails(self):
         self.assertIn("port id P1 appears more than once", joined(of_level(run(port("P1", "round4", {1: "SIG"})), "FAIL")))
+
+
+HAZARD = """
+[connector_hazard]
+damaging_if_socket_drives = ["24V"]
+onto_plug_classes = ["5V", "SIG", "GND"]
+damaging_pairs = [["12V", "5V"]]
+declared_classes = ["12V", "5V"]
+"""
+assert HAZARD in BASE, "HAZARD must be the exact [connector_hazard] text of BASE"
+
+# A signal plug that mates with the 24 V socket P1: pin 1 puts 24 V onto SIG.
+SIGNAL_PLUG = port("P3", "round4", {1: "SIG", 2: "GND"}, contact_rating_a=5.0)
+
+# The review probe: a hazard table whose only key fault is the misspelt class value "24v" (every other
+# class it names is a port pin class, so it needs no declared_classes).
+PROBE_BASE = BASE.replace(HAZARD, """
+[connector_hazard]
+damaging_if_socket_drives = ["24v"]
+onto_plug_classes = ["SIG", "GND"]
+""")
+
+
+class HazardTableTests(unittest.TestCase):
+    """The hazard table is required input once a pairing is evaluated; it is never silently empty."""
+
+    def test_missing_hazard_table_fails_instead_of_reporting_benign(self):
+        findings = run(SIGNAL_PLUG, base=BASE.replace(HAZARD, "\n"))
+        fail = joined(of_level(findings, "FAIL"))
+        self.assertIn("connectors.hazard: [connector_hazard] is missing", fail)
+        self.assertIn("plug P3 into socket P1: UNKNOWN", fail)
+        self.assertNotIn("benign", joined(findings))
+
+    def test_misspelt_hazard_table_name_fails(self):
+        findings = run(SIGNAL_PLUG, base=BASE.replace("[connector_hazard]", "[connector_hazards]"))
+        self.assertIn("[connector_hazard] is missing", joined(of_level(findings, "FAIL")))
+        self.assertNotIn("benign", joined(findings))
+
+    def test_empty_hazard_class_lists_fail(self):
+        empty = BASE.replace('damaging_if_socket_drives = ["24V"]', "damaging_if_socket_drives = []")
+        findings = run(SIGNAL_PLUG, base=empty)
+        fail = joined(of_level(findings, "FAIL"))
+        self.assertIn("damaging_if_socket_drives must be a non-empty list of pin classes", fail)
+        self.assertNotIn("benign", joined(findings))
+        no_lists = BASE.replace(HAZARD, "\n[connector_hazard]\n")
+        self.assertIn("onto_plug_classes must be a non-empty list", joined(of_level(run(SIGNAL_PLUG, base=no_lists), "FAIL")))
+
+    def test_unknown_hazard_key_is_reported(self):
+        misspelt = BASE.replace("damaging_pairs = ", "damaging_pair = ")
+        fail = joined(of_level(run(base=misspelt), "FAIL"))
+        self.assertIn("[connector_hazard] has unknown key(s) damaging_pair", fail)
+
+    def test_a_damaging_pin_is_still_reported_when_the_table_has_a_problem(self):
+        misspelt = BASE.replace("damaging_pairs = ", "damaging_pair = ")
+        fail = joined(of_level(run(SIGNAL_PLUG, base=misspelt), "FAIL"))
+        self.assertIn("plug P3 into socket P1: DAMAGING, pin 1: socket 24V onto plug SIG", fail)
+        self.assertIn("plug P1 into socket P3: UNKNOWN", fail)
+
+    def test_misspelt_hazard_class_value_fails_instead_of_reporting_benign(self):
+        # The probe: "24v" matches no pin, so the 24V socket onto the SIG plug read as benign, exit 0.
+        findings = run(SIGNAL_PLUG, base=PROBE_BASE)
+        fail = joined(of_level(findings, "FAIL"))
+        self.assertIn("connectors.hazard: [connector_hazard] damaging_if_socket_drives names pin class '24v', "
+                      "which no port pin uses and declared_classes does not declare (closest known: '24V')", fail)
+        self.assertIn("plug P3 into socket P1: UNKNOWN", fail)
+        self.assertNotIn("benign", joined(findings))
+
+    def test_misspelt_class_in_damaging_pairs_fails(self):
+        # Both pair classes are used by ports here, so the table needs no declared_classes.
+        extra = (port("P3", "round4", {1: "12V", 2: "GND"}, contact_rating_a=5.0)
+                 + port("P4", "round4", {1: "5V", 2: "GND"}, contact_rating_a=5.0))
+        misspelt = (BASE.replace('declared_classes = ["12V", "5V"]\n', "")
+                    .replace('damaging_pairs = [["12V", "5V"]]', 'damaging_pairs = [["12 V", "5V"]]'))
+        findings = run(extra, base=misspelt)
+        fail = joined(of_level(findings, "FAIL"))
+        self.assertIn("damaging_pairs names pin class '12 V'", fail)
+        self.assertIn("(closest known: '12V'", fail)
+        self.assertIn("plug P4 into socket P3: UNKNOWN", fail)
+        self.assertNotIn("benign", joined(findings))
+
+    def test_unused_hazard_class_fails_unless_declared_even_without_a_mating_pair(self):
+        undeclared = BASE.replace('declared_classes = ["12V", "5V"]\n', "")
+        fail = joined(of_level(run(base=undeclared), "FAIL"))
+        self.assertIn("onto_plug_classes names pin class '5V'", fail)
+        self.assertIn("damaging_pairs names pin class '12V'", fail)
+        self.assertEqual(of_level(run(), "FAIL"), [])  # declared, so not flagged
+        # A class a retired port still uses is known too.
+        retired = port("P9", "usb", {1: "12V", 2: "5V"}, retired="history")
+        self.assertEqual(of_level(run(retired, base=undeclared), "FAIL"), [])
+
+    def test_malformed_declared_classes_makes_pairings_unknown(self):
+        bad = BASE.replace('declared_classes = ["12V", "5V"]', 'declared_classes = "12V"')
+        fail = joined(of_level(run(SIGNAL_PLUG, base=bad), "FAIL"))
+        self.assertIn("declared_classes must be a list of pin classes", fail)
+        self.assertIn("plug P1 into socket P3: UNKNOWN", fail)
+
+    def test_command_line_fails_a_misspelt_hazard_class(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "parameters.toml"
+            path.write_text(PROBE_BASE + SIGNAL_PLUG, encoding="utf-8")
+            code, out = run_main(cc, ["--params", str(path)])
+        self.assertEqual(code, 1, out)
+        self.assertIn("'24v'", out)
+        self.assertNotIn("benign", out)
+
+    def test_no_mating_pair_needs_no_hazard_table(self):
+        self.assertEqual(of_level(run(base=BASE.replace(HAZARD, "\n")), "FAIL"), [])
+
+    def test_command_line_fails_a_24v_to_signal_mating_without_a_hazard_table(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "parameters.toml"
+            path.write_text(BASE.replace(HAZARD, "\n") + SIGNAL_PLUG, encoding="utf-8")
+            code, out = run_main(cc, ["--params", str(path)])
+        self.assertEqual(code, 1, out)
+        self.assertIn("UNKNOWN", out)
 
 
 class ContactLoadingTests(unittest.TestCase):

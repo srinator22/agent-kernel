@@ -155,7 +155,25 @@ one that proved unhelpful is archived with its reason.
 | check-project-readmes | tool | Requires a README with the required headings in every project folder | a CAD add-in project |
 | product-render | skill | Drives the staged CAD-to-film pipeline with four hold points and verified output | a product film project |
 | product-render | procedure | Stages 0 to 9, stage record, Blender and GPU gates, lessons map; uses the render roster roles (ADR 0007) | a product film project |
-| render tools | tools | The 19 render tools above, with tests | a product film project (ports where marked in each header; the rest new) |
+| render_common | tool | Shared render module: PNG codec, luma, frame names, path and cloud-folder guards | new (product-render) |
+| blender_run | tool | Runs a script in the pinned portable Blender headless and fails on any error or version mismatch | new (product-render) |
+| render_chunks | tool | Chunked, resumable frame rendering with a STATE file and ETA | a product film project |
+| frame_audit | tool | Expected vs present frames, blank frames, fireflies, size anomalies, duplicates | new (product-render) |
+| render_sheets | tool | Contact sheets, zoom crops and A/B compare sheets for reviewers | new (product-render) |
+| render_estimate | tool | Local render hours from measured s/frame; cloud cost only from a dated price table | new (product-render) |
+| render_bundle | tool | Delivery folder per version with sources, records and a verified sha256 manifest | new (product-render) |
+| encode_verify | tool | MP4 checks by a pure-Python box parser, with an ffprobe cross-check | new (product-render) |
+| render_encode | tool | (Blender) Frames to MP4 through the VSE with the overlay track | a product film project |
+| blender_compat | tool | (Blender) Shims for 4.x to 5.x API breaks and GPU pinning | a product film project |
+| blender_extract | tool | (Blender) Writes the render-extract/1 JSON the checkers read | new (product-render) |
+| camera_path | tool | Monotone camera path through waypoints; finds overshoot and undeclared stops | a product film project |
+| motion_check | tool | Camera stops outside holds, acceleration spikes, overshoot, label side flips | a product film project |
+| scene_lint | tool | Scene settings against a named preset, units, textures, lights, hidden keyed objects | new (product-render) |
+| color_check | tool | Bit depth, unexpected alpha, clipped or crushed channels, exposure pops | new (product-render) |
+| flicker_metric | tool | Temporal instability per region in near-still windows; seed and denoiser A/B | new (product-render) |
+| sim_validate | tool | Liquid volume against the poured target, leaks, gains, cache hash | new (product-render) |
+| render_overlay | tool | Label track with side consistency, safe area, overlap and title hold | a product film project |
+| fit_check | tool | Box-level collisions, clearances and scale checks at every keyframe state | new (product-render) |
 | product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
 
 ## Considered and not ported

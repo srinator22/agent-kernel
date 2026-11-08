@@ -186,6 +186,19 @@ git add -A && git commit -q -m json
 run ./scripts/ci-watch.sh --plan
 assert_contains "*.jsx? does not match page.json" "$W/js.yml not expected: no changed file matches its paths filter"
 
+# ---- quoted events in an inline list or scalar ----
+put $W/quoted.yml 'on: ["push", pull_request]' "jobs: {}"
+put $W/scalar.yml "on: 'push'" "jobs: {}"
+put $W/prquoted.yml "on: ['pull_request', \"workflow_dispatch\"]" "jobs: {}"
+git add -A && git commit -q -m quoted-events
+run ./scripts/ci-watch.sh --plan
+assert_contains "quoted non-push events are not a push trigger" "$W/prquoted.yml not expected: no push trigger"
+assert_not_contains "a quoted push in an inline list is not skipped" "$W/quoted.yml not expected"
+assert_not_contains "a quoted push scalar is not skipped" "$W/scalar.yml not expected"
+OUT="$(printf '%s\n' "$OUT" | grep 'expected workflows (from')"
+assert_contains "a quoted push in an inline list is expected" " $W/quoted.yml"
+assert_contains "a quoted push scalar is expected" " $W/scalar.yml"
+
 # ---- "nothing to watch" exits 0 only after a confident derivation ----
 t_cleanup
 make_fixture
