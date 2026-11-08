@@ -49,7 +49,7 @@ first.
 |---|---|---|---|---|
 | N1 | - | tests/template/test_test_files.sh, tests/template/test_*.sh, tests/template/lib.sh | advisor | done |
 | N2 | N1 | tests/template/test_taste.sh | advisor | done |
-| N3 | - | scripts/lessons.sh, scripts/template-sync.sh, scripts/check.sh, tests/template/test_lessons.sh, tests/template/test_template_sync.sh, AGENTS.md, .kernel.hash, docs/decisions/0012-*.md | advisor | done |
+| N3 | N1 | scripts/lessons.sh, scripts/template-sync.sh, scripts/check.sh, tests/template/test_lessons.sh, tests/template/test_template_sync.sh, AGENTS.md, .kernel.hash, docs/decisions/0012-*.md | advisor | done |
 | N4 | N1, N2, N3 | .work/TASK.md, BACKLOG.md | reviewer | todo |
 
 ## Plan verdict

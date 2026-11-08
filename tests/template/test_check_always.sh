@@ -361,6 +361,13 @@ else
   echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
   ./scripts/kernel-hash.sh --update >/dev/null
   touch .start-done
+  # Keep the template's index modes: where git does not track file modes
+  # (core.fileMode false, the Windows default) a fresh add records 100644 and
+  # the copy's test_test_files.sh would see every test as not executable.
+  git add -A >/dev/null 2>&1
+  while IFS= read -r -d '' p; do
+    [[ -e "$p" ]] && git update-index --chmod=+x -- "$p" >/dev/null 2>&1
+  done < <(cd "$T_ROOT" && git ls-files -s -z | sed -z -n 's/^100755 [0-9a-f]* [0-9]*\t//p')
   commit_fixture
   run ./scripts/check.sh --quick
   assert_rc "a started project passes check.sh with tests/template kept" 0
