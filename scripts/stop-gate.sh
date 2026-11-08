@@ -9,7 +9,10 @@
 #      Stop hook) -> allow, so a red state that is intended (a failing test
 #      written first, a question for the human) never loops.
 #   2. No live task (.work/TASK.md missing or still the pristine template with
-#      {{title}}) -> allow.
+#      {{title}}): the work is done. When scripts/dream.sh says a dream is
+#      due and records the offer ("due --offer", at most once a day for the
+#      same state), block once so Claude asks the human whether to start
+#      dreaming (docs/procedures/dream.md); otherwise allow.
 #   3. Fast task-state checks on every stop: scripts/taskgraph.sh check and
 #      scripts/tasklint.sh check (each skipped when the script is absent).
 #      Any failure -> block.
@@ -47,8 +50,21 @@ payload="$(cat)"
 if [[ "$payload" =~ \"stop_hook_active\"[[:space:]]*:[[:space:]]*true ]]; then
   exit 0
 fi
-[[ -f "$TASK" ]] || exit 0
-grep -q '{{title}}' "$TASK" && exit 0
+# No live task: offer a dream when one is due, then allow.
+offer_dream() {
+  local msg
+  [[ -f scripts/dream.sh ]] || exit 0
+  msg="$(bash scripts/dream.sh due --offer 2>/dev/null)" || exit 0
+  msg="${msg#dream: due (}"
+  msg="${msg%)}"
+  {
+    echo "stop-gate: work is done and a dream is due (${msg})."
+    echo "Ask the user: \"Start dreaming?\" (docs/procedures/dream.md). If they decline, stop; it is not offered again today."
+  } >&2
+  exit 2
+}
+[[ -f "$TASK" ]] || offer_dream
+grep -q '{{title}}' "$TASK" && offer_dream
 
 out=""
 failed=0

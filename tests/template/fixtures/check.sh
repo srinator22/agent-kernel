@@ -231,6 +231,9 @@ if [[ ! -f .start-done ]]; then
     scripts/template-release.sh scripts/fleet.sh
     .claude/skills/template-update/SKILL.md .agents/skills/template-update/SKILL.md
     tests/template/test_template_release.sh tests/template/test_fleet.sh
+    scripts/dream.sh scripts/dream.py tests/template/test_dream.sh docs/procedures/dream.md
+    .claude/agents/dreamer.md .codex/agents/dreamer.toml
+    .claude/skills/dream/SKILL.md .agents/skills/dream/SKILL.md
     scripts/quickgate.sh scripts/selftest.sh
     tests/template/lib.sh tests/template/test_kernel_hash.sh
     tests/template/test_new_task.sh tests/template/test_lessons.sh

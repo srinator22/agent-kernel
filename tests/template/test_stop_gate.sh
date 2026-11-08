@@ -119,6 +119,42 @@ assert_eq "an unwired lane is not run" "$before" "$(qg_runs)"
 rm scripts/quickgate.sh
 stop
 assert_rc "no quickgate.sh at all: allow" 0
+
+# ---- no live task: offer a dream once when one is due ----
+# A fake dream.sh: "due --offer" succeeds once (it records the offer), then
+# reports the offer as already made, as the real one does within a day.
+cat > scripts/dream.sh <<'DS'
+#!/usr/bin/env bash
+case "$*" in
+  *--offer*)
+    if [[ "${DREAM_DUE:-1}" != 1 || -f .work/jobs/offered ]]; then exit 1; fi
+    mkdir -p .work/jobs && touch .work/jobs/offered
+    echo "dream: due (2 sessions with new activity, 1 task retros since the last dream)"; exit 0 ;;
+esac
+exit 1
+DS
+task "- [ ] works -> src.txt" standard
+stop
+assert_rc "a live task never triggers the dream offer" 0
+assert_no_file "the offer was not even asked for" .work/jobs/offered
+echo "# Task: {{title}}" > .work/TASK.md
+DREAM_DUE=0 stop
+assert_rc "no task and no dream due: allow" 0
+stop
+assert_rc "no task and a dream due: block once" 2
+assert_contains "the block says a dream is due" "work is done and a dream is due (2 sessions with new activity, 1 task retros since the last dream)"
+assert_contains "the block asks the user" "Start dreaming?"
+stop
+assert_rc "the same state is not offered twice" 0
+rm -f .work/jobs/offered
+stop '{"hook_event_name":"Stop","stop_hook_active":true}'
+assert_rc "after one continuation the hook never blocks" 0
+rm -f .work/TASK.md
+stop
+assert_rc "no TASK.md at all and a dream due: block once" 2
+rm scripts/dream.sh
+stop
+assert_rc "no dream.sh: allow" 0
 t_cleanup
 
 # Wiring: the Stop hook runs this script with a timeout long enough for the gate.

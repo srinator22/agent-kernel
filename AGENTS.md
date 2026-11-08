@@ -60,6 +60,7 @@ These rules govern process. Project truth lives in the Project decisions section
 - Hunting defects proactively; defect memory -> docs/procedures/bughunt.md, docs/DEFECT_MEMORY.md
 - Tests from day one, quarantine, oracle first -> docs/procedures/tests.md
 - Lessons back to the template; staying in sync -> docs/procedures/upstream.md
+- Consolidating memory against session transcripts (dreaming) -> docs/procedures/dream.md
 
 ## Project decisions
 

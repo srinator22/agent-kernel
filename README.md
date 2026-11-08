@@ -74,6 +74,10 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
   goes through a branch and merges only after the gauntlet is green on CI.
 - At milestones run `docs/procedures/bughunt.md`; at the end of every task
   run `docs/procedures/retro.md`; run `docs/procedures/maintain.md` monthly.
+- When a session's work is done and a dream is due, Claude asks whether to
+  start dreaming (`/dream`, `docs/procedures/dream.md`): a script reduces the
+  session transcripts since the last dream to their signal, one agent checks
+  the memory against it, and you approve numbered proposals.
 - Tags: the template is tagged `template-vX.Y.Z` by
   `scripts/template-release.sh`; a project built from it is tagged
   `vX.Y.Z`. Projects sync to the latest `template-v` tag.
