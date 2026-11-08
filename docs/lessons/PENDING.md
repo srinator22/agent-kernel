@@ -198,3 +198,43 @@ Entry format (all four fields required):
 - what was added: none.
 - retire-when: Project decisions records a standing override for merging
   green, reviewed PRs.
+
+### A stopped background command can keep writing
+
+- what happened: a fail-first run of test_check_always.sh in the live tree
+  was stopped with the harness's task stop, but its child processes kept
+  running and appended to the same log, so the log mixed two runs (2026-11-08,
+  fleet-sync-fixes). Three processes were killed by PID and the run was
+  repeated on a frozen copy of the pre-fix scripts with a separate log.
+- what check should have caught it: none, this note is the guard: run
+  fail-first evidence on a frozen copy with its own log, and after a stop,
+  check that no child process is still running before reusing a log.
+- what was added: none.
+- retire-when: stopping a background task in the harness ends its whole
+  process tree.
+
+### tasklint reads only the first line of a criterion
+
+- what happened: a ticked criterion written over several lines, with its
+  "->" evidence on the last line, failed tasklint as having no evidence; a
+  bare file name inside a parenthesis on the evidence line ("check.sh") was
+  read as an evidence path that does not exist (2026-11-08,
+  fleet-sync-fixes). Both were rewritten by hand.
+- what check should have caught it: tasklint names an indented continuation
+  line under a criterion, and the evidence paths it could not resolve, with
+  the rule that evidence sits on the criterion's first line.
+- what was added: none.
+- retire-when: tasklint reads a criterion's continuation lines or reports
+  them as such.
+
+### A long literal command fails in the shell tool
+
+- what happened: one rm -rf with 319 literal paths (about 10 KB) failed with
+  "unexpected EOF while looking for matching quote" instead of running; the
+  same paths in four commands of 80 ran (2026-11-08, fleet-sync-fixes). The
+  destructive guard requires literal paths, so batching is the only form.
+- what check should have caught it: none, this note is the guard: keep a
+  literal-path command under about 4 KB and batch the rest.
+- what was added: none.
+- retire-when: the shell tool runs a long command or reports its length
+  limit.

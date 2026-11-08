@@ -1,4 +1,4 @@
-# 0010 - Personal taste profile
+# 0011 - Personal taste profile
 
 Date: 2026-11-08
 Status: accepted

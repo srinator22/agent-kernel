@@ -92,7 +92,7 @@ Builder's calls (the owner checks these when approving):
     are general: no project names, no quotes.
 11. Procedure: a Taste pass section in `docs/procedures/dream.md`, run after
     the project pass or alone with `/dream taste`. Reports stay in
-    `~/.claude/taste/.dream/reports/`. ADR 0010 records the decision.
+    `~/.claude/taste/.dream/reports/`. ADR 0011 records the decision.
 12. Outcome and impact (owner approved 2026-11-08, relayed by the parent
     session and confirmed here). Outcome: `dream.sh done --report <file>
     --applied <numbers>` and `dream.sh taste done --report <file>` (applied
@@ -158,7 +158,7 @@ Builder's calls (the owner checks these when approving):
 - [x] `apply` keeps the import block in CLAUDE.md and the profile block in Codex AGENTS.md current, creates them when missing, leaves every byte outside the markers unchanged, and a second identical run changes nothing -> tests/template/test_taste.sh
 - [x] Caps: `check` and `apply` fail above 160 characters a line or 6000 bytes in total, naming the file and line -> tests/template/test_taste.sh
 - [x] Safety: `apply` refuses a taste folder inside a git work tree; a state with a newer format version is refused with "update the template"; the tests write only under a temporary `TASTE_HOME` -> tests/template/test_taste.sh
-- [x] Agent and Codex twin, procedure section, ADR 0010, check.sh required list, BLUEPRINT tree and BACKLOG rows are in place -> scripts/check.sh
+- [x] Agent and Codex twin, procedure section, ADR 0011, check.sh required list, BLUEPRINT tree and BACKLOG rows are in place -> scripts/check.sh
 - [x] No tracked file holds a profile line, a real quote or a private project name -> judgment: reviewer reads the diff
 - [x] `./scripts/check.sh` green and the reviewer's PASS recorded below -> judgment: verify output and Review verdict
 - [x] Taste outcome: `taste done --report` appends applied and declined numbers, the changes and files touched, and profile lines and bytes before and after -> tests/template/test_taste.sh
@@ -176,7 +176,7 @@ Builder's calls (the owner checks these when approving):
 |---|---|---|---|---|
 | N1 | - | tests/template/test_taste.sh, tests/template/test_dream.sh | advisor | done |
 | N2 | N1 | scripts/dream/taste.py, scripts/dream/dream.py, scripts/dream.sh | advisor | done |
-| N3 | - | .claude/agents/taste-dreamer.md, .codex/agents/taste-dreamer.toml, docs/procedures/dream.md, docs/decisions/0010-personal-taste-profile.md, .claude/skills/dream/SKILL.md, .agents/skills/dream/SKILL.md | advisor | done |
+| N3 | - | .claude/agents/taste-dreamer.md, .codex/agents/taste-dreamer.toml, docs/procedures/dream.md, docs/decisions/0011-personal-taste-profile.md, .claude/skills/dream/SKILL.md, .agents/skills/dream/SKILL.md | advisor | done |
 | N4 | N2, N3 | scripts/check.sh, tests/template/fixtures/check.sh, docs/BLUEPRINT.md, BACKLOG.md, README.md | advisor | done |
 | N5 | N4 | .work/TASK.md | reviewer | done |
 | N6 | N5 | none tracked: ~/.claude/taste/.dream/ only | advisor | done |
