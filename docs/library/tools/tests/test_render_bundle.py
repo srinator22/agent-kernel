@@ -102,7 +102,7 @@ class RenderBundleTests(unittest.TestCase):
             digest, rel = line.split("  ", 1)
             with open(os.path.join(self.folder(), *rel.split("/")), "rb") as fh:
                 self.assertEqual(digest, hashlib.sha256(fh.read()).hexdigest())
-        self.assertEqual([line.split("  ", 1)[1] for line in manifest], sorted(l.split("  ", 1)[1] for l in manifest))
+        self.assertEqual([line.split("  ", 1)[1] for line in manifest], sorted(entry.split("  ", 1)[1] for entry in manifest))
         self.assertNotIn("MANIFEST.sha256", self.read("MANIFEST.sha256"))
 
     def test_minimal_bundle(self):

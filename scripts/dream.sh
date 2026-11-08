@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# dream.sh - wrapper for scripts/dream.py, the offline memory-dream helper.
+# dream.sh - wrapper for scripts/dream/dream.py, the offline memory-dream helper.
 #   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines to signals
 #   done                                      commit the digest's offsets
 #   due [--offer] [--quiet]                   is a dream due (file stats only)
 #   status                                    last dream, due state, pending files
 #   hygiene [--memory-dir DIR]                memory file sizes, ages, dangling links
-#   taste digest|done|apply|check|sync ...    the cross-project taste pass (scripts/taste.py)
+#   taste digest|done|apply|check|sync ...    the cross-project taste pass (scripts/dream/taste.py)
 # Exit codes: 0 ok / due; 1 not due; 2 usage error or no Python; 3 nothing to
 # dream (digest found no new signal). Without Python, "due" prints
 # "dream: not due (python not found)" (nothing with --quiet) and exits 1.
@@ -33,6 +33,6 @@ fi
 
 if [[ "${1:-}" == "taste" ]]; then
   shift
-  exec "$PY" -I -B "$ROOT/scripts/taste.py" "$@"
+  exec "$PY" -I -B "$ROOT/scripts/dream/taste.py" "$@"
 fi
-exec "$PY" -I -B "$ROOT/scripts/dream.py" "$@"
+exec "$PY" -I -B "$ROOT/scripts/dream/dream.py" "$@"

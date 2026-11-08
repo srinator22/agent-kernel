@@ -29,7 +29,10 @@ point in this procedure.
       `docs/BLUEPRINT.md` section 4?
    3. Repo host and visibility (private/public), solo or team?
    4. Git workflow: branch + gated merge (default), or direct-to-main as an
-      explicit standing choice?
+      explicit standing choice? Record the value starting with the choice:
+      "branch + gated merge, <details>" or "direct-to-main, <details>".
+      scripts/new-task.sh reads direct-to-main only when that word is
+      followed by the end of the value or by ; . : , ( or " - ".
    5. Deploy target, or none for now? If deploying: private or public
       exposure, auth approach?
    6. Does it ship data or assets? (If yes: local-first data, self-hosted

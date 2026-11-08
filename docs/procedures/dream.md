@@ -64,7 +64,7 @@ The taste pass learns the owner's tastes across every local project into a
 personal profile outside every repository: `~/.claude/taste/<area>.md`,
 imported by a managed block in `~/.claude/CLAUDE.md` so every Claude session
 in every project loads it, and copied into a managed block in
-`~/.codex/AGENTS.md` for Codex. Any project with `scripts/taste.py` can run
+`~/.codex/AGENTS.md` for Codex. Any project with `scripts/dream/taste.py` can run
 it; all of them share one user-level state in `~/.claude/taste/.dream/`.
 
 T1. Run `scripts/dream.sh taste digest`. It reads every project's

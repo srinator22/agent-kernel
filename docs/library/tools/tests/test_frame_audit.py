@@ -222,8 +222,9 @@ class Findings(AuditCase):
 
     def test_duplicates_and_allowed_holds(self):
         self.seq()
-        shutil_copy = lambda a, b: shutil.copyfile(os.path.join(self.d, f"frame_{a:04d}.png"),
-                                                   os.path.join(self.d, f"frame_{b:04d}.png"))
+        def shutil_copy(a, b):
+            return shutil.copyfile(os.path.join(self.d, f"frame_{a:04d}.png"),
+                                   os.path.join(self.d, f"frame_{b:04d}.png"))
         shutil_copy(5, 6)
         shutil_copy(5, 7)
         code, out, _ = self.run_tool()

@@ -169,6 +169,24 @@ assert_rc "origin behind HEAD refuses" 2
 assert_contains "origin behind message" "not equal to HEAD"
 git push -q origin main >/dev/null 2>&1
 
+# A live task record at HEAD would ship inside the tag (template-v0.3.0 did).
+mkdir -p .work
+printf '# Task: live-one\nMode: standard\n' > .work/TASK.md
+git add -A >/dev/null 2>&1 && git commit -q -m "chore: live task" >/dev/null 2>&1
+git push -q origin main >/dev/null 2>&1
+rel
+assert_rc "a live task does not fail the dry run" 0
+assert_contains "the dry run warns about the live task" "WARNING: .work/TASK.md at HEAD is a live task"
+rel --tag
+assert_rc "a live task at HEAD refuses the tag" 2
+assert_contains "the refusal points to the retro" "finish the task with docs/procedures/retro.md"
+assert_eq "no tag was created" "" "$(git tag -l template-v0.2.0)"
+printf '# Task: {{title}}\nMode: standard | quick | autopilot\n' > .work/TASK.md
+git add -A >/dev/null 2>&1 && git commit -q -m "chore: archive the task" >/dev/null 2>&1
+git push -q origin main >/dev/null 2>&1
+rel
+assert_not_contains "a pristine task file raises no warning" "is a live task"
+
 rel --tag
 assert_rc "successful --tag exits 0" 0
 assert_contains "created message" "created annotated tag template-v0.2.0 at"

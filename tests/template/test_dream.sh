@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/dream.sh and dream.py: the signal digest, the once-only offsets, the
+# scripts/dream.sh and scripts/dream/dream.py: the signal digest, the once-only offsets, the
 # due decision and the memory hygiene report. Transcripts are synthetic JSONL
 # under a fake projects folder; DREAM_PROJECTS_DIR and DREAM_NOW pin the inputs.
 # Without python the test is skipped (CI has python3).
@@ -15,7 +15,7 @@ if [[ -z "$PY" ]]; then
 fi
 
 make_fixture
-cp_script dream.sh dream.py
+cp_script dream.sh dream/dream.py
 NATIVE="$(cygpath -w "$FIX" 2>/dev/null || echo "$FIX")"
 SLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$NATIVE")"
 PROJ="$FIX/projects"
@@ -360,7 +360,7 @@ assert_rc "truncated: digest exits 0" 0
 assert_file_has "truncated: re-read from the start" "$ST9/digest.md" "short rewrite"
 
 # --- worktrees, saved roots, --match, subagents, shared state ---
-git add scripts/dream.sh scripts/dream.py >/dev/null 2>&1
+git add scripts/dream.sh scripts/dream/dream.py >/dev/null 2>&1
 git commit -q -m fixture >/dev/null 2>&1
 WT="$FIX-wt"
 WTN="$(cygpath -w "$WT" 2>/dev/null || echo "$WT")"

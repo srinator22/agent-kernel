@@ -326,7 +326,7 @@ suggest_baseline() {
     n="$(git -C "$TPL" ls-tree -r "$c" | awk -F'\t' 'NR==FNR {want[$1 SUBSEP $2]=1; next} {split($1, a, " "); if ((a[3] SUBSEP $2) in want) n++} END {print n+0}' "$hashes" -)"
     printf '%s %s %s\n' "$n" "$i" "$(git -C "$TPL" log -1 --format='%h %cs %s' "$c")"
   done < <(git -C "$TPL" rev-list --all --topo-order) \
-    | sort -k1,1nr -k2,2n | head -n 3 \
+    | sort -k1,1nr -k2,2n | sed -n '1,3p' \
     | while read -r n _ h d s; do echo "  $h $d $s - $n of $total identical"; done
   return 0
 }
@@ -383,7 +383,7 @@ main() {
     dirty="$(git status --porcelain -- . ":(exclude)$OUTDIR" 2>/dev/null || true)"
     if [[ -n "$dirty" ]]; then
       echo "template-sync: refusing to apply: the working tree is not clean (git status --porcelain is not empty). Commit or stash first, or use --dry-run." >&2
-      printf '%s\n' "$dirty" | head -10 | sed 's/^/  /' >&2
+      printf '%s\n' "$dirty" | sed -n '1,10s/^/  /p' >&2
       exit 2
     fi
     branch="$(git symbolic-ref --short -q HEAD 2>/dev/null || true)"

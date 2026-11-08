@@ -99,7 +99,7 @@ def iso(d):
 class Ctx:
     def __init__(self, a):
         here = os.path.dirname(os.path.realpath(__file__))
-        self.root = os.path.realpath(a.root) if a.root else os.path.dirname(here)
+        self.root = os.path.realpath(a.root) if a.root else os.path.dirname(os.path.dirname(here))
         self.projects = (a.projects_dir or os.environ.get("DREAM_PROJECTS_DIR")
                          or os.path.join(os.path.expanduser("~"), ".claude", "projects"))
         self.state_dir = a.state_dir or os.path.join(main_worktree(self.root), ".work", "dream")
@@ -132,7 +132,7 @@ class Ctx:
             return []
         if r.returncode != 0:
             return []
-        return [norm(l[9:]) for l in r.stdout.splitlines() if l.startswith("worktree ")]
+        return [norm(ln[9:]) for ln in r.stdout.splitlines() if ln.startswith("worktree ")]
 
     def last(self):
         return parse_iso(self.state.get("last_dream") or "") or EPOCH
@@ -283,14 +283,14 @@ def hygiene_text(c, memory_dir=None):
     # Count lessons the way scripts/lessons.sh does: skip fenced examples and
     # the documented format line, whose text starts with a "<...>" placeholder.
     appr, fence = [], False
-    for l in idx:
-        if l.startswith("```"):
+    for row in idx:
+        if row.startswith("```"):
             fence = not fence
             continue
-        m = re.match(r"- \[L\d+\] (.*)", l)
+        m = re.match(r"- \[L\d+\] (.*)", row)
         if not fence and m and not m.group(1).startswith("<"):
-            appr.append(l)
-    unused = [l for l in appr if re.search(r"used:\s*0\b", l)]
+            appr.append(row)
+    unused = [row for row in appr if re.search(r"used:\s*0\b", row)]
     out.append("approved lessons: %d (%d with used: 0)" % (len(appr), len(unused)))
 
     pend = read(os.path.join(c.root, "docs", "lessons", "PENDING.md"))

@@ -27,7 +27,7 @@ Owner's answers (2026-11-08):
 
 Builder's calls (the owner checks these when approving):
 1. Commands: `scripts/dream.sh taste digest|done|check|apply`, in a new
-   `scripts/taste.py` that reuses the helpers in `scripts/dream.py`. All
+   `scripts/dream/taste.py` that reuses the helpers in `scripts/dream/dream.py`. All
    user-level paths derive from `TASTE_HOME` (default: the home folder), so
    tests never touch the real one.
 2. Only the owner's own words count. A user line is the owner's when its
@@ -174,7 +174,7 @@ Builder's calls (the owner checks these when approving):
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
 | N1 | - | tests/template/test_taste.sh, tests/template/test_dream.sh | advisor | done |
-| N2 | N1 | scripts/taste.py, scripts/dream.py, scripts/dream.sh | advisor | done |
+| N2 | N1 | scripts/dream/taste.py, scripts/dream/dream.py, scripts/dream.sh | advisor | done |
 | N3 | - | .claude/agents/taste-dreamer.md, .codex/agents/taste-dreamer.toml, docs/procedures/dream.md, docs/decisions/0010-personal-taste-profile.md, .claude/skills/dream/SKILL.md, .agents/skills/dream/SKILL.md | advisor | done |
 | N4 | N2, N3 | scripts/check.sh, tests/template/fixtures/check.sh, docs/BLUEPRINT.md, BACKLOG.md, README.md | advisor | done |
 | N5 | N4 | .work/TASK.md | reviewer | todo |

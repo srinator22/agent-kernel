@@ -17,7 +17,7 @@ if [[ -z "$PY" ]]; then
 fi
 
 make_fixture
-cp_script dream.sh dream.py taste.py
+cp_script dream.sh dream/dream.py dream/taste.py
 unset DREAM_PROJECTS_DIR CODEX_HOME
 finish() {
   local h

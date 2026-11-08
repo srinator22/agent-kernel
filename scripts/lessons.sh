@@ -438,7 +438,7 @@ cmd_check() {
     else
       # The substitution can fail (diff exits 1 on a difference); under set -e a
       # failing substitution inside an assignment would end the script silently.
-      drift="$(diff -rq .claude/skills .agents/skills 2>&1 | head -3 | tr '\n' ';' || true)"
+      drift="$(diff -rq .claude/skills .agents/skills 2>&1 | sed -n '1,3p' | tr '\n' ';' || true)"
       if [[ -n "$drift" ]]; then
         errs+=(".claude/skills and .agents/skills differ: $drift")
       fi

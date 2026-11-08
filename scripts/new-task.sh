@@ -31,13 +31,25 @@ if [[ -f "$TASK_FILE" ]] && ! grep -q '{{title}}' "$TASK_FILE"; then
 fi
 
 # Direct-to-main applies only once start has recorded it as an explicit
-# choice; while the Project decisions line still holds a placeholder, the
-# default branch+gated-merge workflow applies.
+# choice (start.md item 4): the "- Git workflow:" value starts with
+# direct-to-main (backtick, star or underscore markup allowed) followed by end
+# of value, by optional spaces then ; . : , or (, or by " - ". Anything else,
+# a placeholder or a negation such as "direct-to-main is not allowed" included,
+# reads as the default branch + gated merge, so a misread can only create a
+# branch, never commit to main by mistake.
 BRANCH="task/$SLUG"
-if grep -Eq -- '- Git workflow:.*direct-to-main' AGENTS.md && ! grep -Eq -- '- Git workflow:.*\{\{' AGENTS.md; then
+wf="$(grep -m1 -E -- '^- Git workflow:' AGENTS.md 2>/dev/null || true)"
+wf="${wf%$'\r'}"
+wf="${wf#- Git workflow:}"
+direct_re='^[[:space:]]*[`*_]*direct-to-main[`*_]*([[:space:]]*$|[[:space:]]*[;.:,(]|[[:space:]]+-[[:space:]])'
+if [[ "$wf" =~ $direct_re ]]; then
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
   echo "new-task: recorded workflow is direct-to-main; staying on branch $BRANCH"
 else
+  if [[ "$wf" =~ ^[[:space:]]*[\`*_]*direct-to-main ]]; then
+    echo "new-task: WARNING: the - Git workflow: value starts with direct-to-main but reads as branch + gated merge; if direct-to-main is the standing choice, write it as \"direct-to-main, <details>\" (start.md item 4)" >&2
+  fi
+  echo "new-task: recorded workflow is branch + gated merge; creating branch $BRANCH"
   git checkout -b "$BRANCH"
 fi
 

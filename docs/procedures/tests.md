@@ -24,7 +24,12 @@ already has somewhere to put its test (kernel rules 2 and 4).
 5. Quarantine protocol. A flaky test is a defect (kernel rule 2). Add it
    to `tests/quarantine.list`, read by the test runner: one test path per
    line, `# owner: <task> date: YYYY-MM-DD`. The runner skips only listed
-   paths and prints them each run. The maintain pass fails on any entry older
+   paths and prints them each run: `scripts/selftest.sh` for
+   `tests/template/` paths (a listed path that does not exist fails it), the
+   project's own runner (wired in `scripts/stack-check.sh`) for the rest. A
+   case that does not apply in this repository prints an `n/a` line naming
+   the gate that covers it (`t_na` in `tests/template/lib.sh`), and selftest
+   shows those lines on every run. The maintain pass fails on any entry older
    than 30 days (`scripts/lessons.sh check` reads the file); the entry is
    also recorded in `docs/lessons/QUARANTINE.md`. Deleting or weakening a
    test is never quarantine.
