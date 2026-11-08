@@ -12,20 +12,6 @@ Entry format (all four fields required):
 - what was added:
 - retire-when:
 
-### Fakes of external CLIs come from observed output
-
-- what happened: a CI watcher's tests used a fake gh written from
-  assumptions; the real gh refuses "run view --job" while the run is still
-  in progress, so the tested log-tail path printed a refusal in practice.
-  Only a reviewer's live call found it, after two review rounds.
-- what check should have caught it: each faked command of an external CLI
-  is backed by one recorded real response (or refusal), named in the test
-  header, so a fake cannot accept what the real tool rejects.
-- what was added: none, this note is the guard; the ci-watch fake now
-  refuses like gh 2.90.
-- retire-when: test doubles for external CLIs are generated from recorded
-  real responses.
-
 ### The live destructive guard reads the whole command line
 
 - what happened: with scripts/destructive-guard.sh active as a PreToolUse
@@ -39,33 +25,6 @@ Entry format (all four fields required):
   run by path; commit bodies passed with git commit -F.
 - retire-when: the harness passes hook payloads that separate data from
   the command, or the guard parses heredoc bodies as data.
-
-### Inline generator scripts lose their escapes through the shell
-
-- what happened: Python run inline through the Bash tool turned written
-  escapes (\x, \n) into real bytes and newlines, so a test file got
-  mojibake bytes instead of escape text; the new character gate caught it
-  in the first full run, which cost one 10-minute gate cycle.
-- what check should have caught it: the character gate (check.sh 4a) did;
-  a faster lane would have caught it before the full run.
-- what was added: generator scripts written with the file tool and run by
-  path, backslashes built with chr(92).
-- retire-when: the quick lane runs the character gate in seconds as part
-  of every edit loop.
-
-### A text-matching guard is reviewed against an explicit list of forms
-
-- what happened: the destructive guard's criterion and rule doc promised
-  "any spelling of the path"; five reviewer rounds each found a new
-  spelling (keywords, an earlier cd, escaped spaces, rebuilt wrapper
-  quotes), each a real gap, and the budget ran out once.
-- what check should have caught it: the acceptance criterion should have
-  listed the forms to refuse and the forms to allow, with the reviewer
-  told that forms outside the list are limits, not defects.
-- what was added: the rule doc now states the coverage list and the
-  limits; ADR 0006 records the fail-toward-refusing policy.
-- retire-when: two more guard-type tasks pass review in one round with a
-  form list in their criteria.
 
 ### A Windows-green gate can hide a Linux exec-bit failure
 
@@ -81,23 +40,6 @@ Entry format (all four fields required):
 - retire-when: scripts/selftest.sh runs in a CI matrix that includes
   Windows and Linux before merge (BACKLOG P2), or merges always wait for
   branch CI.
-
-### A worked example on real software finds what unit tests cannot
-
-- what happened: the render library tools passed 440+ unit tests, yet taking
-  a primitive sample scene through every stage on the real Blender build
-  found 10 tool defects (a version banner printed after the script output,
-  font sizes not scaled, an off-by-one title hold, done chunks with deleted
-  frames skipped, a self-test that wrote no record, and more); the
-  independent review found an eleventh (a failed command passing the render
-  gate when every frame existed).
-- what check should have caught it: a library procedure that drives an
-  external tool ships with a worked example run end to end on that tool
-  before it is called done; the example's record quotes every gate.
-- what was added: docs/library/examples/product-render-sample/ and its
-  RECORD.md; each defect has a failing-first regression test.
-- retire-when: a profile rule requires a recorded end-to-end example for
-  every procedure that drives an external program.
 
 ### A reviewer's GO must rest on evidence newer than the inputs
 
@@ -123,17 +65,6 @@ Entry format (all four fields required):
 - what was added: worker briefs now say "stop only by PID or task id";
   scripts/destructive-guard.sh does not cover process kills yet.
 - retire-when: the guard refuses kill-by-name with a test.
-
-### Python from stdin hangs this machine's shell wrapper
-
-- what happened: commands of the form `python - <<EOF` or `python -I -`
-  hung until the 120 s timeout three times in one session (twice by the
-  advisor, once by a worker), costing a background-task stop each time.
-- what check should have caught it: the library hook
-  `refuse_shell_stdin.py`, which refuses exactly this, adopted into the
-  core settings for every session.
-- what was added: none, this note is the guard.
-- retire-when: the hook is wired in `.claude/settings.json` with its test.
 
 ### ADR numbers collide across parallel branches
 
@@ -163,35 +94,14 @@ Entry format (all four fields required):
 - retire-when: a second project confirms or corrects them, and the
   lookdev-artist or cinematographer agent carries the confirmed defaults.
 
-### Test clones on Windows set core.autocrlf themselves
-
-- what happened: a template-sync test cloned its fixture template, and the
-  clone took the machine's global core.autocrlf=true; the checked-out files
-  differed from the index, so the real apply refused a "dirty" tree and
-  three assertions failed until the cause was found (2026-11-07,
-  template-updates).
-- what check should have caught it: a tests/template/lib.sh clone helper
-  that always passes -c core.autocrlf=false, used by every test that
-  clones.
-- what was added: the test clones with -c core.autocrlf=false.
-- retire-when: lib.sh has the helper and no test calls git clone directly.
-
-### Counting carriage returns in Git Bash
-
-- what happened: grep -c $'' reported a CR on every line of every file,
-  because Git Bash passed the pattern without its CR; the files were LF
-  (2026-11-07, template-updates).
-- what check should have caught it: none, this note is the guard: count
-  CR bytes with tr -cd '' | wc -c or read git ls-files --eol.
-- what was added: none.
-- retire-when: check.sh reports line endings itself.
-
 ### The auto-mode check blocks a merge the owner has not asked for in words
 
 - what happened: after green CI and a PASS review, gh pr merge was refused
   as "merge without review" although the owner had said "do it"; it went
   through once the owner wrote "merge into main" (2026-11-07,
-  template-updates).
+  template-updates). Seen again on 2026-11-07 (merge refused three times,
+  a tag refused as a public surface) and passed after the owner wrote merge
+  and release.
 - what check should have caught it: none, this note is the guard: ask the
   owner for the merge explicitly when the PR is ready, and offer the merge
   action.
@@ -226,15 +136,3 @@ Entry format (all four fields required):
 - what was added: none.
 - retire-when: tasklint reads a criterion's continuation lines or reports
   them as such.
-
-### A long literal command fails in the shell tool
-
-- what happened: one rm -rf with 319 literal paths (about 10 KB) failed with
-  "unexpected EOF while looking for matching quote" instead of running; the
-  same paths in four commands of 80 ran (2026-11-08, fleet-sync-fixes). The
-  destructive guard requires literal paths, so batching is the only form.
-- what check should have caught it: none, this note is the guard: keep a
-  literal-path command under about 4 KB and batch the rest.
-- what was added: none.
-- retire-when: the shell tool runs a long command or reports its length
-  limit.
