@@ -390,6 +390,8 @@ def parse_report(path):
         m = re.match(r"(\d+)\. ", row)
         if m:
             cur = int(m.group(1))
+            if cur in props:
+                die("dream: %s numbers proposal %d twice; fix the report first" % (path, cur))
             props[cur] = []
         elif cur is not None and row.strip().startswith("Change:"):
             props[cur].append(row.strip()[7:].strip())
@@ -398,7 +400,9 @@ def parse_report(path):
 
 def outcome_text(c, path, applied, before):
     props = parse_report(path)
-    for n in applied:
+    for i, n in enumerate(applied):
+        if n in applied[:i]:
+            die("dream: proposal %d is approved twice" % n)
         if n not in props:
             die("dream: proposal %d is not in %s; approved numbers must match its numbered list" % (n, path))
     done = sorted(set(applied))

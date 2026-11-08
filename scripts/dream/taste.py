@@ -188,6 +188,16 @@ def inside_git(path):
         if parent == p:
             return False
         p = parent
+    # A .git entry counts even when git cannot read it (dubious ownership,
+    # a broken repository), so the guard never fails open on a git error.
+    up = p
+    while True:
+        if os.path.lexists(os.path.join(up, ".git")):
+            return True
+        parent = os.path.dirname(up)
+        if parent == up:
+            break
+        up = parent
     try:
         r = subprocess.run(["git", "-C", p, "rev-parse", "--is-inside-work-tree"],
                            capture_output=True, text=True, timeout=10, env=git_env())
@@ -790,7 +800,10 @@ def parse_report(path):
                 cur.update(op="remove", id=mx.group(1))
             else:
                 cur["op"] = None
-            props[int(m.group(1))] = cur
+            num = int(m.group(1))
+            if num in props:
+                die("taste: %s numbers proposal %d twice; fix the report before applying" % (path, num))
+            props[num] = cur
         elif cur is not None and line[:1] in (" ", "\t"):
             ev = re.match(r"\s+Evidence:\s*(.*)$", line)
             if ev:
@@ -827,7 +840,10 @@ def cmd_apply(c, a):
     prof = {k: list(v) for k, v in before.items()}
     nid = next_id(prof, ledger)
     problems, notes, uses, done_keys, hist = [], [], {}, [], []
-    for num in a.numbers:
+    for i, num in enumerate(a.numbers):
+        if num in a.numbers[:i]:
+            problems.append("taste: proposal %d is approved twice" % num)
+            continue
         key = "%s#%d" % (rid, num)
         p = props.get(num)
         if p is None:

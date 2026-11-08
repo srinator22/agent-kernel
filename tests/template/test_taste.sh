@@ -284,6 +284,17 @@ assert_contains "the unknown number named" "no proposal 12"
 assert_no_file "a refused apply writes no profile" "$TD/communication.md"
 assert_no_file "a refused apply writes no Codex file" "$AGM"
 assert_eq "a refused apply leaves CLAUDE.md alone" "$PRE" "$(outside "$CMD")"
+ta apply --report "$R1" 10 10
+assert_rc "a repeated approved number exits 1" 1
+assert_contains "the repeated number is named" "proposal 10 is approved twice"
+assert_no_file "a repeated number writes nothing" "$TD/working.md"
+RDUP="$ST/reports/2026-11-09-dup.md"
+printf '%s
+' '# Taste report 2026-11-09' '## Proposals'   '1. add working: Ask before large refactors.' "   Evidence: $SID_O"   '1. add design: Prefer roomy layouts.' "   Evidence: $SID_P" > "$RDUP"
+ta apply --report "$RDUP" 1
+assert_rc "a report that numbers two proposals alike exits 2" 2
+assert_contains "the report's repeated number is named" "numbers proposal 1 twice"
+assert_no_file "a repeated report number writes nothing" "$TD/working.md"
 
 ta apply --report "$R1" 1 2 10
 assert_rc "apply exits 0" 0
@@ -471,5 +482,12 @@ assert_contains "the git refusal says why" "inside a git work tree"
 assert_no_file "nothing is written inside the repository" "$IN/.claude/taste/communication.md"
 run env TASTE_HOME="$IN" bash "$FIX/scripts/dream.sh" taste sync
 assert_rc "sync inside a git work tree is refused" 2
+# A .git entry git itself cannot read (as with "dubious ownership") still counts.
+DG="$FIX-home-dotgit"
+mkdir -p "$DG/.git" "$DG/home/.claude/taste/.dream"
+cp "$ST/state.json" "$DG/home/.claude/taste/.dream/state.json"
+run env TASTE_HOME="$DG/home" bash "$FIX/scripts/dream.sh" taste apply --report "$R1" 1
+assert_rc "a taste folder under an unreadable .git is refused" 2
+assert_no_file "nothing is written under the unreadable .git" "$DG/home/.claude/taste/communication.md"
 
 finish

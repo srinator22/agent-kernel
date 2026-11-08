@@ -445,6 +445,16 @@ assert_contains "outcome: the missing number is named" "proposal 7 is not in"
 assert_file "outcome: a refused done keeps the digest state" "$ST10/state.next.json"
 run bash scripts/dream.sh done --state-dir "$ST10" --applied 1
 assert_rc "outcome: --applied without --report exits 2" 2
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 1 1
+assert_rc "outcome: a repeated approved number exits 2" 2
+assert_contains "outcome: the repeated number is named" "proposal 1 is approved twice"
+RD10="$ST10/dup-report.md"
+printf '%s
+' '# Dream report 2026-11-07' '## Proposals' '1. [stale] one' '   Change: edit BACKLOG.md'   '1. [stale] two' '   Change: edit README.md' > "$RD10"
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$RD10" --applied 1
+assert_rc "outcome: a report that numbers two proposals alike exits 2" 2
+assert_contains "outcome: the report's repeated number is named" "numbers proposal 1 twice"
+assert_file "outcome: a refused done still keeps the digest state" "$ST10/state.next.json"
 printf '%s\n' '### New trap' 'seen 2026-11-07' >> "$FIX/docs/lessons/PENDING.md"
 run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 1
 assert_rc "outcome: done with a report exits 0" 0

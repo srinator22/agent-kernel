@@ -31,10 +31,11 @@ Builder's calls (the owner checks these when approving):
    user-level paths derive from `TASTE_HOME` (default: the home folder), so
    tests never touch the real one.
 2. Only the owner's own words count. A user line is the owner's when its
-   `origin.kind` is `human`, or, in older transcripts without `origin`, when
-   its prompt source is not sdk, system, peer, scheduled or task-notification
-   and the text has no known machine-written prefix (another session's
-   brief, a skill body, a session continuation). Pasted content, system tags
+   `origin.kind` is `human`; in older transcripts without `origin`, when its
+   `turnOrigin` is `human`, or, with no `turnOrigin`, when its prompt source
+   is not `system` and the text has no known machine-written prefix (another
+   session's brief, a skill body, a session continuation). Owner lines
+   themselves carry prompt source sdk, so sdk alone never rejects a line. Pasted content, system tags
    and compaction summaries are skipped. The same filter goes into
    `dream.py`, whose project digest counts other sessions' messages as the
    owner's today.
@@ -206,6 +207,7 @@ Builder's calls (the owner checks these when approving):
 - 2026-11-08 project outcome and impact: 17 new checks failed first (136/153), pass after the change (153/153); words, STOP and fmt_counts shared from dream.py, taste.py reuses them (141/141); mutation check: plain messages as mechanize evidence -> 1 fail, trend dropped on an exit-3 digest -> 1, used lessons as retire candidates -> 1, declined Change files listed -> 1
 - 2026-11-08 real project digest (scratch state): 258573 lines in 3.1 s, 102 signals; impact lists 5 lessons sharing words with new failures, no retire candidate (no approved used: 0 line older than 45 days)
 - 2026-11-08 ./scripts/check.sh exit 0: selftest 22/22, template self-test OK (146 required files, ruff 0.16.10 contract, blueprint parity)
+- 2026-11-08 review round 1 FAIL: a repeated approved number applied twice, and a report numbering two proposals alike silently kept the later. Failing tests first (taste 129/149, dream 151/158), then fixed: apply and done refuse both (taste 149/149, dream 158/158). Also from the review: a .git entry git cannot read now counts as a repository for the guard (failing test first); design call 2 corrected to the rule is_human applies. Accepted as is: taste parse_report reads only the first line of a proposal, since the agent format forbids wrapping, and apply's line cap still bounds what lands
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
