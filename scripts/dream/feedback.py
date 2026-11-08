@@ -48,7 +48,7 @@ APPROVAL = re.compile(
 
 def classify(text):
     """Guess the kind of an owner message; the first match wins."""
-    t = " ".join(text.replace("’", "'").split())
+    t = " ".join(text.replace("\u2019", "'").split())
     if DEFERRAL.search(t):
         return "deferral"
     if re.match(r"^no,?\s+later\b", t, re.I):
@@ -163,7 +163,9 @@ def run():
     if os.environ.get("FEEDBACK_LOG") == "0":
         return
     try:
-        payload = json.loads(sys.stdin.read() or "null")
+        # Bytes, decoded as UTF-8: the hook JSON is UTF-8, and text-mode stdin uses
+        # the locale code page on Windows, which garbles non-ASCII prompts.
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "null")
     except ValueError:
         return
     if not isinstance(payload, dict):
