@@ -22,6 +22,12 @@ words with a new C, D, H, I or E signal; candidates only, the dreamer judges).
 "done --report R --applied N..." appends an Outcome to the saved report:
 applied and declined numbers, files named in the applied Change lines, and the
 hygiene numbers at digest time against now.
+Scorecard: each digest, and the read-only "scorecard" command, carries the
+owner's decisions read from the saved <date>-report.md files (per report, per
+proposal kind) and the INDEX.md values and BACKLOG.md last cells now for the
+lessons and rows that approved Change lines name; bounded to the last 10
+reports and 20 lines each, so it stays small. Unusable reports are skipped
+with a reason, never fatal.
 State: <state-dir>/state.json {version, files{path: {offset, m}}, known_roots,
 last_dream, dreams[{date, counts}] (the last 10)}; <state-dir>/offered holds the day:retro-count fingerprint of the
 last offer. "done" commits state.next.json, so an unfinished dream loses nothing.
@@ -69,6 +75,13 @@ RETIRE_DAYS = 45
 INDEX_REL = "docs/lessons/INDEX.md"
 LESSON = re.compile(r"- \[(L\d+)\] (.*?)\s*\(used:\s*(\d+)\b")
 FILE_RE = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)*[\w-][\w.-]*\.(?:md|sh|py|toml|json|ya?ml|txt))\b")
+# Scorecard: saved reports are exactly <date>-report.md; the later self-review
+# pass and replay check start at these decided-proposal counts.
+REPORT_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-report\.md")
+LESSON_ID = re.compile(r"\bL\d{3,}\b")
+LAST = re.compile(r"last:\s*([^,)]+)")
+SELF_REVIEW_AT, REPLAY_AT = 30, 50
+CARD_REPORTS, CARD_LINES, CARD_CELL = 10, 20, 80
 # Words too common to tie a lesson or a profile line to a signal.
 STOP = {"about", "after", "again", "always", "never", "their", "there", "these", "those", "which",
         "while", "would", "should", "could", "where", "every", "other", "being", "prefer", "instead",
@@ -351,14 +364,21 @@ def impact_lines(c, sigs, counts):
                     out.append("%s unused for %d days (used: 0; its line was committed %s)"
                                % (lid, (c.now - dates[n]).days, dates[n].strftime("%Y-%m-%d")))
     for _, lid, text, _ in lessons:
-        w = words(text)
-        hits = []
-        for sid, s in sigs:
-            common = w & words(s["text"]) if s["kind"] in MECHANIZE_KINDS else set()
-            if len(common) >= 2:
-                hits.append("%s (%s)" % (sid, " ".join(sorted(common))))
+        hits = ["%s (%s)" % (sid, " ".join(sorted(common))) for sid, common in lesson_hits(text, sigs)]
         if hits:
             out.append("%s shares words with %s" % (lid, ", ".join(hits[:3])))
+    return out
+
+
+def lesson_hits(text, sigs):
+    """(signal id, shared words) for each C, D, H, I or E signal sharing two or
+    more words with a lesson; the one matcher for Impact and the scorecard."""
+    w = words(text)
+    out = []
+    for sid, s in sigs:
+        common = w & words(s["text"]) if s["kind"] in MECHANIZE_KINDS else set()
+        if len(common) >= 2:
+            out.append((sid, common))
     return out
 
 
@@ -372,30 +392,227 @@ def hygiene_numbers(text):
     return out
 
 
-def parse_report(path):
-    """{number: [Change texts]} from a saved dream report's Proposals section."""
+class ReportError(Exception):
+    """A saved report that cannot be used: msg for the scorecard's skipped
+    line, fatal for dream.sh done, which stops on it."""
+
+    def __init__(self, msg, fatal=None):
+        super().__init__(msg)
+        self.msg, self.fatal = msg, fatal or "dream: " + msg
+
+
+def kind_name(tag):
+    """A proposal's bracket tag lowercased, spaces around ":" normalised."""
+    t = re.sub(r"\s+", " ", re.sub(r"\s*:\s*", ": ", tag.strip().lower())).strip()
+    return t or "untagged"
+
+
+def read_report(path):
+    """({number: (kind, [Change texts])}, [rows of each Outcome section]) from a
+    saved report; ReportError when it cannot be read or numbers a proposal twice."""
     try:
         with open(path, encoding="utf-8") as f:
             rows = f.read().splitlines()
-    except OSError as e:
-        die("dream: cannot read the report %s: %s" % (path, e))
-    props, cur, inside = {}, None, False
+    except (OSError, UnicodeDecodeError) as e:
+        raise ReportError("cannot read it: %s" % e, "dream: cannot read the report %s: %s" % (path, e))
+    props, outcomes, cur, section = {}, [], None, None
     for row in rows:
         if row.startswith("## "):
-            inside = row.strip() == "## Proposals"
+            head = row.strip()
+            section = "p" if head == "## Proposals" else "o" if head.startswith("## Outcome") else None
+            if section == "o":
+                outcomes.append([])
             cur = None
             continue
-        if not inside:
+        if section == "o":
+            outcomes[-1].append(row.strip())
             continue
-        m = re.match(r"(\d+)\. ", row)
+        if section != "p":
+            continue
+        m = re.match(r"(\d+)\. (.*)", row)
         if m:
             cur = int(m.group(1))
             if cur in props:
-                die("dream: %s numbers proposal %d twice; fix the report first" % (path, cur))
-            props[cur] = []
+                raise ReportError("numbers proposal %d twice" % cur,
+                                  "dream: %s numbers proposal %d twice; fix the report first" % (path, cur))
+            tag = re.match(r"\[([^\]]*)\]", m.group(2).strip())
+            props[cur] = (kind_name(tag.group(1) if tag else ""), [])
         elif cur is not None and row.strip().startswith("Change:"):
-            props[cur].append(row.strip()[7:].strip())
-    return props
+            props[cur][1].append(row.strip()[7:].strip())
+    return props, outcomes
+
+
+def parse_report(path):
+    """{number: [Change texts]} from a saved dream report's Proposals section."""
+    try:
+        props, _ = read_report(path)
+    except ReportError as e:
+        die(e.fatal)
+    return {n: changes for n, (_, changes) in props.items()}
+
+
+def parse_outcome(rows, props):
+    """(approved numbers, declined numbers) from one Outcome section's rows."""
+    vals = {}
+    for row in rows:
+        for key in ("Applied", "Declined"):
+            if row.startswith(key + ":"):
+                vals[key] = row[len(key) + 1:].strip()
+    out = []
+    for key in ("Applied", "Declined"):
+        if key not in vals:
+            raise ReportError("Outcome lacks a%s %s line" % ("n" if key == "Applied" else "", key))
+        parts = [] if vals[key].lower() == "none" else [p.strip() for p in vals[key].split(",")]
+        if not all(p.isdigit() for p in parts):
+            raise ReportError("Outcome %s is not a number list" % key)
+        nums = {int(p) for p in parts}
+        for n in sorted(nums):
+            if n not in props:
+                raise ReportError("Outcome names %d, which its Proposals lack" % n)
+        out.append(nums)
+    both = out[0] & out[1]
+    if both:
+        raise ReportError("Outcome puts %d in both Applied and Declined" % min(both))
+    return out[0], out[1]
+
+
+def cut(s, n=CARD_CELL):
+    return s if len(s) <= n else s[:n - 3] + "..."
+
+
+def cell_key(s):
+    return re.sub(r"\s+", " ", s.replace("`", "")).strip().lower()
+
+
+def table_cells(row):
+    """Cells of a markdown table row: edge pipes stripped, split on unescaped
+    pipes, "\\|" unescaped."""
+    row = row.strip()
+    if row.startswith("|"):
+        row = row[1:]
+    if row.endswith("|") and not row.endswith("\\|"):
+        row = row[:-1]
+    return [c.replace("\\|", "|").strip() for c in re.split(r"(?<!\\)\|", row)]
+
+
+def backlog_status(root):
+    """{first cell key: last cell} for each BACKLOG.md table row."""
+    out = {}
+    for row in read_text(os.path.join(root, "BACKLOG.md")).splitlines():
+        if row.lstrip().startswith("|"):
+            cells = table_cells(row)
+            if len(cells) >= 2:
+                out.setdefault(cell_key(cells[0]), cells[-1])
+    return out
+
+
+def index_values(root):
+    """{lesson id: (text, used, last)} for the approved lessons in INDEX.md."""
+    rows = read_text(os.path.join(root, INDEX_REL)).splitlines()
+    out = {}
+    for n, lid, text, used in approved_lessons(root):
+        m = LAST.search(rows[n - 1])
+        out[lid] = (text, "N/A" if used is None else used, m.group(1).strip() if m else "N/A")
+    return out
+
+
+def branch_label(root):
+    try:
+        r = subprocess.run(["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "N/A - not a git checkout"
+    if r.returncode != 0:
+        return "N/A - not a git checkout"
+    b = r.stdout.strip()
+    return "detached" if b == "HEAD" else b
+
+
+def scorecard_lines(c, sigs=None):
+    """The owner's recorded decisions on past proposals and what became of the
+    lessons and BACKLOG rows the approved ones named. Read-only; sigs are this
+    digest's (id, signal) pairs, or None outside a digest."""
+    out = ["", "## Scorecard",
+           "the owner's recorded decisions on past dream proposals, counted by script; "
+           "now values read from %s (branch %s)" % (c.root, branch_label(c.root))]
+    names = []
+    if os.path.isdir(c.state_dir):
+        names = sorted(n for n in os.listdir(c.state_dir) if REPORT_NAME.fullmatch(n))
+    if not names:
+        return out + ["no saved reports"]
+    reports, skipped = [], []
+    for name in names:
+        try:
+            props, outcomes = read_report(os.path.join(c.state_dir, name))
+            dec = parse_outcome(outcomes[-1], props) if outcomes else None
+        except ReportError as e:
+            skipped.append("skipped %s: %s" % (name, e.msg))
+            continue
+        reports.append((name[:10], props, dec))
+    older, recent = reports[:-CARD_REPORTS], reports[-CARD_REPORTS:]
+    out.append("reports (last %d, oldest first; approved means the owner approved it, not that it landed):"
+               % CARD_REPORTS)
+    if older:
+        out.append("  older (%d reports): proposals %d, approved %d, declined %d, no Outcome %d" % (
+            len(older), sum(len(p) for _, p, _ in older), sum(len(d[0]) for _, _, d in older if d),
+            sum(len(d[1]) for _, _, d in older if d), sum(1 for _, _, d in older if d is None)))
+    for date, props, dec in recent:
+        if dec is None:
+            out.append("  %s: proposals %d, no Outcome recorded" % (date, len(props)))
+        else:
+            out.append("  %s: proposals %d, approved %d, declined %d" % (date, len(props), len(dec[0]), len(dec[1])))
+    out += skipped
+    kinds = {}
+    for _, props, dec in reports:
+        for num, (kind, _) in props.items() if dec else ():
+            k = kinds.setdefault(kind, [0, 0])
+            k[0] += num in dec[0]
+            k[1] += num in dec[1]
+    out.append("by kind (every report with an Outcome):")
+    for kind in sorted(kinds):
+        a, d = kinds[kind]
+        out.append("  %s: approved %d, declined %d, rate %s"
+                   % (kind, a, d, "%d%%" % round(100 * a / (a + d)) if a + d else "N/A - none decided"))
+    if not kinds:
+        out.append("  none")
+    lessons, rows = [], []
+    for _, props, dec in reversed(recent):
+        for num in sorted(dec[0]) if dec else ():
+            for ch in props[num][1]:
+                lessons += [lid for lid in LESSON_ID.findall(ch) if lid not in lessons]
+                if "BACKLOG.md" not in ch:
+                    continue
+                for q in re.findall(r'"([^"]*)"', ch):
+                    first = q.split(" | ")[0].replace("\\|", "|").strip()
+                    if " | " in q and cell_key(first) not in {cell_key(r) for r in rows}:
+                        rows.append(first)
+    idx = index_values(c.root)
+    out.append("lessons named in approved changes, last %d reports (newest first; candidates: %s):" % (
+        CARD_REPORTS, "this digest's C, D, H, I or E signals sharing two or more words, not proof"
+        if sigs is not None else "N/A - no digest signals"))
+    for lid in lessons[:CARD_LINES]:
+        if lid not in idx:
+            out.append("  %s: not in INDEX.md" % lid)
+            continue
+        text, used, last = idx[lid]
+        out.append("  %s: used %s, last %s%s" % (lid, used, last, "" if sigs is None
+                                                  else "; candidates %d" % len(lesson_hits(text, sigs))))
+    if not lessons:
+        out.append("  none")
+    if len(lessons) > CARD_LINES:
+        out.append("  ... %d more not shown" % (len(lessons) - CARD_LINES))
+    status = backlog_status(c.root)
+    out.append("BACKLOG rows named in approved changes, last %d reports (newest first; last cell now):" % CARD_REPORTS)
+    for first in rows[:CARD_LINES]:
+        now = status.get(cell_key(first))
+        out.append("  %s: %s" % (cut(first), "not found" if now is None else cut(now)))
+    if not rows:
+        out.append("  none")
+    if len(rows) > CARD_LINES:
+        out.append("  ... %d more not shown" % (len(rows) - CARD_LINES))
+    decided = sum(len(d[0]) + len(d[1]) for _, _, d in reports if d)
+    out.append("decided: %d (self-review pass at %d, replay check at %d)" % (decided, SELF_REVIEW_AT, REPLAY_AT))
+    return out
 
 
 def outcome_text(c, path, applied, before):
@@ -613,13 +830,14 @@ def cmd_digest(c, a):
     nextstate["this_dream"] = {"date": iso(c.now), "counts": counts}
     nextstate["snapshot"] = hygiene_numbers(hyg)
     sigs = ["- s%d %s" % (i + 1, render(s)) for i, s in enumerate(kept)]
+    pairs = [("s%d" % (i + 1), s) for i, s in enumerate(kept)]
     body = "\n".join([
         "# Dream digest",
         "generated: %s  repository: %s" % (iso(c.now), c.root),
         "since: %s" % since,
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
-    ] + impact_lines(c, [("s%d" % (i + 1), s) for i, s in enumerate(kept)], counts) + [
+    ] + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",
@@ -732,6 +950,11 @@ def cmd_due(c, a):
     return 0
 
 
+def cmd_scorecard(c, a):
+    print("\n".join(scorecard_lines(c)[1:]))
+    return 0
+
+
 def cmd_status(c, a):
     s, r, due = due_numbers(c)
     print("last dream: %s" % (c.state["last_dream"] or "never"))
@@ -762,10 +985,11 @@ def main():
     sub.add_parser("status", parents=[common])
     h = sub.add_parser("hygiene", parents=[common])
     h.add_argument("--memory-dir")
+    sub.add_parser("scorecard", parents=[common])
     a = ap.parse_args()
     c = Ctx(a)
-    sys.exit({"digest": cmd_digest, "done": cmd_done, "due": cmd_due,
-              "status": cmd_status, "hygiene": cmd_hygiene}[a.cmd](c, a))
+    sys.exit({"digest": cmd_digest, "done": cmd_done, "due": cmd_due, "status": cmd_status,
+              "hygiene": cmd_hygiene, "scorecard": cmd_scorecard}[a.cmd](c, a))
 
 
 if __name__ == "__main__":
