@@ -10,6 +10,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh
 
 GUARD="$(grep -m1 '^source .*/lib\.sh"' "${BASH_SOURCE[0]}")"
 TESTS=("$T_ROOT"/tests/template/test_*.sh)
+# An empty GUARD would match any blank line and pass every file.
+assert_eq "this file holds the canonical guarded line" "yes" "$([[ "$GUARD" == *"cannot load lib.sh"* ]] && echo yes || echo no)"
 
 # Every test loads lib.sh with exactly the canonical guarded line.
 unguarded=()
@@ -30,13 +32,14 @@ for t in "${TESTS[@]}"; do
   mkdir -p "iso/$n" "run/$n"
   cp "$t" "iso/$n/"
   rc=0
-  out="$(cd "run/$n" && bash "$FIX/iso/$n/$n.sh" 2>&1)" || rc=$?
+  # stderr only: the message must reach a terminal even when stdout is piped.
+  out="$(cd "run/$n" && bash "$FIX/iso/$n/$n.sh" 2>&1 >/dev/null)" || rc=$?
   (( rc != 0 )) || passed_rc+=("$n")
   [[ "$out" == *"cannot load lib.sh"* ]] || silent+=("$n")
   [[ -z "$(ls -A "run/$n")" ]] || leaked+=("$n: $(ls -A "run/$n" | tr '\n' ' ')")
 done
 assert_eq "without lib.sh every test exits non-zero" "" "${passed_rc[*]:-}"
-assert_eq "without lib.sh every test says it cannot load lib.sh" "" "${silent[*]:-}"
+assert_eq "without lib.sh every test says on stderr it cannot load lib.sh" "" "${silent[*]:-}"
 assert_eq "without lib.sh no test writes into the folder it started from" "" "${leaked[*]:-}"
 
 # Every tracked tests/template/*.sh is 100755 in the git index.

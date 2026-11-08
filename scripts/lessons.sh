@@ -743,8 +743,7 @@ cmd_skills() {
 case "${1:-}" in
   check) cmd_check ;;
   skills) cmd_skills ;;
-  core-skills) printf '%s
-' "${CORE_SKILLS[@]}" ;;
+  core-skills) printf '%s\n' "${CORE_SKILLS[@]}" ;;
   use) shift; cmd_use "$@" ;;
   expire) shift; cmd_expire "$@" ;;
   stats) cmd_stats ;;

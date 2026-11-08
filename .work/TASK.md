@@ -60,3 +60,11 @@ first.
 - 2026-11-08 fix 3 report fail-first: test_template_sync.sh section p before the template-sync change: 153 passed, 3 failed (no skills line, no ACTION line, exit 0). After: 156 passed.
 - 2026-11-08 owner chose A (relayed). Counting fail-first: test_lessons.sh against HEAD's lessons.sh: 107 passed, 16 failed, including "a seventh core skill keeps a full project within the cap (exit 1, expected 0)", the template-v0.4.0 case; root cause scripts/lessons.sh cmd_check cap=BASE_SKILLS+sets with core and project skills in one count. After: 123 passed. test_template_sync.sh with real core names: 156 passed.
 - 2026-11-08 step 5m: the snippet run alone passes on the tree and fails with a probe folder .claude/skills/zz-probe ("differ from CORE_SKILLS"); the probe was removed.
+- 2026-11-09 merged origin/main twice (af63c7a, 55228eb), both clean. Full check.sh on the first merge failed test_check_always (95 passed, 3 failed): its started-project fixture records every file 100644 where git does not track modes, so the copy's exec-bit check failed; fixed by carrying the template's 100755 index modes into the fixture (98 passed). taskgraph: N3 now depends on N1 (both touch test_lessons.sh and test_template_sync.sh).
+- 2026-11-09 review 1: APPROVE WITH NITS. Finding 1 fail-first: test_template_sync.sh section p with a v3 lessons.sh lacking the skills command, before the fix: "FAIL a lessons.sh without the skills command is no cap breach (output has: ACTION: skills cap)", output "ACTION: skills cap: . Merge or archive a project skill ...; the sync is recorded." (run stopped before its total); fixed so only exit 1 is a breach, other exits report "skills cap not checked", and the ACTION line says whether the sync was recorded. Nits 2-4 fixed (printf newlines, non-empty GUARD assertion, stderr-only capture): test_test_files.sh 6 passed.
+
+## Review verdict
+<!-- written ONLY by the independent reviewer -->
+
+## Retro
+<!-- filled by docs/procedures/retro.md -->

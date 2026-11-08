@@ -5,8 +5,8 @@
 # set, header-only lessons files, adopted profiles and ci.yml as DIFF only, the
 # KERNEL and Rules index diffs from AGENTS.md, conflicts reported on every run
 # until merged and never recorded as synced, and the exit codes (0 clean or
-# applied, 1 conflicts, kernel change pending or skills cap exceeded, 2 usage or
-# guard failure), and the skills cap reported after a sync.
+# applied, 1 conflicts, kernel change pending, skills cap exceeded or not
+# counted, 2 usage or guard failure), and the skills cap reported after a sync.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -449,6 +449,19 @@ proj_commit "a third project skill"
 run ./scripts/template-sync.sh --template "$TPL3" --ref v2
 assert_contains "a project over its cap gets an action item" "ACTION: skills cap: .claude/skills has 10 skills; the cap is 9"
 assert_rc "a sync that leaves the project over its skills cap exits 1" 1
+# A lessons.sh without the skills command (an older release) exits 2 with its
+# usage; that is an unchecked cap, not a breach with no reason.
+cd "$TPL3" || exit 1
+put scripts/lessons.sh '#!/usr/bin/env bash
+echo "usage: lessons.sh check" >&2
+exit 2'
+commit_all v3 && git tag v3
+cd "$PRJ3" || exit 1
+proj_commit "the over-cap sync"
+run ./scripts/template-sync.sh --template "$TPL3" --ref v3
+assert_not_contains "a lessons.sh without the skills command is no cap breach" "ACTION: skills cap"
+assert_contains "a cap that could not be counted is reported" "template-sync: skills cap not checked: scripts/lessons.sh skills exited 2"
+assert_rc "a sync whose cap could not be counted exits 1" 1
 cd "$PRJ" || exit 1
 
 # ---- usage ----
