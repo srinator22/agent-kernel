@@ -111,10 +111,13 @@ gerr() { echo "CHECK FAILED: $*" >&2; gfail=1; }
 # 4a. Style: plain hyphens only (kernel rule 20), and no typographic or
 # mis-encoded characters. Tracked files only.
 # Needs grep with PCRE (GNU); where unavailable this defers to CI.
+# The first 20 matches are printed with sed, which reads all its input: a
+# pipe into head ends the writer with SIGPIPE under pipefail (exit 141) once
+# the list outgrows the pipe buffer.
 rc=0
 dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
 if (( rc == 0 )); then
-  printf '%s\n' "$dashes" | head -20
+  printf '%s\n' "$dashes" | sed -n '1,20p'
   gerr "em or en dash found; plain hyphens only"
 elif (( rc > 1 )); then
   echo "WARNING: git grep -P unavailable; dash check deferred to CI."
@@ -126,7 +129,7 @@ fi
 rc=0
 chars="$(git grep -IPn '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' 2>/dev/null)" || rc=$?
 if (( rc == 0 )); then
-  printf '%s\n' "$chars" | head -20
+  printf '%s\n' "$chars" | sed -n '1,20p'
   gerr "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
 elif (( rc > 1 )); then
   echo "WARNING: git grep -P unavailable; character check deferred to CI."
@@ -231,7 +234,10 @@ if [[ ! -f .start-done ]]; then
     scripts/template-release.sh scripts/fleet.sh
     .claude/skills/template-update/SKILL.md .agents/skills/template-update/SKILL.md
     tests/template/test_template_release.sh tests/template/test_fleet.sh
-    scripts/dream.sh scripts/dream.py tests/template/test_dream.sh docs/procedures/dream.md
+    scripts/dream.sh scripts/dream/dream.py scripts/dream/ruff.toml
+    tests/template/test_dream.sh docs/procedures/dream.md
+    docs/library/ruff.toml docs/profiles/ruff.toml
+    tests/template/test_selftest.sh tests/template/fixtures/fake-ruff.sh
     .claude/agents/dreamer.md .codex/agents/dreamer.toml
     .claude/skills/dream/SKILL.md .agents/skills/dream/SKILL.md
     scripts/quickgate.sh scripts/selftest.sh
@@ -320,10 +326,75 @@ if [[ ! -f .start-done ]]; then
     if [[ -n "$msg" ]]; then terr "$msg"; fi
   done < <(blueprint_parity docs/BLUEPRINT.md "${required[@]}")
 
+  # 5k. Template Python carries its own ruff contract. Projects that run
+  # "ruff check ." or "ruff format --check ." with stricter rules must not
+  # fail on synced template files, so every tracked .py lies under a folder
+  # below the root with its own ruff.toml (ruff uses the closest config; a
+  # root config is never synced), and the pinned ruff passes check and
+  # format --check there. format --check guards the folders' format exclusion.
+  # The same two runs repeat from a scratch root whose config selects every
+  # rule, so the folder config must win over a strict project config.
+  # Runner: ruff on PATH at exactly RUFF_PIN, else uvx, else pipx (network on
+  # first use; pinned by exact version since the template has no lockfile).
+  # Test hook: TEMPLATE_RUFF names the ruff command (the self-tests' fake).
+  RUFF_PIN="0.16.10"
+  ruff_dirs=()
+  while IFS= read -r f; do ruff_dirs+=("${f%/ruff.toml}"); done < <(git ls-files -- '*/ruff.toml')
+  while IFS= read -r p; do
+    covered=0
+    for d in "${ruff_dirs[@]+"${ruff_dirs[@]}"}"; do
+      if [[ "$p" == "$d/"* ]]; then covered=1; break; fi
+    done
+    (( covered )) || terr "$p is template Python outside a folder with its own ruff.toml; projects would lint it with their own rules (move it under such a folder)"
+  done < <(git ls-files -- '*.py')
+  if (( ${#ruff_dirs[@]} > 0 )); then
+    ruff_cmd=(); ruff_via=""
+    if [[ -n "${TEMPLATE_RUFF:-}" ]]; then
+      ruff_cmd=("$TEMPLATE_RUFF"); ruff_via="TEMPLATE_RUFF ($TEMPLATE_RUFF)"
+    elif command -v ruff >/dev/null 2>&1 && [[ "$(ruff --version 2>/dev/null || true)" == "ruff $RUFF_PIN" ]]; then
+      ruff_cmd=(ruff); ruff_via="ruff on PATH"
+    elif command -v uvx >/dev/null 2>&1; then
+      ruff_cmd=(uvx "ruff@$RUFF_PIN"); ruff_via="uvx"
+    elif command -v pipx >/dev/null 2>&1; then
+      ruff_cmd=(pipx run "ruff==$RUFF_PIN"); ruff_via="pipx"
+    fi
+    if (( ${#ruff_cmd[@]} == 0 )); then
+      terr "ruff $RUFF_PIN is needed for the template's Python (${ruff_dirs[*]}): install exactly that version, or uv (uvx) or pipx"
+    elif ! ruff_ver="$("${ruff_cmd[@]}" --version 2>&1)"; then
+      terr "could not run ruff $RUFF_PIN through $ruff_via: $ruff_ver"
+    else
+      echo "template ruff: $ruff_via, $ruff_ver"
+      "${ruff_cmd[@]}" check --no-cache --quiet "${ruff_dirs[@]}" \
+        || terr "ruff check failed on the template's Python (${ruff_dirs[*]})"
+      "${ruff_cmd[@]}" format --no-cache --check --quiet "${ruff_dirs[@]}" \
+        || terr "ruff format --check failed on the template's Python; keep the [format] exclude in each folder ruff.toml"
+      scratch="$(mktemp -d "${TMPDIR:-/tmp}/template-ruff.XXXXXX")"
+      printf '[tool.ruff]\nline-length = 40\n\n[tool.ruff.lint]\nselect = ["ALL"]\n' > "$scratch/pyproject.toml"
+      while IFS= read -r f; do
+        mkdir -p "$scratch/$(dirname "$f")" && cp "$f" "$scratch/$f"
+      done < <(git ls-files -- '*/ruff.toml' '*.py')
+      if ! (cd "$scratch" && "${ruff_cmd[@]}" check --no-cache --quiet "${ruff_dirs[@]}" \
+            && "${ruff_cmd[@]}" format --no-cache --check --quiet "${ruff_dirs[@]}"); then
+        terr "a strict project-root ruff config overrides a folder ruff.toml; projects would lint template Python with their own rules"
+      fi
+      case "$scratch" in */template-ruff.*) rm -rf -- "$scratch" ;; esac
+    fi
+  fi
+
+  # 5l. No script pipes into head. Under pipefail the writer dies with
+  # SIGPIPE (exit 141) once its output outlives head, which turned a long dash
+  # list into a crash; use sed -n '1,Np', which reads all its input. Not
+  # linted, same mechanism: an early-exit grep -q or grep -m on a pipe.
+  heads="$(git grep -nE '\|[[:space:]]*head([[:space:]]|$)' -- 'scripts/*.sh' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
+  if [[ -n "$heads" ]]; then
+    printf '%s\n' "$heads"
+    terr "a script pipes into head (exit 141 under pipefail on long output); use sed -n '1,Np'"
+  fi
+
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
   exit 0
 fi
 

@@ -481,7 +481,7 @@ def luma(img: Image, stride: int = 1) -> list:
 
 def rgb8_rows(img: Image) -> list:
     """Rows of bytes (R,G,B per pixel, 8 bit): gray expanded, alpha ignored, 16 bit scaled to 8."""
-    c, w, mv = img.channels, img.width, img.maxval
+    c, w = img.channels, img.width
     out = []
     for row in img.rows:
         if img.bitdepth == 16:

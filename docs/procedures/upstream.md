@@ -106,6 +106,20 @@ last), so check.sh itself stays the template's and syncs cleanly.
    8. Run `./scripts/check.sh` until green, then ship per
       `docs/procedures/ship.md` with a commit body listing what the sync
       applied, merged and left.
+   9. Drop workarounds the new release makes unnecessary (the fixes since
+      template-v0.3.0):
+      - take the template's `scripts/selftest.sh` and `scripts/new-task.sh`
+        over a local fix (several projects added their own quarantine reader
+        or workflow parser);
+      - remove the `tests/quarantine.list` and `QUARANTINE.md` entries for
+        `tests/template/test_blueprint_parity.sh` and `test_check_always.sh`
+        once they pass;
+      - reword a `- Git workflow:` line that new-task.sh reads as gated
+        although direct-to-main is meant, such as "direct-to-main on master",
+        to "direct-to-main, on master"; new-task.sh warns on such a line;
+      - merge the adopted-profile DIFF of the hardware-pcb tool tests, then
+        drop a ruff exclusion of `docs/profiles` or `docs/library`: the
+        folder `ruff.toml` files carry the template's own lint contract.
 
    The script never touches the Project decisions section, re-verifies the
    kernel hash after applying, and refuses a real apply on main or on a

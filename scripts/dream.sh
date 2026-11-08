@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dream.sh - wrapper for scripts/dream.py, the offline memory-dream helper.
+# dream.sh - wrapper for scripts/dream/dream.py, the offline memory-dream helper.
 #   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines to signals
 #   done                                      commit the digest's offsets
 #   due [--offer] [--quiet]                   is a dream due (file stats only)
@@ -30,4 +30,4 @@ if [[ -z "$PY" ]]; then
   exit 2
 fi
 
-exec "$PY" -I -B "$ROOT/scripts/dream.py" "$@"
+exec "$PY" -I -B "$ROOT/scripts/dream/dream.py" "$@"

@@ -110,7 +110,7 @@ class Plan(OverlayCase):
         self.assertEqual(code, 1)
         self.assertIn("side: label 'lid': crosses to the other side of its subject (declared left)", out)
         self.assertIn("safe: label 'lid'", out)
-        self.assertIn("-99", [l for l in out.splitlines() if l.startswith("side:")][0])
+        self.assertIn("-99", [ln for ln in out.splitlines() if ln.startswith("side:")][0])
         last = self.track()["items"][0]["frames"][-1]
         self.assertAlmostEqual(last["x"], 0.05 * W)  # clamped into the safe area in the track
 
@@ -183,7 +183,9 @@ class Plan(OverlayCase):
 
     def test_title_lower_third_and_cover_advisory(self):
         # A centred title over a subject is reported (advisory, exit unchanged); lower_third moves it down.
-        still = lambda f: {"Pin": [0.5, 0.5, 2.0]}
+        def still(f):
+            return {"Pin": [0.5, 0.5, 2.0]}
+
         code, out, _ = self.run_tool(spec([], {"text": "End", "in": 5, "hold_s": 2.0}), extract(still))
         self.assertEqual(code, 0, out)
         self.assertIn("advisory: title box covers 'Pin' (anchor) at frames 5-", out)
