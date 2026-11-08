@@ -142,9 +142,10 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
-  dream.sh                    # dream digest, due, done, status, hygiene (wrapper for dream/dream.py)
+  dream.sh                    # dream digest, due, done, status, hygiene, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
+    taste.py                  # stdlib: cross-project taste digest, evidence pool, approved lines into ~/.claude/taste
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
@@ -178,6 +179,7 @@ tests/
     test_fleet.sh             # status rows against fixture projects
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
     test_selftest.sh          # quarantine list, n/a lines, summary counts
+    test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network
@@ -197,6 +199,7 @@ tests/
     worker.md                 # mechanical execution; model sonnet; Bash|PowerShell hook blocks git commit/push
     monitor.md                # post-push CI watcher; model haiku; runs scripts/ci-watch.sh
     dreamer.md                # read-only dream: digest and memory files in, numbered proposals out; model sonnet
+    taste-dreamer.md          # read-only taste pass: taste digest and profile in, numbered profile lines out; model sonnet
   skills/
     start/SKILL.md            # thin wrapper -> docs/procedures/start.md
     ship/SKILL.md             # thin wrapper -> docs/procedures/ship.md
@@ -206,7 +209,7 @@ tests/
     template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
     dream/SKILL.md            # thin wrapper -> docs/procedures/dream.md
 .codex/
-  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml
+  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml, taste-dreamer.toml
 .agents/
   skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)
 .archive/

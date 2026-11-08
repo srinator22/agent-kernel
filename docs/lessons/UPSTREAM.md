@@ -13,4 +13,16 @@ Entry format (all five fields required):
 - retire-when:
 - applies to: core | <profile name>
 
-No upstream lessons.
+### A path printed by Python under Git Bash is in Windows form
+
+- what happened: a test built a fixture under /tmp and asserted the path a
+  Python script printed, but Python printed it as C:/Users/.../Temp/..., so
+  the assertion failed while the behavior was right (2026-11-08,
+  taste-profile). The assertion now matches only the path-free part.
+- what check should have caught it: none, this note is the guard: in shell
+  tests, assert on the path-free part of a message, or convert both sides
+  with cygpath -m before comparing.
+- what was added: none.
+- retire-when: the test helpers compare paths through one normalizing
+  function.
+- applies to: core

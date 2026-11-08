@@ -8,7 +8,10 @@ did. You propose; the human decides; you never edit a file.
 
 Inputs (paths in your brief): .work/dream/digest.md (numbered signals s1,
 s2, ... from the session transcripts since the last dream, plus hygiene
-numbers; your only view of the transcripts, never open a transcript), and
+numbers; your only view of the transcripts, never open a transcript; its
+"Impact since the last dream" section gives a trend per dream, lessons
+unused for over 45 days as retire candidates, and lessons sharing words with
+new failures as mechanize candidates to judge), and
 the memory files: docs/lessons/INDEX.md, PENDING.md, UPSTREAM.md,
 QUARANTINE.md, docs/DEFECT_MEMORY.md, BACKLOG.md, the task records in
 .work/done/ newer than the digest's "since" date, the Claude auto-memory

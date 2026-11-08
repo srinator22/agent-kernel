@@ -52,6 +52,16 @@ elif kind == "vis":
     o = dict(base, type="user", isVisibleInTranscriptOnly=True, message={"role": "user", "content": text})
 elif kind == "userp":
     o = dict(base, type="user", message={"role": "user", "content": text})
+elif kind == "human":
+    o = dict(base, type="user", origin={"kind": "human"}, promptSource="sdk", message={"role": "user", "content": text})
+elif kind == "peer":
+    o = dict(base, type="user", origin={"kind": "peer", "from": "local_x"}, promptSource="system",
+             message={"role": "user", "content": text})
+elif kind == "brief":
+    o = dict(base, type="user", promptSource="sdk", turnOrigin="sdk", message={"role": "user", "content": text})
+elif kind == "queuednotif":
+    o = dict(base, type="attachment", attachment={"type": "queued_command", "prompt": text,
+                                                  "origin": {"kind": "task-notification"}})
 elif kind in ("raw", "rawp", "nl"):
     o = None
 else:
@@ -102,6 +112,11 @@ mk "$S1" err       2026-11-07T10:12:00.000Z "$LONGERR"
 mk "$S1" raw       2026-11-07T10:13:00.000Z "{\"cwd\": \"$(printf '%s' "$NATIVE" | sed 's/\\/\\\\/g')\" broken"
 mk "$S1" compact   2026-11-07T10:14:00.000Z "This session is being continued from a previous conversation compact summary"
 mk "$S1" vis       2026-11-07T10:15:00.000Z "visible only in the transcript text"
+mk "$S1" human     2026-11-07T10:16:00.000Z "typed by the owner in a new client"
+mk "$S1" peer      2026-11-07T10:17:00.000Z "another session's words must not appear"
+mk "$S1" brief     2026-11-07T10:18:00.000Z "Task (from the session that started this one): a brief must not appear"
+mk "$S1" user      2026-11-07T10:19:00.000Z "Background (from the session that started this one): an old brief must not appear"
+mk "$S1" queuednotif 2026-11-07T10:20:00.000Z "a queued notification must not appear"
 mk "$S2" user      2026-11-07T11:00:00.000Z "from another project folder"
 mk "$S2" user      2026-11-07T11:01:00.000Z "other repo must not appear" "$NATIVE-other/dir"
 mk "$S1" rawp      2026-11-07T11:30:00.000Z "$(printf '%s' '{"type":"user","timestamp":"2026-11-07T11:30:00.000Z","cwd":"')$(printf '%s' "$NATIVE" | sed 's/\\/\\\\/g')\",\"gitBranch\":\"main\",\"message\":{\"content\":\"the partial line\"}}"
@@ -134,6 +149,11 @@ assert_file_has "repeated error collapses with a count" "$D" "Exit code 1 compil
 assert_file_lacks "isMeta line excluded" "$D" "meta line must not appear"
 assert_file_lacks "compaction summary excluded" "$D" "This session is being continued"
 assert_file_lacks "transcript-only line excluded" "$D" "visible only in the transcript text"
+assert_file_has "owner line (origin human) included" "$D" "typed by the owner in a new client"
+assert_file_lacks "another session's message excluded" "$D" "another session's words must not appear"
+assert_file_lacks "a session brief excluded" "$D" "a brief must not appear"
+assert_file_lacks "an old-format session brief excluded" "$D" "an old brief must not appear"
+assert_file_lacks "a queued notification excluded" "$D" "a queued notification must not appear"
 run git -C "$FIX" status --porcelain -uall -- .work/dream
 assert_eq "state folder never shows in git status" "" "$OUT"
 assert_file_lacks "wrapper text excluded" "$D" "wrapper must not appear"
@@ -382,5 +402,79 @@ assert_file_has "shared state: the digest lands in the main checkout" "$FIX/.wor
 assert_no_file "shared state: the linked worktree keeps no state" "$WT2/.work/dream"
 git worktree remove --force "$WT2" >/dev/null 2>&1
 
+# --- outcome and impact ---
+# Lesson ages come from the git date of each INDEX.md line, so the lines are
+# committed with pinned dates: L001 and L002 on 2026-09-01, L003 on 2026-11-01.
+PROJ10="$FIX/projects10"
+ST10="$FIX/state10"
+mkdir -p "$PROJ10/$SLUG"
+S10="$PROJ10/$SLUG/jjjjjjjj10.jsonl"
+printf '%s\n' '# Index' \
+  '- [L001] Rotating secrets - keep tokens inside the vault (used: 0, last: -, retire-when: vault removed)' \
+  '- [L002] Guarding commits - block worker commits with the guard hook (used: 2, last: 2026-11-01, retire-when: harness)' \
+  > "$FIX/docs/lessons/INDEX.md"
+git add docs/lessons/INDEX.md >/dev/null 2>&1
+GIT_AUTHOR_DATE=2026-09-01T00:00:00Z GIT_COMMITTER_DATE=2026-09-01T00:00:00Z git commit -q -m old-lessons >/dev/null 2>&1
+printf '%s\n' '- [L003] Fresh lesson - recent and never used (used: 0, last: -, retire-when: never)' >> "$FIX/docs/lessons/INDEX.md"
+git add docs/lessons/INDEX.md >/dev/null 2>&1
+GIT_AUTHOR_DATE=2026-11-01T00:00:00Z GIT_COMMITTER_DATE=2026-11-01T00:00:00Z git commit -q -m new-lesson >/dev/null 2>&1
+mk "$S10" user 2026-11-07T08:00:00.000Z "rotating secrets inside the vault tokens is a plain message"
+mk "$S10" user 2026-11-07T08:01:00.000Z "no, wrong file"
+mk "$S10" err  2026-11-07T08:02:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
+dg --projects-dir "$PROJ10" --state-dir "$ST10"
+assert_rc "impact: first digest exits 0" 0
+D10="$ST10/digest.md"
+assert_file_has "impact: the digest has an impact section" "$D10" "## Impact since the last dream"
+assert_file_has "impact: trend counts this dream by kind" "$D10" "  this dream: C 1, H 1, U 1"
+assert_file_has "impact: the first dream has no earlier trend" "$D10" "  no earlier dream"
+assert_file_has "impact: an old unused lesson is a retire candidate" "$D10" "L001 unused for 67 days"
+assert_file_lacks "impact: a recent unused lesson is not" "$D10" "L003 unused"
+assert_file_lacks "impact: a used lesson is not" "$D10" "L002 unused"
+assert_file_has "impact: a lesson whose words recur in a failure is a mechanize candidate" "$D10" "L002 shares words with s3 (commits guard worker)"
+assert_file_lacks "impact: plain messages are not mechanize evidence" "$D10" "L001 shares words"
+
+R10="$ST10/2026-11-07-report.md"
+printf '%s\n' '# Dream report 2026-11-07' 'Read: 3 signals; INDEX.md' '## Proposals' \
+  '1. [new lesson] Record the wrong-file trap' '   Why: s2' '   Evidence: s2' \
+  '   Change: add an entry to docs/lessons/PENDING.md under the last entry' \
+  '2. [stale] Fix a backlog row' '   Why: s3' '   Evidence: s3' '   Change: edit the row in BACKLOG.md' \
+  '## Considered and dropped' '- 9. s1: a plain message' > "$R10"
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 7
+assert_rc "outcome: an approved number missing from the report exits 2" 2
+assert_contains "outcome: the missing number is named" "proposal 7 is not in"
+assert_file "outcome: a refused done keeps the digest state" "$ST10/state.next.json"
+run bash scripts/dream.sh done --state-dir "$ST10" --applied 1
+assert_rc "outcome: --applied without --report exits 2" 2
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 1 1
+assert_rc "outcome: a repeated approved number exits 2" 2
+assert_contains "outcome: the repeated number is named" "proposal 1 is approved twice"
+RD10="$ST10/dup-report.md"
+printf '%s\n' '# Dream report 2026-11-07' '## Proposals' '1. [stale] one' '   Change: edit BACKLOG.md' \
+  '1. [stale] two' '   Change: edit README.md' > "$RD10"
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$RD10" --applied 1
+assert_rc "outcome: a report that numbers two proposals alike exits 2" 2
+assert_contains "outcome: the report's repeated number is named" "numbers proposal 1 twice"
+assert_file "outcome: a refused done still keeps the digest state" "$ST10/state.next.json"
+printf '%s\n' '### New trap' 'seen 2026-11-07' >> "$FIX/docs/lessons/PENDING.md"
+run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 1
+assert_rc "outcome: done with a report exits 0" 0
+assert_contains "outcome: done says where the outcome went" "dream: outcome appended to"
+assert_file_has "outcome: heading" "$R10" "## Outcome 2026-11-07"
+assert_file_has "outcome: applied numbers" "$R10" "Applied: 1"
+assert_file_has "outcome: declined numbers" "$R10" "Declined: 2"
+assert_file_has "outcome: files named in the applied Change lines" "$R10" "Files: docs/lessons/PENDING.md"
+assert_file_lacks "outcome: a declined change's file is not listed" "$R10" "Files: docs/lessons/PENDING.md, BACKLOG.md"
+assert_file_has "outcome: hygiene before and after" "$R10" "  pending lessons: 3 (oldest 40 days, 1 older than 30 days) -> 4 (oldest 40 days, 1 older than 30 days)"
+assert_file_has "outcome: unchanged numbers are named once" "$R10" "Unchanged: AGENTS.md"
+
+dg --projects-dir "$PROJ10" --state-dir "$ST10"
+assert_rc "impact: nothing new exits 3" 3
+DREAM_NOW="2026-11-09T12:00:00Z" mk "$S10" user 2026-11-09T08:00:00.000Z "a later plain message"
+DREAM_NOW="2026-11-09T12:00:00Z" dg --projects-dir "$PROJ10" --state-dir "$ST10"
+assert_rc "impact: second digest exits 0" 0
+assert_file_has "impact: the trend keeps the earlier dream through a stop" "$D10" "  2026-11-07: C 1, H 1, U 1"
+assert_file_has "impact: and counts this one" "$D10" "  this dream: U 1"
+DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --state-dir "$ST10"
+assert_rc "impact: done without a report still works" 0
 
 t_finish

@@ -2,7 +2,8 @@
 
 Purpose: an offline, model-free pass over this repository's session transcripts.
 It keeps only user-visible signal (corrections, messages, interrupts, denials,
-hook blocks, failed tool calls), reads each transcript line once ever, and
+hook blocks, failed tool calls; a message counts only when is_human says the
+owner wrote it), reads each transcript line once ever, and
 reports memory-file hygiene. A model reads only the resulting digest.
 
 Inputs: JSONL transcripts at <projects>/<dir>/<session>.jsonl (top level only;
@@ -14,8 +15,15 @@ Outputs: <state-dir>/digest.md, <state-dir>/state.next.json (proposed offsets).
 No tracked file is ever edited. The default state folder is the main
 worktree's .work/dream (shared by all linked worktrees); it holds a .gitignore
 of "*" so it never shows in git status. --max-bytes must be at least 2000.
+Impact and outcome: each digest opens an "Impact since the last dream"
+section (signal counts by kind per dream, approved lessons with used: 0 whose
+INDEX.md line is older than 45 days by git date, lessons sharing two or more
+words with a new C, D, H, I or E signal; candidates only, the dreamer judges).
+"done --report R --applied N..." appends an Outcome to the saved report:
+applied and declined numbers, files named in the applied Change lines, and the
+hygiene numbers at digest time against now.
 State: <state-dir>/state.json {version, files{path: {offset, m}}, known_roots,
-last_dream}; <state-dir>/offered holds the day:retro-count fingerprint of the
+last_dream, dreams[{date, counts}] (the last 10)}; <state-dir>/offered holds the day:retro-count fingerprint of the
 last offer. "done" commits state.next.json, so an unfinished dream loses nothing.
 The per-file flag m marks transcripts that ever held lines for this repository,
 so activity in unrelated projects never makes a dream due. Unseen transcripts
@@ -48,6 +56,24 @@ DENIED = ("permission for this action was denied", "doesn't want to proceed",
           "was rejected", "denied by")
 HOOK = ("hook error", "blocked by")
 PRIORITY = {"C": 0, "D": 0, "H": 0, "I": 0, "E": 1, "U": 2, "M": 2}
+# Text that clients put in a user turn on someone else's behalf, in
+# transcripts written before lines carried an origin.
+MACHINE_PREFIXES = ("Task (from the session that started this one)",
+                    "Background (from the session that started this one)",
+                    "Another Claude session sent", "Base directory for this skill:",
+                    "This session is being continued", "I hit my usage limit while you were working",
+                    "The app was quit while you were working")
+KIND_ORDER = "CDHIEUM"
+MECHANIZE_KINDS = "CDHIE"
+RETIRE_DAYS = 45
+INDEX_REL = "docs/lessons/INDEX.md"
+LESSON = re.compile(r"- \[(L\d+)\] (.*?)\s*\(used:\s*(\d+)\b")
+FILE_RE = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)*[\w-][\w.-]*\.(?:md|sh|py|toml|json|ya?ml|txt))\b")
+# Words too common to tie a lesson or a profile line to a signal.
+STOP = {"about", "after", "again", "always", "never", "their", "there", "these", "those", "which",
+        "while", "would", "should", "could", "where", "every", "other", "being", "prefer", "instead",
+        "without", "using", "really", "think", "thing", "things", "something", "because", "before",
+        "still", "first", "owner"}
 HYGIENE_FILES = ["AGENTS.md", "BACKLOG.md", "docs/DEFECT_MEMORY.md",
                  "docs/lessons/INDEX.md", "docs/lessons/PENDING.md",
                  "docs/lessons/UPSTREAM.md", "docs/lessons/QUARANTINE.md"]
@@ -111,6 +137,7 @@ class Ctx:
         s.setdefault("files", {})
         s.setdefault("known_roots", [])
         s.setdefault("last_dream", None)
+        s.setdefault("dreams", [])
         return s
 
     def sp(self, name):
@@ -197,6 +224,22 @@ def is_correction(s):
     return CORRECTION.match(s.strip().replace("\u2019", "'")) is not None
 
 
+def is_human(holder, text=""):
+    """True when a user line (or a queued_command attachment) holds the owner's
+    own words. Newer transcripts say so in origin.kind; another session's
+    message is "peer", a background result "task-notification". Older lines
+    have only turnOrigin, or nothing, so known machine-written openings decide."""
+    o = holder.get("origin")
+    if isinstance(o, dict) and o.get("kind"):
+        return o.get("kind") == "human"
+    t = holder.get("turnOrigin")
+    if t:
+        return t == "human"
+    if holder.get("promptSource") == "system":
+        return False
+    return not text.lstrip().startswith(MACHINE_PREFIXES)
+
+
 def extract(obj):
     """Yield (kind, text) signals from one parsed transcript line."""
     t = obj.get("type")
@@ -205,7 +248,7 @@ def extract(obj):
         content = msg.get("content") if isinstance(msg, dict) else None
         for s in texts(content):
             s = s.strip()
-            if not s or s.startswith("<"):
+            if not s or s.startswith("<") or not is_human(obj, s):
                 continue
             if s.startswith("[Request interrupted by user"):
                 yield "I", clean(s, MSG_LIMIT)
@@ -229,8 +272,156 @@ def extract(obj):
         att = obj.get("attachment")
         if isinstance(att, dict) and att.get("type") == "queued_command":
             p = att.get("prompt")
-            if isinstance(p, str) and p.strip() and not p.strip().startswith("<"):
+            if isinstance(p, str) and p.strip() and not p.strip().startswith("<") and is_human(att, p):
                 yield ("C" if is_correction(p) else "M"), clean(p, MSG_LIMIT)
+
+
+def words(s):
+    """Distinctive words (five letters or more, minus STOP) for overlap checks."""
+    return {w for w in re.findall(r"[a-z]{5,}", s.lower()) if w not in STOP}
+
+
+def fmt_counts(counts, order):
+    return ", ".join("%s %d" % (k, counts[k]) for k in order if counts.get(k)) or "none"
+
+
+def read_text(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def approved_lessons(root):
+    """(line number, id, text, used) for each approved lesson, counted the way
+    scripts/lessons.sh does: fenced examples and the documented format line,
+    whose text starts with a "<...>" placeholder, are not lessons."""
+    out, fence = [], False
+    for n, row in enumerate(read_text(os.path.join(root, INDEX_REL)).splitlines(), 1):
+        if row.startswith("```"):
+            fence = not fence
+            continue
+        m = re.match(r"- \[L\d+\] (.*)", row)
+        if fence or not m or m.group(1).startswith("<"):
+            continue
+        f = LESSON.match(row)
+        out.append((n, f.group(1) if f else row[3:7], f.group(2) if f else m.group(1),
+                    int(f.group(3)) if f else None))
+    return out
+
+
+def git_line_dates(root, rel):
+    """Committer date of each line of rel by git blame; None outside git or for
+    an untracked file. Uncommitted lines carry the current time."""
+    try:
+        r = subprocess.run(["git", "-C", root, "blame", "--line-porcelain", "--", rel],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    out, cur = {}, None
+    for row in r.stdout.splitlines():
+        m = re.match(r"[0-9a-f]{40} \d+ (\d+)", row)
+        if m:
+            cur = int(m.group(1))
+        elif row.startswith("committer-time ") and cur is not None:
+            out[cur] = dt.datetime.fromtimestamp(int(row.split()[1]), dt.timezone.utc)
+    return out
+
+
+def impact_lines(c, sigs, counts):
+    """What changed since the last dream, from data already kept; candidates only."""
+    out = ["", "## Impact since the last dream", "trend, signals by kind per dream:"]
+    dreams = c.state["dreams"][-10:]
+    if not dreams:
+        out.append("  no earlier dream")
+    for d in dreams:
+        out.append("  %s: %s" % (d["date"][:10], fmt_counts(d["counts"], KIND_ORDER)))
+    out.append("  this dream: %s" % fmt_counts(counts, KIND_ORDER))
+    lessons = approved_lessons(c.root)
+    if lessons:
+        dates = git_line_dates(c.root, INDEX_REL)
+        if dates is None:
+            out.append("retire candidates: N/A - %s has no git history here" % INDEX_REL)
+        else:
+            for n, lid, _, used in lessons:
+                if used == 0 and n in dates and (c.now - dates[n]).days > RETIRE_DAYS:
+                    out.append("%s unused for %d days (used: 0; its line was committed %s)"
+                               % (lid, (c.now - dates[n]).days, dates[n].strftime("%Y-%m-%d")))
+    for _, lid, text, _ in lessons:
+        w = words(text)
+        hits = []
+        for sid, s in sigs:
+            common = w & words(s["text"]) if s["kind"] in MECHANIZE_KINDS else set()
+            if len(common) >= 2:
+                hits.append("%s (%s)" % (sid, " ".join(sorted(common))))
+        if hits:
+            out.append("%s shares words with %s" % (lid, ", ".join(hits[:3])))
+    return out
+
+
+def hygiene_numbers(text):
+    """The top-level "label: value" lines of a hygiene report, in order."""
+    out = {}
+    for row in text.splitlines():
+        if row and not row.startswith(" "):
+            label, _, val = row.partition(": ")
+            out[label] = val
+    return out
+
+
+def parse_report(path):
+    """{number: [Change texts]} from a saved dream report's Proposals section."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = f.read().splitlines()
+    except OSError as e:
+        die("dream: cannot read the report %s: %s" % (path, e))
+    props, cur, inside = {}, None, False
+    for row in rows:
+        if row.startswith("## "):
+            inside = row.strip() == "## Proposals"
+            cur = None
+            continue
+        if not inside:
+            continue
+        m = re.match(r"(\d+)\. ", row)
+        if m:
+            cur = int(m.group(1))
+            if cur in props:
+                die("dream: %s numbers proposal %d twice; fix the report first" % (path, cur))
+            props[cur] = []
+        elif cur is not None and row.strip().startswith("Change:"):
+            props[cur].append(row.strip()[7:].strip())
+    return props
+
+
+def outcome_text(c, path, applied, before):
+    props = parse_report(path)
+    for i, n in enumerate(applied):
+        if n in applied[:i]:
+            die("dream: proposal %d is approved twice" % n)
+        if n not in props:
+            die("dream: proposal %d is not in %s; approved numbers must match its numbered list" % (n, path))
+    done = sorted(set(applied))
+    files = []
+    for n in done:
+        for ch in props[n]:
+            for f in FILE_RE.findall(ch):
+                if f not in files:
+                    files.append(f)
+    after = hygiene_numbers(hygiene_text(c))
+    before = before or {}
+    changed = ["  %s: %s -> %s" % (k, before.get(k, "N/A"), v) for k, v in after.items() if before.get(k) != v]
+    same = [k for k, v in after.items() if before.get(k) == v]
+    return "\n".join(["", "## Outcome %s" % c.now.strftime("%Y-%m-%d"),
+                      "Applied: %s" % (", ".join(map(str, done)) or "none"),
+                      "Declined: %s" % (", ".join(str(n) for n in sorted(props) if n not in done) or "none"),
+                      "Files: %s" % (", ".join(files) or "none"),
+                      "Hygiene, at the digest -> now:"] + (changed or ["  no change"])
+                     + ["Unchanged: %s" % (", ".join(same) or "none"), ""])
 
 
 def count_lines(b):
@@ -248,25 +439,9 @@ def hygiene_text(c, memory_dir=None):
         else:
             out.append("%s: missing" % rel)
 
-    def read(path):
-        try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                return f.read()
-        except OSError:
-            return ""
-
-    idx = read(os.path.join(c.root, "docs", "lessons", "INDEX.md")).splitlines()
-    # Count lessons the way scripts/lessons.sh does: skip fenced examples and
-    # the documented format line, whose text starts with a "<...>" placeholder.
-    appr, fence = [], False
-    for row in idx:
-        if row.startswith("```"):
-            fence = not fence
-            continue
-        m = re.match(r"- \[L\d+\] (.*)", row)
-        if not fence and m and not m.group(1).startswith("<"):
-            appr.append(row)
-    unused = [row for row in appr if re.search(r"used:\s*0\b", row)]
+    read = read_text
+    appr = approved_lessons(c.root)
+    unused = [x for x in appr if x[3] == 0]
     out.append("approved lessons: %d (%d with used: 0)" % (len(appr), len(unused)))
 
     pend = read(os.path.join(c.root, "docs", "lessons", "PENDING.md"))
@@ -420,7 +595,7 @@ def cmd_digest(c, a):
 
     nextstate = {"version": 1, "files": newfiles,
                  "known_roots": sorted(set(c.state["known_roots"]) | set(wts)),
-                 "last_dream": c.state["last_dream"]}
+                 "last_dream": c.state["last_dream"], "dreams": c.state["dreams"]}
     since = c.state["last_dream"] or "the first dream"
     nxt = c.sp("state.next.json")
     if not raw:
@@ -430,7 +605,13 @@ def cmd_digest(c, a):
         print("dream: nothing to dream (no new signal since %s)" % since)
         return 3
 
+    counts = {}
+    for s in raw.values():
+        counts[s["kind"]] = counts.get(s["kind"], 0) + 1
+    hyg = hygiene_text(c)
     nextstate["signals"] = len(kept)
+    nextstate["this_dream"] = {"date": iso(c.now), "counts": counts}
+    nextstate["snapshot"] = hygiene_numbers(hyg)
     sigs = ["- s%d %s" % (i + 1, render(s)) for i, s in enumerate(kept)]
     body = "\n".join([
         "# Dream digest",
@@ -438,10 +619,11 @@ def cmd_digest(c, a):
         "since: %s" % since,
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
+    ] + impact_lines(c, [("s%d" % (i + 1), s) for i, s in enumerate(kept)], counts) + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",
-    ] + sigs + ["", "## Hygiene", hygiene_text(c), ""])
+    ] + sigs + ["", "## Hygiene", hyg, ""])
     ensure_dir(c.state_dir)
     dpath = c.sp("digest.md")
     with open(dpath, "w", encoding="utf-8", newline="\n") as f:
@@ -456,9 +638,20 @@ def cmd_done(c, a):
     nxt = c.sp("state.next.json")
     if not os.path.isfile(nxt):
         die("dream: run digest first")
+    if a.applied and not a.report:
+        die("dream: --applied needs --report <the saved report>")
     with open(nxt, encoding="utf-8") as f:
         s = json.load(f)
+    if a.report:
+        text = outcome_text(c, a.report, a.applied, s.get("snapshot"))
+        with open(a.report, "a", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        print("dream: outcome appended to %s" % a.report)
     n = s.pop("signals", 0)
+    this = s.pop("this_dream", None)
+    s.pop("snapshot", None)
+    if this:
+        s["dreams"] = (s.get("dreams", []) + [this])[-10:]
     s["last_dream"] = iso(c.now)
     write_json(c.sp("state.json"), s)
     os.remove(nxt)
@@ -560,7 +753,9 @@ def main():
     d = sub.add_parser("digest", parents=[common])
     d.add_argument("--match", action="append", default=[])
     d.add_argument("--max-bytes", type=int, default=40000)
-    sub.add_parser("done", parents=[common])
+    dn = sub.add_parser("done", parents=[common])
+    dn.add_argument("--report", help="append the outcome of this dream to the saved report")
+    dn.add_argument("--applied", type=int, nargs="+", default=[], help="the proposal numbers the human approved")
     u = sub.add_parser("due", parents=[common])
     u.add_argument("--offer", action="store_true")
     u.add_argument("--quiet", action="store_true")

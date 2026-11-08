@@ -81,7 +81,9 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
 - When a session's work is done and a dream is due, Claude asks whether to
   start dreaming (`/dream`, `docs/procedures/dream.md`): a script reduces the
   session transcripts since the last dream to their signal, one agent checks
-  the memory against it, and you approve numbered proposals.
+  the memory against it, and you approve numbered proposals. Its taste pass
+  learns your tastes across every local project into a personal profile
+  under `~/.claude/taste/` that every session loads; you approve each line.
 - Tags: the template is tagged `template-vX.Y.Z` by
   `scripts/template-release.sh`; a project built from it is tagged
   `vX.Y.Z`. Projects sync to the latest `template-v` tag.

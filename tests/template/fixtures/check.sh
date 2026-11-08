@@ -239,6 +239,8 @@ if [[ ! -f .start-done ]]; then
     docs/library/ruff.toml docs/profiles/ruff.toml
     tests/template/test_selftest.sh tests/template/fixtures/fake-ruff.sh
     .claude/agents/dreamer.md .codex/agents/dreamer.toml
+    scripts/dream/taste.py tests/template/test_taste.sh
+    .claude/agents/taste-dreamer.md .codex/agents/taste-dreamer.toml
     .claude/skills/dream/SKILL.md .agents/skills/dream/SKILL.md
     scripts/quickgate.sh scripts/selftest.sh
     tests/template/lib.sh tests/template/test_kernel_hash.sh
