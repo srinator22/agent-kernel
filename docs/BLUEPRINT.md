@@ -142,7 +142,7 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
-  dream.sh                    # dream digest, due, done, status, hygiene, taste (wrapper for dream/dream.py and dream/taste.py)
+  dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
     taste.py                  # stdlib: cross-project taste digest, evidence pool, approved lines into ~/.claude/taste
@@ -177,7 +177,7 @@ tests/
     test_session_context.sh   # mode line, git priming, task state, template update notice
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
-    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
+    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
     test_selftest.sh          # quarantine list, n/a lines, summary counts
     test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
     fixtures/

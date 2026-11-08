@@ -67,6 +67,32 @@ Taste pass below. Prefer the gap between tasks.
    dream" section starts from this record.
 7. Run the Taste pass below.
 
+## Scorecard
+
+Every digest has a "## Scorecard" section between Impact and Signals.
+`scripts/dream.sh scorecard` prints the same section read-only, which is
+how to see it when a digest exits 3. A script builds it from the saved
+reports (`.work/dream/YYYY-MM-DD-report.md`) and the checkout's current
+files; no model writes it, so the dreamer cannot grade itself. It shows:
+- one row per report, oldest first (the last 10; older ones fold into one
+  row), with the proposals, the numbers the owner approved and declined in
+  the report's last Outcome, or "no Outcome recorded";
+- the approval rate per proposal kind (the bracket tag);
+- each lesson id and each quoted BACKLOG row that an approved Change line
+  names, newest report first, at most 20 of each: its INDEX.md used and
+  last values, or the row's last cell, as they are now in the checkout and
+  branch the first line names;
+- the decided count against 30 (a self-review pass) and 50 (a replay check).
+
+"Approved" is the owner's approval number, not proof the change landed:
+"not in INDEX.md" or "not found" on a branch the change has not reached yet
+is expected. Candidates are signals that share two or more words with a
+lesson, the same matcher as Impact, not proof of recurrence. A report that
+cannot be read or has a malformed Outcome is listed as skipped. Kind rows
+and skipped lines are capped at 20 as well, and long values are cut. A lesson id is L with three or
+more digits, as INDEX.md writes them, read as written: a range such as
+"L011-L013" counts L011 and L013 only.
+
 ## Taste pass
 
 The taste pass learns the owner's tastes across every local project into a

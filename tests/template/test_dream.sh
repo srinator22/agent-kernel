@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/dream.sh and scripts/dream/dream.py: the signal digest, the once-only offsets, the
-# due decision and the memory hygiene report. Transcripts are synthetic JSONL
+# due decision, the memory hygiene report and the scorecard. Transcripts are synthetic JSONL
 # under a fake projects folder; DREAM_PROJECTS_DIR and DREAM_NOW pin the inputs.
 # Without python the test is skipped (CI has python3).
 set -uo pipefail
@@ -476,6 +476,176 @@ assert_file_has "impact: the trend keeps the earlier dream through a stop" "$D10
 assert_file_has "impact: and counts this one" "$D10" "  this dream: U 1"
 DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --state-dir "$ST10"
 assert_rc "impact: done without a report still works" 0
+
+# --- scorecard ---
+# Owner decisions from saved reports, counted by script. "Now" values come from
+# the fixture's INDEX.md (L001 used 0, L002 used 2 last 2026-11-01) and a
+# BACKLOG.md written here.
+run bash scripts/dream.sh scorecard --state-dir "$FIX/nostate"
+assert_rc "scorecard: no state folder exits 0" 0
+assert_contains "scorecard: no state folder says so" "no saved reports"
+assert_no_file "scorecard: no state folder is created" "$FIX/nostate"
+
+printf '%s\n' '# Backlog' '| item | priority | why | status |' '|---|---|---|---|' \
+  '| Alpha guard (matcher Bash\|PowerShell) with a test | P2 | recurs | done 2026-11-01 |' \
+  '| `Delta` row in backticks | P3 | x | open |' > "$FIX/BACKLOG.md"
+SCST11="$FIX/scstate11"
+mkdir -p "$SCST11"
+printf '%s\n' '# Dream report 2026-10-01' '## Proposals' \
+  '1. [Mechanize] Wire the guard' '   Evidence: s1' \
+  '   Change: BACKLOG.md rows "Alpha guard (matcher Bash|PowerShell) with a test | P2 | recurs | open" and "Beta missing | P3 | x | open", plus "Delta row in backticks | P3 | x | open"' \
+  '2. [pending:approve] Move a lesson' '   Change: docs/lessons/INDEX.md add "[L002] Guarding commits", note L001 and L099; docs/lessons/PENDING.md add "Gamma | not a row"' \
+  '3. Untagged idea' '   Change: BACKLOG.md row "Epsilon declined | P3 | x | open"; INDEX.md L077' \
+  '## Considered and dropped' '- nothing' \
+  '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: 3' 'Files: BACKLOG.md' > "$SCST11/2026-10-01-report.md"
+printf '%s\n' '# Dream report 2026-10-02' '## Proposals' '1. [stale] a' '2. [stale] b' > "$SCST11/2026-10-02-report.md"
+printf '%s\n' '# Dream report 2026-10-03' '## Proposals' '1. [stale] only' \
+  '## Outcome 2026-10-03' 'Applied: 1' 'Declined: none' \
+  '## Outcome 2026-10-04' 'Applied: none' 'Declined: 1' > "$SCST11/2026-10-03-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] one' '1. [stale] two' > "$SCST11/2026-10-04-report.md"
+printf '# r\n## Proposals\n1. [stale] bad \xff\xfe bytes\n' > "$SCST11/2026-10-05-report.md"
+mkdir -p "$SCST11/2026-10-06-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-07' 'Applied: 1, x' 'Declined: none' > "$SCST11/2026-10-07-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-08' 'Applied: 1' > "$SCST11/2026-10-08-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-09' 'Applied: 5' 'Declined: 1' > "$SCST11/2026-10-09-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '2. [stale] b' '## Outcome 2026-10-10' 'Applied: 1, 2' 'Declined: 2' > "$SCST11/2026-10-10-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] ignored' '## Outcome x' 'Applied: 1' 'Declined: none' > "$SCST11/notes-report.md"
+snap() { (cd "$SCST11" && find . -type f -exec cksum {} + | sort); }
+SNAP_BEFORE="$(snap)"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
+assert_rc "scorecard: command exits 0 with skipped reports" 0
+SC="$OUT"
+assert_eq "scorecard: the command changes no file in the state folder" "$SNAP_BEFORE" "$(snap)"
+assert_contains "scorecard: heading" "## Scorecard"
+assert_contains "scorecard: says what it counts" "the owner's recorded decisions on past dream proposals, counted by script"
+assert_contains "scorecard: names the checkout and branch read" "now values read from $NATIVE (branch "
+assert_contains "scorecard: a report with an Outcome" "  2026-10-01: proposals 3, approved 2, declined 1"
+assert_contains "scorecard: a report without an Outcome" "  2026-10-02: proposals 2, no Outcome recorded"
+assert_contains "scorecard: the last Outcome counts" "  2026-10-03: proposals 1, approved 0, declined 1"
+assert_contains "scorecard: a repeated number is skipped" "skipped 2026-10-04-report.md: numbers proposal 1 twice"
+assert_contains "scorecard: invalid UTF-8 is skipped" "skipped 2026-10-05-report.md: cannot read it"
+assert_contains "scorecard: an unreadable report is skipped" "skipped 2026-10-06-report.md: cannot read it"
+assert_contains "scorecard: a non-numeric Outcome is skipped" "skipped 2026-10-07-report.md: Outcome Applied is not a number list"
+assert_contains "scorecard: an Outcome without Declined is skipped" "skipped 2026-10-08-report.md: Outcome lacks a Declined line"
+assert_contains "scorecard: an Outcome number missing from Proposals is skipped" "skipped 2026-10-09-report.md: Outcome names 5, which its Proposals lack"
+assert_contains "scorecard: a number in both lists is skipped" "skipped 2026-10-10-report.md: Outcome puts 2 in both Applied and Declined"
+case "$SC" in *notes-report*) t_bad "scorecard: a file not named YYYY-MM-DD-report.md is ignored" "$SC" ;; *) t_ok "scorecard: a file not named YYYY-MM-DD-report.md is ignored" ;; esac
+assert_contains "scorecard: kind tag lowercased" "  mechanize: approved 1, declined 0, rate 100%"
+assert_contains "scorecard: kind spacing normalised" "  pending: approve: approved 1, declined 0, rate 100%"
+assert_contains "scorecard: kinds count every report with an Outcome" "  stale: approved 0, declined 1, rate 0%"
+assert_contains "scorecard: a proposal without a tag is untagged" "  untagged: approved 0, declined 1, rate 0%"
+assert_contains "scorecard: decided total against the thresholds" "decided: 4 (self-review pass at 30, replay check at 50)"
+assert_contains "scorecard: candidates have no source without a digest" "candidates: N/A - no digest signals"
+assert_contains "scorecard: a bracketed lesson id shows its INDEX values" "  L002: used 2, last 2026-11-01"
+assert_contains "scorecard: a bare lesson id is read too" "  L001: used 0, last -"
+assert_contains "scorecard: a lesson missing from INDEX.md" "  L099: not in INDEX.md"
+case "$SC" in *L077*) t_bad "scorecard: a declined proposal's lesson is not listed" "$SC" ;; *) t_ok "scorecard: a declined proposal's lesson is not listed" ;; esac
+assert_contains "scorecard: an escaped pipe still matches its row" "  Alpha guard (matcher Bash|PowerShell) with a test: done 2026-11-01"
+assert_contains "scorecard: every quoted row in a Change line counts" "  Beta missing: not found"
+assert_contains "scorecard: backticks do not stop a match" "  Delta row in backticks: open"
+case "$SC" in *Gamma*) t_bad "scorecard: a quote outside a BACKLOG.md change is not a row" "$SC" ;; *) t_ok "scorecard: a quote outside a BACKLOG.md change is not a row" ;; esac
+case "$SC" in *Epsilon*) t_bad "scorecard: a declined proposal's row is not listed" "$SC" ;; *) t_ok "scorecard: a declined proposal's row is not listed" ;; esac
+
+NOGIT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.nogit.XXXXXX")"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$NOGIT"
+assert_contains "scorecard: outside git the branch is N/A" "(branch N/A - not a git checkout)"
+rm -rf "$NOGIT"
+git -C "$FIX" checkout -q --detach
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
+assert_contains "scorecard: a detached HEAD is named" "(branch detached)"
+git -C "$FIX" checkout -q -
+
+# In a digest the section sits between Impact and Signals and counts candidates
+# with the Impact section's word matcher.
+SCPROJ11="$FIX/scprojects11"
+mkdir -p "$SCPROJ11/$SLUG"
+mk "$SCPROJ11/$SLUG/kkkkkkkk11.jsonl" err 2026-11-07T09:00:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
+dg --projects-dir "$SCPROJ11" --state-dir "$SCST11"
+assert_rc "scorecard: a digest with skipped reports still completes" 0
+SCD11="$SCST11/digest.md"
+assert_file_has "scorecard: the digest carries the section" "$SCD11" "## Scorecard"
+ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Signals\)$' "$SCD11" | cut -d: -f2 | tr '\n' ',')"
+assert_eq "scorecard: section order Impact, Scorecard, Signals" "## Impact since the last dream,## Scorecard,## Signals," "$ORDER"
+assert_file_has "scorecard: candidates in a digest come from its signals" "$SCD11" "  L002: used 2, last 2026-11-01; candidates 1"
+assert_file_has "scorecard: and the Impact section agrees" "$SCD11" "L002 shares words with s1"
+
+# Size: 15 reports of 12 approved proposals, two lessons and two long rows each.
+SCST12="$FIX/scstate12"
+mkdir -p "$SCST12"
+LONG="$(printf 'x%.0s' $(seq 1 90))"
+for d in $(seq 1 15); do
+  f="$SCST12/2026-09-$(printf '%02d' "$d")-report.md"
+  { echo "# r"; echo "## Proposals"
+    for p in $(seq 1 12); do
+      echo "$p. [mechanize] p$p"
+      echo "   Change: BACKLOG.md rows \"row-$d-$p-a $LONG | P2 | why $LONG | open $LONG\" and \"row-$d-$p-b $LONG | P2 | why | open\"; INDEX.md L$((d * 100 + p * 2)) and L$((d * 100 + p * 2 + 1))"
+    done
+    echo "## Outcome 2026-09-$(printf '%02d' "$d")"; echo "Applied: $(seq -s ', ' 1 12)"; echo "Declined: none"
+  } > "$f"
+done
+run bash scripts/dream.sh scorecard --state-dir "$SCST12"
+assert_rc "scorecard: the size fixture exits 0" 0
+BYTES="$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
+if (( BYTES < 6000 )); then t_ok "scorecard: 15 heavy reports stay under 6000 bytes ($BYTES)"; else t_bad "scorecard: 15 heavy reports stay under 6000 bytes" "$BYTES bytes"; fi
+assert_contains "scorecard: older reports fold into one row" "  older (5 reports): proposals 60, approved 60, declined 0, no Outcome 0"
+assert_contains "scorecard: the newest report's lessons come first" "  L1502: not in INDEX.md"
+assert_contains "scorecard: lessons beyond 20 are counted" "  ... 220 more not shown"
+assert_contains "scorecard: rows beyond 20 are counted" "  ... 220 more not shown"
+case "$OUT" in *row-15-1-a*) t_ok "scorecard: the newest report's rows come first" ;; *) t_bad "scorecard: the newest report's rows come first" "$OUT" ;; esac
+case "$OUT" in *"$LONG$LONG"*) t_bad "scorecard: cells are cut to 80 characters" "$OUT" ;; *) t_ok "scorecard: cells are cut to 80 characters" ;; esac
+
+# Each lesson id and row prints once: repeated in one Change line, across
+# reports, and a row cell differing only in case or backticks.
+SCST13="$FIX/scstate13"
+mkdir -p "$SCST13"
+printf '%s\n' '# r' '## Proposals' '1. [counter] twice in one line' \
+  '   Change: INDEX.md add [L404] and set L404 last; BACKLOG.md row "Zeta repeated row | P2 | x | open"' \
+  '## Outcome 2026-08-01' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-01-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [counter] again in a later report' \
+  '   Change: INDEX.md L404; BACKLOG.md row "`zeta REPEATED row` | P2 | y | open"' \
+  '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-02-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13"
+assert_eq "scorecard: a lesson repeated across reports prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
+# The repeat inside one Change line alone (an earlier report would hide it).
+SCST13B="$FIX/scstate13b"
+mkdir -p "$SCST13B"
+cp "$SCST13/2026-08-01-report.md" "$SCST13B/"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13B"
+assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+
+# A long used or last value in INDEX.md is cut, so a lesson line stays short.
+LR="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.longlast.XXXXXX")"
+mkdir -p "$LR/docs/lessons"
+printf '%s\n' "- [L404] Long values - x (used: $(printf '9%.0s' $(seq 1 60)), last: $(printf 'z%.0s' $(seq 1 200)), retire-when: y)" \
+  > "$LR/docs/lessons/INDEX.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13" --root "$LR"
+LINE="$(printf '%s\n' "$OUT" | grep '^  L404: ')"
+assert_contains "scorecard: the long lesson is listed" "  L404: used "
+if (( ${#LINE} <= 100 )); then t_ok "scorecard: long used and last values are cut (${#LINE} characters)"; else t_bad "scorecard: long used and last values are cut" "$LINE"; fi
+rm -rf "$LR"
+
+# Kind rows and skipped lines are capped too: 30 kinds and 30 bad reports.
+SCST14="$FIX/scstate14"
+mkdir -p "$SCST14"
+for k in $(seq 1 30); do
+  printf '%s\n' '# r' '## Proposals' "1. [kind-$k] one" '## Outcome 2026-07-01' 'Applied: 1' 'Declined: none' \
+    > "$SCST14/2026-07-$(printf '%02d' "$k")-report.md"
+  printf '%s\n' '# r' '## Proposals' '1. [x] a' '1. [x] b' > "$SCST14/2026-06-$(printf '%02d' "$k")-report.md"
+done
+run bash scripts/dream.sh scorecard --state-dir "$SCST14"
+assert_eq "scorecard: at most 20 kind rows" 20 "$(printf '%s\n' "$OUT" | grep -c '^  kind-[0-9]*: approved')"
+assert_eq "scorecard: at most 20 skipped lines" 20 "$(printf '%s\n' "$OUT" | grep -c '^skipped ')"
+assert_contains "scorecard: the remaining kinds are counted" "  ... 10 more kinds not shown"
+assert_contains "scorecard: the remaining skipped reports are counted" "... 10 more skipped reports not shown"
+
+# A repository with no commits yet still names its branch.
+UNBORN="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.unborn.XXXXXX")"
+git -C "$UNBORN" init -q -b fresh >/dev/null 2>&1 || git -C "$UNBORN" init -q >/dev/null 2>&1
+UB="$(git -C "$UNBORN" symbolic-ref --short HEAD 2>/dev/null)"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$UNBORN"
+assert_contains "scorecard: an unborn branch is named" "(branch $UB)"
+rm -rf "$UNBORN"
 
 # --- outcome files are checked against what changed; memory from a worktree ---
 # Files lists a named file only when git (against the digest's commit) or the
