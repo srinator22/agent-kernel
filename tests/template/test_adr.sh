@@ -10,7 +10,7 @@ cp_script adr.sh
 D=docs/decisions
 adr() { # file title-number date status
   mkdir -p "$D"
-  printf '# %s - A decision\n\nDate: %s\nStatus: %s\n\n## Context\n\nText.\n' "$2" "$3" "$4" > "$D/$1"
+  printf '# %s - A decision\n\nDate: %s\nStatus: %s\n\n## Context\n\nText.\n\n## Decision\n\nText.\n\n## Consequences\n\nText.\n' "$2" "$3" "$4" > "$D/$1"
 }
 
 run ./scripts/adr.sh check
@@ -65,6 +65,27 @@ run ./scripts/adr.sh check
 assert_rc "an empty Status fails" 1
 assert_contains "the status rule is stated" "needs a non-empty 'Status:' line"
 
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\n## Context\n\nOnly a context.\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "an ADR without Decision and Consequences fails" 1
+assert_contains "the missing sections are named" "0003-third.md: needs the sections '## Context', '## Decision' and '## Consequences'"
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\n## Decision\n\nX.\n\n## Context\n\nX.\n\n## Consequences\n\nX.\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "sections out of order fail" 1
+assert_contains "the order rule is stated" "the sections must run '## Context', '## Decision', '## Consequences' in that order"
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\n## Context\n\nX.\n\n## Decision\n\nX.\n\n## Consequences\n\nX.\n\n## Rejected alternatives\n\nX.\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "an extra section after the three passes" 0
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\nNo sections, only an example:\n\n```markdown\n## Context\n## Decision\n## Consequences\n```\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "headings inside a fenced block are not sections" 1
+assert_contains "the fenced-only ADR is named" "0003-third.md: needs the sections"
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\n~~~\n## Context\n## Decision\n## Consequences\n~~~\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "a tilde fence hides its headings too" 1
+printf '# 0003 - A decision\n\nDate: 2026-01-04\nStatus: accepted\n\n## Context\n\n```\n## Consequences\n```\n\n## Decision\n\nX.\n\n## Consequences\n\nX.\n' > "$D/0003-third.md"
+run ./scripts/adr.sh check
+assert_rc "a fenced heading does not count toward the order" 0
 adr 0001-first.md 0001 2026-01-02 "superseded by 0009 (2026-02-01)"
 adr 0003-third.md 0003 2026-01-04 accepted
 run ./scripts/adr.sh check

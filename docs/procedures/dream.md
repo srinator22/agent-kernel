@@ -42,7 +42,8 @@ Taste pass below. Prefer the gap between tasks.
 3. Dispatch the `dreamer` agent (standard tier, read-only) with the digest
    path, the memory file list in its definition, and this repository's
    Claude auto-memory folder (`~/.claude/projects/<folder named after the
-   repository path>/memory`). It returns at most 12 numbered proposals,
+   main checkout's path>/memory`, also from a linked worktree). It returns
+   at most 12 numbered proposals,
    each with evidence (digest signal ids or file:line).
 4. Save the report as `.work/dream/<date>-report.md` and show the human the
    numbered list. The human answers with numbers ("apply 1, 3, 5", or none).
@@ -58,8 +59,12 @@ Taste pass below. Prefer the gap between tasks.
    in the gitignored state only, so a dream with nothing approved leaves no
    tracked change, and appends "## Outcome <date>" to the report: the
    applied and declined numbers, the files named in the applied Change
-   lines, and the hygiene numbers at the digest against now. The next
-   digest's "Impact since the last dream" section starts from this record.
+   lines that changed since the digest (git against the commit the digest
+   saw, and the auto-memory folder), and the hygiene numbers at the digest
+   against now. Run it in the checkout that holds the applied changes, on a
+   history that contains the digest's commit; elsewhere the Files line says
+   the files were not checked. The next digest's "Impact since the last
+   dream" section starts from this record.
 7. Run the Taste pass below.
 
 ## Scorecard

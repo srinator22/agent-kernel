@@ -28,9 +28,13 @@ MANIFEST.md format
     - File cell: a path relative to the datasheets folder, plain, in
       backticks or as a Markdown link. A bare name (no slash) matches the one
       file of that name anywhere below the folder.
-    - A path ending in "/" is a directory row: it lists the folder and covers
-      every file below it; a second table with bare file names carries the
-      per-file hashes.
+    - A path ending in "/" is a directory row: it records that the folder
+      belongs to the manifest and FAILs if the folder does not exist. It
+      lists no file and hashes none: every file below it still needs its own
+      per-file row (usually a second table with bare file names), or it is
+      reported exactly as without the directory row, an unlisted FAIL, and a
+      per-file row with no hash WARNs. A [[parts]] datasheet below it is
+      likewise "not listed" until it has its own row.
     - "-" in the File cell means no file; the Status must then start with
       "NOT RETRIEVED" (a WARN) or the row FAILs.
     - SHA-256: 64 hex characters; anything else is a WARN (integrity not
@@ -156,11 +160,11 @@ def _resolve(row_path: str, datasheets: Path, by_basename: dict[str, list[Path]]
     return None, "missing"
 
 
-def _verify_rows(rows: list[ManifestRow], datasheets: Path,
-                 files: list[Path]) -> tuple[list[Finding], set[Path], list[Path]]:
+def _verify_rows(rows: list[ManifestRow], datasheets: Path, files: list[Path]) -> tuple[list[Finding], set[Path]]:
+    """(findings, the files that have a per-file row). A directory row only has to name an existing folder: it
+    lists no file and hashes none, so a file below it with no row of its own stays unlisted."""
     findings: list[Finding] = []
     listed: set[Path] = set()
-    directories: list[Path] = []
     by_basename: dict[str, list[Path]] = {}
     for file in files:
         by_basename.setdefault(file.name, []).append(file)
@@ -174,10 +178,7 @@ def _verify_rows(rows: list[ManifestRow], datasheets: Path,
                                         f"{row.label}: row has no file path and is not marked {NOT_RETRIEVED}"))
             continue
         if row.is_directory:
-            folder = datasheets / row.path
-            if folder.is_dir():
-                directories.append(folder)
-            else:
+            if not (datasheets / row.path).is_dir():
                 findings.append(Finding("FAIL", f"{CHECK}.missing", f"{row.label}: folder {row.path} does not exist"))
             continue
         target, problem = _resolve(row.path, datasheets, by_basename)
@@ -190,10 +191,10 @@ def _verify_rows(rows: list[ManifestRow], datasheets: Path,
             findings.append(Finding("WARN", f"{CHECK}.hash", f"{row.path}: no SHA-256 recorded, integrity not verified"))
         elif sha256_of(target).lower() != row.sha256.lower():
             findings.append(Finding("FAIL", f"{CHECK}.hash", f"{row.path}: SHA-256 does not match the manifest"))
-    return findings, listed, directories
+    return findings, listed
 
 
-def _part_findings(params: dict, root: Path, listed: set[Path], covered: set[Path]) -> list[Finding]:
+def _part_findings(params: dict, root: Path, listed: set[Path]) -> list[Finding]:
     findings = []
     for part in params.get("parts", []):
         datasheet = part.get("datasheet")
@@ -204,7 +205,7 @@ def _part_findings(params: dict, root: Path, listed: set[Path], covered: set[Pat
         target = root / datasheet
         if not target.exists():
             findings.append(Finding("FAIL", f"{CHECK}.part_datasheet", f"{ref}: datasheet {datasheet} does not exist"))
-        elif target not in listed and target not in covered:
+        elif target not in listed:
             findings.append(Finding("WARN", f"{CHECK}.part_datasheet",
                                     f"{ref}: datasheet {datasheet} is not listed in the manifest"))
     return findings
@@ -255,12 +256,11 @@ def run(params: dict, root: Path, manifest: Path | None = None, datasheets: Path
 
     wanted = tuple(s.lower() for s in suffixes)
     files = sorted(path for path in datasheets.rglob("*") if path.is_file() and path.suffix.lower() in wanted)
-    findings, listed, directories = _verify_rows(rows, datasheets, files)
-    covered = {file for file in files if any(folder in file.parents for folder in directories)}
+    findings, listed = _verify_rows(rows, datasheets, files)
     for file in files:
-        if file not in listed and file not in covered:
+        if file not in listed:
             findings.append(Finding("FAIL", f"{CHECK}.unlisted", f"unlisted file: {file.relative_to(datasheets).as_posix()}"))
-    findings.extend(_part_findings(params, root, listed, covered))
+    findings.extend(_part_findings(params, root, listed))
     if check_captures:
         findings.extend(_capture_findings(datasheets, root, capture_allow or []))
     if not any(f.level == "FAIL" for f in findings):

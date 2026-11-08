@@ -20,8 +20,12 @@ section (signal counts by kind per dream, approved lessons with used: 0 whose
 INDEX.md line is older than 45 days by git date, lessons sharing two or more
 words with a new C, D, H, I or E signal; candidates only, the dreamer judges).
 "done --report R --applied N..." appends an Outcome to the saved report:
-applied and declined numbers, files named in the applied Change lines, and the
-hygiene numbers at digest time against now.
+applied and declined numbers, the files named in the applied Change lines that
+changed since the digest (git against the commit the digest saw, with files
+dirty at digest time compared by size and modification time, and the
+auto-memory folder by the same stat), and the hygiene numbers at digest time
+against now. The auto-memory folder is the one named after the main
+checkout, also when the script runs in a linked worktree.
 Scorecard: each digest, and the read-only "scorecard" command, carries the
 owner's decisions read from the saved <date>-report.md files (per report, per
 proposal kind) and the INDEX.md values and BACKLOG.md last cells now for the
@@ -29,7 +33,8 @@ lessons and rows that approved Change lines name; bounded to the last 10
 reports and 20 lines each, so it stays small. Unusable reports are skipped
 with a reason, never fatal.
 State: <state-dir>/state.json {version, files{path: {offset, m}}, known_roots,
-last_dream, dreams[{date, counts}] (the last 10)}; <state-dir>/offered holds the day:retro-count fingerprint of the
+last_dream, dreams[{date, counts}] (the last 10)}; state.next.json also
+carries this_dream, snapshot, head, dirty and memory for done; <state-dir>/offered holds the day:retro-count fingerprint of the
 last offer. "done" commits state.next.json, so an unfinished dream loses nothing.
 The per-file flag m marks transcripts that ever held lines for this repository,
 so activity in unrelated projects never makes a dream due. Unseen transcripts
@@ -178,6 +183,91 @@ def ensure_dir(d):
     if not os.path.exists(g):
         with open(g, "w", encoding="utf-8", newline="\n") as f:
             f.write("*\n")
+
+
+def memory_dir(c):
+    """Claude Code keeps one auto-memory folder per repository, named after the
+    main checkout, so a linked worktree reads that folder too."""
+    return os.path.join(c.projects, slug(main_worktree(c.root)), "memory")
+
+
+def stat_key(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return [-1, 0]
+    return [st.st_size, st.st_mtime_ns]
+
+
+def git_z(root, *args):
+    try:
+        r = subprocess.run(["git", "-C", root] + list(args), capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    return [x for x in r.stdout.decode("utf-8", "replace").split("\0") if x]
+
+
+def tree_state(root):
+    """The commit the digest saw and the stat of every file dirty or untracked
+    then, so done can tell a change made after the digest from one made before."""
+    head = git_z(root, "rev-parse", "HEAD")
+    st = git_z(root, "status", "--porcelain=v1", "-z", "-uall")
+    if not head or st is None:
+        return None, {}
+    dirty, skip = {}, False
+    for e in st:
+        if skip:
+            skip = False
+            continue
+        path = e[3:]
+        if e[0] in "RC" or e[1] in "RC":
+            skip = True
+        dirty[path] = stat_key(os.path.join(root, path))
+    return head[0].strip(), dirty
+
+
+def memory_state(c):
+    d = memory_dir(c)
+    return {os.path.basename(f): stat_key(f) for f in glob.glob(os.path.join(d, "*.md"))}
+
+
+def changed_since(c, s):
+    """(paths, None): repository paths and memory note names changed since the
+    digest; (None, reason) when that cannot be told. The diff is trusted only
+    when this checkout's history holds the digest's commit, so done in another
+    worktree on a diverged branch never claims the difference of two branches."""
+    head = s.get("head")
+    if not head:
+        return None, "the digest recorded no commit"
+    try:
+        anc = subprocess.run(["git", "-C", c.root, "merge-base", "--is-ancestor", head, "HEAD"],
+                             capture_output=True, timeout=30).returncode
+    except (OSError, subprocess.SubprocessError):
+        anc = 128
+    if anc == 1:
+        return None, "the digest's commit is not in this checkout's history"
+    diff = git_z(c.root, "diff", "--name-only", "-z", head)
+    new = git_z(c.root, "ls-files", "--others", "--exclude-standard", "-z")
+    if anc != 0 or diff is None or new is None:
+        return None, "git cannot compare against " + head[:12]
+    dirty = s.get("dirty", {})
+    out = set()
+    for path in diff + new:
+        if path in dirty and dirty[path] == stat_key(os.path.join(c.root, path)):
+            continue
+        out.add(path)
+    was = s.get("memory", {})
+    now = memory_state(c)
+    out |= {n for n in set(was) | set(now) if was.get(n) != now.get(n)}
+    return out, None
+
+
+def names_path(named, path):
+    """Matches by last components, so a bare README.md in a Change line counts
+    when any README.md changed; a Change line names files loosely."""
+    return path == named or path.endswith("/" + named) or named.endswith("/" + path)
 
 
 def main_worktree(root):
@@ -627,7 +717,7 @@ def scorecard_lines(c, sigs=None):
     return out
 
 
-def outcome_text(c, path, applied, before):
+def outcome_text(c, path, applied, s):
     props = parse_report(path)
     for i, n in enumerate(applied):
         if n in applied[:i]:
@@ -641,14 +731,20 @@ def outcome_text(c, path, applied, before):
             for f in FILE_RE.findall(ch):
                 if f not in files:
                     files.append(f)
+    changed, why = changed_since(c, s)
+    if changed is None:
+        files_line = "Files: %s (named in the Change lines; not checked: %s)" % (", ".join(files) or "none", why)
+    else:
+        files = [f for f in files if any(names_path(f, p) for p in changed)]
+        files_line = "Files: %s" % (", ".join(files) or "none")
     after = hygiene_numbers(hygiene_text(c))
-    before = before or {}
+    before = s.get("snapshot") or {}
     changed = ["  %s: %s -> %s" % (k, before.get(k, "N/A"), v) for k, v in after.items() if before.get(k) != v]
     same = [k for k, v in after.items() if before.get(k) == v]
     return "\n".join(["", "## Outcome %s" % c.now.strftime("%Y-%m-%d"),
                       "Applied: %s" % (", ".join(map(str, done)) or "none"),
                       "Declined: %s" % (", ".join(str(n) for n in sorted(props) if n not in done) or "none"),
-                      "Files: %s" % (", ".join(files) or "none"),
+                      files_line,
                       "Hygiene, at the digest -> now:"] + (changed or ["  no change"])
                      + ["Unchanged: %s" % (", ".join(same) or "none"), ""])
 
@@ -657,7 +753,7 @@ def count_lines(b):
     return b.count(b"\n") + (1 if b and not b.endswith(b"\n") else 0)
 
 
-def hygiene_text(c, memory_dir=None):
+def hygiene_text(c, mem_override=None):
     out = []
     for rel in HYGIENE_FILES:
         p = os.path.join(c.root, rel)
@@ -695,7 +791,7 @@ def hygiene_text(c, memory_dir=None):
     for title, age in ages:
         out.append("  - %s: %s" % (title, "undated" if age is None else "%d days" % age))
 
-    mdir = memory_dir or os.path.join(c.projects, slug(c.root), "memory")
+    mdir = mem_override or memory_dir(c)
     mfiles = sorted(glob.glob(os.path.join(mdir, "*.md"))) if os.path.isdir(mdir) else []
     mm = os.path.join(mdir, "MEMORY.md")
     if mfiles:
@@ -841,6 +937,8 @@ def cmd_digest(c, a):
     nextstate["signals"] = len(kept)
     nextstate["this_dream"] = {"date": iso(c.now), "counts": counts}
     nextstate["snapshot"] = hygiene_numbers(hyg)
+    nextstate["head"], nextstate["dirty"] = tree_state(c.root)
+    nextstate["memory"] = memory_state(c)
     sigs = ["- s%d %s" % (i + 1, render(s)) for i, s in enumerate(kept)]
     pairs = [("s%d" % (i + 1), s) for i, s in enumerate(kept)]
     body = "\n".join([
@@ -873,13 +971,14 @@ def cmd_done(c, a):
     with open(nxt, encoding="utf-8") as f:
         s = json.load(f)
     if a.report:
-        text = outcome_text(c, a.report, a.applied, s.get("snapshot"))
+        text = outcome_text(c, a.report, a.applied, s)
         with open(a.report, "a", encoding="utf-8", newline="\n") as f:
             f.write(text)
         print("dream: outcome appended to %s" % a.report)
     n = s.pop("signals", 0)
     this = s.pop("this_dream", None)
-    s.pop("snapshot", None)
+    for k in ("snapshot", "head", "dirty", "memory"):
+        s.pop(k, None)
     if this:
         s["dreams"] = (s.get("dreams", []) + [this])[-10:]
     s["last_dream"] = iso(c.now)

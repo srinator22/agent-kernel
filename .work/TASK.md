@@ -72,6 +72,8 @@ PASS. Reviewer plan review, round 3, 2026-11-08: B1 is closed by A10's dedupe an
 - 2026-11-09 after the fix: test_dream.sh 215 passed, 0 failed; ./scripts/check.sh exit 0, selftest 22 passed, 0 failed, 0 quarantined
 - 2026-11-09 change review round 2: FAIL. B1: the round-1 fix put the ST13B run before the cross-report row assertion, so it read a one-report run and could not fail. Non-blocking N1 (an unreadable state.json stops the read-only scorecard, left as an explicit error) and N2 (skipped lines and lesson used and last values had no length cut)
 - 2026-11-09 B1 and N2 fixed: the row assertion runs on ST13's two reports again; skipped lines are cut to 160 characters, used to 20 and last to 40, with a long-values test. Fail-first with the row dedupe disabled and no cut: 215 passed, 2 failed (the row assertion, the long values); after: 217 passed, 0 failed; ruff check and format clean from scripts/dream
+- 2026-11-09 change review round 3: FAIL only for the missing check.sh log on the committed tree; B1 closed, cuts correct; N3 (the 160-character skipped-line cut is untested) non-blocking
+- 2026-11-09 merged origin/main 55228eb (PRs 6, 7 and 16): dream.py header and test_dream.sh conflicts kept both sides; the scorecard tests' state folders renamed to scstate11-14 and scprojects11 so they no longer share state11-13 with PR 16's outcome tests; test_dream.sh 231 passed, 0 failed; ruff check clean
 
 ## Review verdict
 
