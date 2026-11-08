@@ -407,8 +407,10 @@ rm -f .start-done
 cp "$FIX/agents.profiles" AGENTS.md
 
 # ---- (p) skills cap after a sync (kernel rule 10, scripts/lessons.sh skills) ----
-# The template adds a core skill in v2; the project already holds its own
-# skills. The sync applies the skill and then reports the cap result.
+# The template-v0.4.0 case: v2 adds the dream core skill to a project whose
+# two project slots are full. The sync applies it, the core skill takes no
+# project slot, and the cap result is reported; a third project skill is a
+# breach and an action item.
 TPL3="$FIX/template3"
 PRJ3="$FIX/project3"
 put_skill() { local d; for d in .claude/skills .agents/skills; do put "$d/$1/SKILL.md" "# $1"; done; }
@@ -419,9 +421,9 @@ mkdir -p scripts
 cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" scripts/
 put_agents "Kernel v1." "rule index v1"
 sed -i.bak "s|^- Template:.*|- Template: $TPL3 v1|" AGENTS.md && rm -f AGENTS.md.bak
-for s in c1 c2 c3 c4 c5 c6; do put_skill "$s"; done
+for s in adr maintain retro ship start template-update; do put_skill "$s"; done
 commit_all v1 && git tag v1
-put_skill c7
+put_skill dream
 commit_all v2 && git tag v2
 mkdir -p "$PRJ3" && cd "$PRJ3" || exit 1
 git init -q . >/dev/null 2>&1
@@ -437,16 +439,16 @@ git checkout -q -b sync-skills
 run ./scripts/lessons.sh skills
 assert_rc "before the sync the project is at its skills cap" 0
 run ./scripts/template-sync.sh --template "$TPL3" --ref v2
-assert_contains "the new core skill is applied" "ADD       .claude/skills/c7/SKILL.md"
-assert_contains "the skills count is reported after the sync" "template-sync: skills: 9 (cap 8"
-assert_contains "the cap breach is an action item" "ACTION: skills cap: .claude/skills has 9 skills; the cap is 8"
-assert_rc "a sync that leaves the project over its skills cap exits 1" 1
+assert_contains "the new core skill is applied" "ADD       .claude/skills/dream/SKILL.md"
+assert_contains "the skills count is reported after the sync" "template-sync: skills: 9 (cap 9 = 7 core + 2 project"
+assert_not_contains "a new core skill is no action item" "ACTION: skills cap"
+assert_rc "a sync that adds a core skill to a full project exits 0" 0
 proj_commit "sync to v2"
-rm -rf .claude/skills/own2 .agents/skills/own2
-proj_commit "drop own2"
+put_skill own3
+proj_commit "a third project skill"
 run ./scripts/template-sync.sh --template "$TPL3" --ref v2
-assert_rc "a sync within the skills cap exits 0" 0
-assert_not_contains "no action item within the cap" "ACTION: skills cap"
+assert_contains "a project over its cap gets an action item" "ACTION: skills cap: .claude/skills has 10 skills; the cap is 9"
+assert_rc "a sync that leaves the project over its skills cap exits 1" 1
 cd "$PRJ" || exit 1
 
 # ---- usage ----

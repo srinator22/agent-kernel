@@ -4,8 +4,9 @@ Run monthly or on request; never mid-task. Forgetting is mandatory (kernel
 rule 10): archival happens on evidence, never on vibes.
 
 1. Verify caps with `scripts/lessons.sh check`: `AGENTS.md` <= 180 lines;
-   <= 20 approved lessons; 8 core skills plus the skills the adopted
-   profiles declare (the script enforces it). Over any cap: merge or archive until
+   <= 20 approved lessons; the template's core skills (at most 8) plus 2
+   project skills plus the skills the adopted profiles declare (the script
+   enforces it). Over any cap: merge or archive until
    under.
 2. Run `scripts/lessons.sh expire` to list lessons unused > 45 days or with
    their retire-when condition met; `scripts/lessons.sh expire --apply`

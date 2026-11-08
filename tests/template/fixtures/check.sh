@@ -393,10 +393,19 @@ if [[ ! -f .start-done ]]; then
     terr "a script pipes into head (exit 141 under pipefail on long output); use sed -n '1,Np'"
   fi
 
+  # 5m. The template's skills are exactly the core list scripts/lessons.sh
+  # counts apart from project skills (kernel rule 10, ADR 0012), so a core
+  # skill added without its CORE_SKILLS entry cannot ship as a project skill.
+  core_want="$(./scripts/lessons.sh core-skills | sort)"
+  core_have="$(find .claude/skills -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
+  if [[ "$core_want" != "$core_have" ]]; then
+    terr "the template's .claude/skills ($(echo $core_have)) differ from CORE_SKILLS in scripts/lessons.sh ($(echo $core_want))"
+  fi
+
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
   exit 0
 fi
 

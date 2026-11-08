@@ -47,10 +47,9 @@ Every tools/ and hooks/ test runs in the template self-test
 4. Record the adoption in Project decisions (one line: item, date, reason) and
    add a Codex counterpart for every Claude agent, or record why there is none
    (`docs/rules/models.md`, parity rule).
-5. Mind the caps: kernel rule 10 allows 8 core skills plus the skills the
-   adopted profiles declare. The template ships 5 core skills, so up to 3
-   library skills fit in the free core slots; beyond that, retire an unused
-   skill first. `scripts/lessons.sh check` enforces the cap.
+5. Mind the caps: kernel rule 10 allows the template's core skills plus 2
+   project skills plus the skills the adopted profiles declare, so up to 2
+   library skills fit; beyond that, retire an unused skill first. `scripts/lessons.sh check` enforces the cap.
 6. Tier per agent: set `model:` in the copied agent per `docs/rules/models.md`;
    Codex files carry no `model =` line.
 

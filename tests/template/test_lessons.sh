@@ -138,51 +138,64 @@ ship_skill() {
   done
 }
 
-# Skills cap: 8 core plus declared profile skill sets.
-for i in 2 3 4 5 6 7 8 9; do
-  mkdir -p ".claude/skills/s$i" ".agents/skills/s$i"
-  echo "# s$i" > ".claude/skills/s$i/SKILL.md"; echo "# s$i" > ".agents/skills/s$i/SKILL.md"
-done
+# Skills cap (kernel rule 10): the template core skills present, plus 2
+# project skills, plus the skills the adopted profiles list. alpha is the
+# fixture's first project skill.
+add_skill() { local s; for s in "$@"; do mkdir -p ".claude/skills/$s" ".agents/skills/$s"; echo "# $s" > ".claude/skills/$s/SKILL.md"; echo "# $s" > ".agents/skills/$s/SKILL.md"; done; }
+drop_skill() { local s; for s in "$@"; do rm -rf ".claude/skills/$s" ".agents/skills/$s"; done; }
+run ./scripts/lessons.sh core-skills
+assert_eq "core-skills prints the template core set" "adr dream maintain retro ship start template-update" "$(printf '%s\n' "$OUT" | tr '\n' ' ' | sed 's/ $//')"
+add_skill adr maintain retro ship start template-update s2
 run ./scripts/lessons.sh check
-assert_rc "9 skills with no profile skill set fail" 1
-assert_contains "cap of 8 is named" "the cap is 8"
+assert_rc "6 core and 2 project skills pass" 0
+run ./scripts/lessons.sh skills
+assert_rc "skills exits 0 within the cap" 0
+assert_contains "skills prints the count and the cap" "skills: 8 (cap 8 = 6 core + 2 project + 0 skills listed by the adopted profiles)"
+# The template-v0.4.0 case: a core skill the template adds takes no project slot.
+add_skill dream
+run ./scripts/lessons.sh check
+assert_rc "a seventh core skill keeps a full project within the cap" 0
+assert_contains "the cap grows with the core skill" "9 skills"
+add_skill s3
+run ./scripts/lessons.sh check
+assert_rc "a third project skill fails" 1
+assert_contains "the cap formula prints its figures" "the cap is 9 (7 core + 2 project + 0 skills listed by the adopted profiles = 9"
 run ./scripts/lessons.sh skills
 assert_rc "skills exits 1 over the cap" 1
-assert_contains "skills prints the count and the cap" "skills: 9 (cap 8 = 8 core + 0 skills listed by the adopted profiles)"
-assert_contains "skills names the breach" "lessons: .claude/skills has 9 skills; the cap is 8"
+assert_contains "skills names the breach" "lessons: .claude/skills has 10 skills; the cap is 9"
+drop_skill dream
+run ./scripts/lessons.sh check
+assert_rc "a removed core skill frees no project slot" 1
+add_skill dream
 mkdir -p docs/profiles/p1
 printf 'Profile p1\nSkills: s9-extra\n' > docs/profiles/p1/PROFILE.md
 ship_skill p1 s9-extra
 run ./scripts/lessons.sh check
-assert_rc "9 skills with one declared profile skill set pass" 0
+assert_rc "a declared profile skill set raises the cap" 0
 run ./scripts/lessons.sh skills
-assert_rc "skills exits 0 within the cap" 0
-assert_contains "skills counts the profile skill" "skills: 9 (cap 9 = 8 core + 1 skills listed by the adopted profiles)"
+assert_contains "skills counts the profile skill" "skills: 10 (cap 10 = 7 core + 2 project + 1 skills listed by the adopted profiles)"
 printf -- '- Profiles: other\n' > AGENTS.md
 run ./scripts/lessons.sh check
 assert_rc "a profile that is not adopted does not raise the cap" 1
 printf -- '- Profiles: p1\n' > AGENTS.md
 run ./scripts/lessons.sh check
 assert_rc "an adopted profile raises the cap" 0
-rm -rf docs/profiles AGENTS.md .claude/skills/s9 .agents/skills/s9
+rm -rf docs/profiles AGENTS.md
+drop_skill s3
 run ./scripts/lessons.sh check
-assert_rc "8 skills pass" 0
+assert_rc "back within the cap" 0
 
 # Skills cap counts the skills a profile lists, not one per profile.
-for i in 9 10 11; do
-  mkdir -p ".claude/skills/s$i" ".agents/skills/s$i"
-  echo "# s$i" > ".claude/skills/s$i/SKILL.md"; echo "# s$i" > ".agents/skills/s$i/SKILL.md"
-done
+add_skill s3 s4 s5
 mkdir -p docs/profiles/p3
 printf 'Profile p3\n- Skills: ska, skb, skc\n' > docs/profiles/p3/PROFILE.md
 ship_skill p3 ska skb skc
 run ./scripts/lessons.sh check
-assert_rc "11 skills with a profile listing three pass" 0
-mkdir -p .claude/skills/s12 .agents/skills/s12
-echo "# s12" > .claude/skills/s12/SKILL.md; echo "# s12" > .agents/skills/s12/SKILL.md
+assert_rc "5 project skills with a profile listing three pass" 0
+add_skill s6
 run ./scripts/lessons.sh check
-assert_rc "12 skills with a profile listing three fail" 1
-assert_contains "the cap formula prints its figures" "the cap is 11 (8 core + 3 skills listed by the adopted profiles = 11"
+assert_rc "6 project skills with a profile listing three fail" 1
+assert_contains "the cap names the three profile skills" "the cap is 12 (7 core + 2 project + 3 skills listed by the adopted profiles = 12"
 printf 'Profile p3\n- Skills: ska, skb,\n  skc (a note, with a comma), skd\n' > docs/profiles/p3/PROFILE.md
 ship_skill p3 skd
 run ./scripts/lessons.sh check
@@ -191,15 +204,23 @@ printf 'Profile p3\n- Skills: ska, skb, skc,\n  skd (`a note`);\n  the rest of t
 run ./scripts/lessons.sh check
 assert_rc "a list ending in a parenthetical and a semicolon still counts four" 0
 run ./scripts/lessons.sh stats
-assert_contains "stats shows the four declared skills" "8 core + 4 skills"
+assert_contains "stats shows the four declared skills" "7 core + 2 project + 4 skills"
 printf 'Profile p3\nSkills: none\n' > docs/profiles/p3/PROFILE.md
 rm -rf docs/profiles/p3/skills
 run ./scripts/lessons.sh check
 assert_rc "Skills: none adds nothing" 1
-rm -rf docs/profiles .claude/skills/s9 .claude/skills/s10 .claude/skills/s11 .claude/skills/s12
-rm -rf .agents/skills/s9 .agents/skills/s10 .agents/skills/s11 .agents/skills/s12
+rm -rf docs/profiles
+drop_skill s2 s3 s4 s5 s6
 run ./scripts/lessons.sh check
-assert_rc "back to 8 skills passes" 0
+assert_rc "7 core and 1 project skill pass" 0
+
+# The template core set itself is capped at 8.
+cp scripts/lessons.sh "$FIX/lessons.keep"
+sed -i.bak 's/^CORE_SKILLS=(\(.*\))$/CORE_SKILLS=(\1 c8 c9)/' scripts/lessons.sh && rm -f scripts/lessons.sh.bak
+run ./scripts/lessons.sh check
+assert_rc "a core set of 9 fails" 1
+assert_contains "the core cap is named" "the template core set lists 9 skills; the cap is 8"
+cp "$FIX/lessons.keep" scripts/lessons.sh && rm -f "$FIX/lessons.keep"
 
 # Agent mirror: every .claude agent has a Codex twin or a named exception.
 mkdir -p .claude/agents .codex/agents

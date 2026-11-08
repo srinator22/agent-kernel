@@ -11,8 +11,8 @@ approving direction. Contributions follow the same rules the agents do.
 - Conventional Commits; the body carries the why. No attribution
   trailers. Plain hyphens only - no em or en dashes anywhere.
 - Keep the budgets: AGENTS.md <= 180 lines, rules files <= 40 lines,
-  8 core skills plus the skills the adopted profiles declare
-  (`scripts/lessons.sh check` enforces it).
+  the template's core skills (at most 8) plus 2 project skills plus the
+  skills the adopted profiles declare (`scripts/lessons.sh check` enforces it).
 - Removing anything means moving it to `.archive/` with a one-line
   reason, never deleting.
 - The template stays project-agnostic: no stacks, dependencies, or
