@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" width="1200" height="280" role="img" aria-labelledby="t d">
+  <title id="t">Say it once</title>
+  <desc id="d">You say a preference once in plain words. It is noted on your machine. It becomes a rule with your words and the date, which you can veto. If you have to say it again, the rule becomes a test.</desc>
+  <style>
+    text { font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    .ink { stroke: #13203A; }
+    .ink-fill { fill: #13203A; }
+    .muted { fill: #5A6782; }
+    .faint { stroke: #B8C2D6; }
+    .paper { fill: #FFFFFF; }
+    .accent { fill: #4C57D6; }
+    .accent-stroke { stroke: #4C57D6; }
+    .ok { fill: #1C9E73; }
+    .pill { fill: #EEF0FF; }
+    .label { font-size: 17px; font-weight: 600; }
+    .sub { font-size: 15px; font-weight: 400; }
+    .say { font-size: 18px; font-weight: 500; }
+    .row { font-size: 16px; font-weight: 600; }
+    .meta { font-size: 13px; font-weight: 400; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #DCE3F2; }
+      .ink-fill { fill: #DCE3F2; }
+      .muted { fill: #9AA6BF; }
+      .faint { stroke: #3A4560; }
+      .paper { fill: #161D2E; }
+      .accent { fill: #8E9BFF; }
+      .accent-stroke { stroke: #8E9BFF; }
+      .ok { fill: #3CCB97; }
+      .pill { fill: #262E5C; }
+    }
+  </style>
+
+  <path class="paper ink" stroke-width="2" d="M 52 84 H 252 A 12 12 0 0 1 264 96 V 150 A 12 12 0 0 1 252 162 H 96 L 74 182 L 78 162 H 52 A 12 12 0 0 1 40 150 V 96 A 12 12 0 0 1 52 84 Z"/>
+  <text class="say ink-fill" x="152" y="129" text-anchor="middle">Keep the labels short.</text>
+
+  <rect class="paper ink" stroke-width="2" x="398" y="74" width="104" height="112" rx="8"/>
+  <g class="faint" stroke-width="4" stroke-linecap="round">
+    <line x1="422" y1="102" x2="484" y2="102"/>
+    <line x1="422" y1="122" x2="484" y2="122"/>
+    <line x1="422" y1="142" x2="470" y2="142"/>
+  </g>
+  <line class="accent-stroke" x1="422" y1="162" x2="484" y2="162" stroke-width="4" stroke-linecap="round"/>
+  <g class="ink" stroke-width="2" fill="none">
+    <circle cx="398" cy="96" r="5"/><circle cx="398" cy="130" r="5"/><circle cx="398" cy="164" r="5"/>
+  </g>
+
+  <rect class="paper ink" stroke-width="2" x="620" y="88" width="270" height="80" rx="10"/>
+  <text class="row ink-fill" x="640" y="120">UI-3   Keep labels short</text>
+  <text class="meta muted" x="640" y="148">your words, 2026-11-09</text>
+  <rect class="pill" x="806" y="134" width="68" height="22" rx="11"/>
+  <text class="meta accent" x="840" y="149" text-anchor="middle">Review</text>
+
+  <rect class="pill" x="968" y="134" width="92" height="40" rx="8"/>
+  <text class="row accent" x="1014" y="160" text-anchor="middle">Review</text>
+  <rect class="ok" x="1048" y="84" width="112" height="40" rx="8"/>
+  <text class="row" x="1104" y="110" text-anchor="middle" fill="#FFFFFF">a test</text>
+  <path class="ink" d="M 1014 128 C 1014 104 1024 104 1040 104" fill="none" stroke-width="2" stroke-linecap="round"/>
+  <path class="ink" d="M 1034 98 L 1042 104 L 1034 110" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g class="ink" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 290 130 H 368"/><path d="M 360 123 L 368 130 L 360 137"/>
+    <path d="M 530 130 H 596"/><path d="M 588 123 L 596 130 L 588 137"/>
+    <path d="M 906 130 H 948"/><path d="M 940 123 L 948 130 L 940 137"/>
+  </g>
+
+  <g text-anchor="middle">
+    <text class="label ink-fill" x="152" y="228">you say it once</text><text class="sub muted" x="152" y="250">in plain words</text>
+    <text class="label ink-fill" x="450" y="228">it is noted</text><text class="sub muted" x="450" y="250">on your machine only</text>
+    <text class="label ink-fill" x="755" y="228">it becomes a rule</text><text class="sub muted" x="755" y="250">you can veto the line</text>
+    <text class="label ink-fill" x="1064" y="228">said again?</text><text class="sub muted" x="1064" y="250">the rule becomes a test</text>
+  </g>
+</svg>

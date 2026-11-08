@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460" role="img" aria-labelledby="t d">
+  <title id="t">Agentic template</title>
+  <desc id="d">A day and night loop. By day the agent plans, builds, checks and ships. By night it reads back the day, finds lessons, asks you to approve them and remembers what you approved.</desc>
+  <style>
+    text { font-family: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    .title { font-size: 60px; font-weight: 700; letter-spacing: -1.6px; fill: #13203A; }
+    .lede { font-size: 21px; font-weight: 400; fill: #46536B; }
+    .night-lede { font-size: 21px; font-weight: 400; fill: #C9D2FF; }
+    .day-label { font-size: 16px; font-weight: 600; fill: #13203A; }
+    .night-label { font-size: 16px; font-weight: 600; fill: #C9D2FF; }
+    .track-day { fill: none; stroke: #13203A; stroke-width: 2.5; }
+    .track-night { fill: none; stroke: #8E9BFF; stroke-width: 2.5; stroke-dasharray: 2 9; stroke-linecap: round; }
+    .stop-day { fill: #FFFFFF; stroke: #13203A; stroke-width: 2.5; }
+    .stop-night { fill: #232A66; stroke: #8E9BFF; stroke-width: 2.5; }
+    .runner { fill: #FFFFFF; }
+    @media (prefers-reduced-motion: reduce) { .runner, .halo { display: none; } }
+  </style>
+  <defs>
+    <clipPath id="frame"><rect width="1200" height="460" rx="20"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DCE8FA"/>
+      <stop offset="1" stop-color="#F6F9FE"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1D2360"/>
+      <stop offset="1" stop-color="#0E1233"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="crescent">
+      <rect width="1200" height="460" fill="#000"/>
+      <circle cx="1118" cy="392" r="22" fill="#fff"/>
+      <circle cx="1128" cy="384" r="19" fill="#000"/>
+    </mask>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="250" fill="url(#sky)"/>
+    <rect y="250" width="1200" height="210" fill="url(#night)"/>
+    <circle cx="1120" cy="78" r="40" fill="none" stroke="#F7B23B" stroke-opacity="0.35" stroke-width="1.5"/>
+    <circle cx="1120" cy="78" r="24" fill="#F7B23B"/>
+    <rect width="1200" height="460" fill="#E8ECFF" mask="url(#crescent)"/>
+    <g fill="#C9D2FF">
+      <circle cx="96" cy="292" r="1.4"/><circle cx="214" cy="430" r="1.1"/><circle cx="388" cy="302" r="1.6"/>
+      <circle cx="512" cy="436" r="1.2"/><circle cx="1010" cy="438" r="1.3"/><circle cx="1166" cy="300" r="1.1"/>
+      <circle cx="702" cy="446" r="1"/><circle cx="1066" cy="352" r="1.2"/>
+    </g>
+    <line x1="0" y1="250" x2="1200" y2="250" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="1.5"/>
+
+    <text class="title" x="64" y="128">Agentic template</text>
+    <text class="lede" x="66" y="174">A starter kit that makes AI coding agents</text>
+    <text class="lede" x="66" y="204">careful, and teaches them what you like.</text>
+    <text class="night-lede" x="66" y="318">It works by day.</text>
+    <text class="night-lede" x="66" y="348">It learns while it sleeps.</text>
+
+    <path class="track-day" d="M 610 250 A 240 140 0 0 1 1090 250"/>
+    <path class="track-night" d="M 1090 250 A 240 140 0 0 1 610 250"/>
+
+    <path d="M 845 104 L 855 110 L 845 116" fill="none" stroke="#13203A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 855 384 L 845 390 L 855 396" fill="none" stroke="#8E9BFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle class="stop-day" cx="624" cy="202" r="7"/>
+    <circle class="stop-day" cx="749" cy="123" r="7"/>
+    <circle class="stop-day" cx="951" cy="123" r="7"/>
+    <circle class="stop-day" cx="1076" cy="202" r="7"/>
+    <text class="day-label" x="608" y="207" text-anchor="end">plan</text>
+    <text class="day-label" x="749" y="104" text-anchor="middle">build</text>
+    <text class="day-label" x="951" y="104" text-anchor="middle">check</text>
+    <text class="day-label" x="1092" y="207">ship</text>
+
+    <circle class="stop-night" cx="1076" cy="298" r="7"/>
+    <circle class="stop-night" cx="951" cy="377" r="7"/>
+    <circle class="stop-night" cx="749" cy="377" r="7"/>
+    <circle class="stop-night" cx="624" cy="298" r="7"/>
+    <text class="night-label" x="1092" y="303">read the day</text>
+    <text class="night-label" x="951" y="408" text-anchor="middle">find lessons</text>
+    <text class="night-label" x="749" y="408" text-anchor="middle">you approve</text>
+    <text class="night-label" x="608" y="303" text-anchor="end">remember</text>
+
+    <g>
+      <circle class="halo" r="16" fill="url(#glow)">
+        <animateMotion dur="16s" repeatCount="indefinite" path="M 610 250 A 240 140 0 0 1 1090 250 A 240 140 0 0 1 610 250"/>
+      </circle>
+      <circle class="runner" r="5.5" stroke="#13203A" stroke-width="1.5">
+        <animateMotion dur="16s" repeatCount="indefinite" path="M 610 250 A 240 140 0 0 1 1090 250 A 240 140 0 0 1 610 250"/>
+      </circle>
+    </g>
+  </g>
+</svg>
