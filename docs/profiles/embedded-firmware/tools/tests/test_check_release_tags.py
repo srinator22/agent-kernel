@@ -214,16 +214,125 @@ class RuleTests(unittest.TestCase):
         code, _ = self.run_checker("--exceptions", "EXCEPTIONS.md")
         self.assertEqual(code, 1)
 
+    def run_without_changelog(self, *extra: str) -> tuple[int, str]:
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = crt.main(["--version-file", VERSION_FILE, "--tag-prefix", PREFIX,
+                             "--archive-root", ARCHIVE_ROOT, "--exceptions", "EXCEPTIONS.md",
+                             "--root", str(self.base), *extra])
+        return code, buffer.getvalue()
+
+    def test_current_version_on_a_lightweight_legacy_tag_fails_without_changelog(self) -> None:
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.tag("v1.0.0", annotated=False)  # old naming, and not annotated
+        self.repo.archive("1.0.0")
+        self.repo.write("EXCEPTIONS.md", "1.0.0 legacy-tag v1.0.0: old naming scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertIn("tag v1.0.0 is lightweight; it must be annotated", output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: current version is tagged \(v1\.0\.0\), but that tag fails")
+
+    def test_current_version_on_a_legacy_tag_needs_matching_content_and_archive(self) -> None:
+        older = self.repo.commit_version("0.9.0", changelog("0.9.0"))
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.tag("v1.0.0", older)  # annotated, but on a commit whose version file reads 0.9.0
+        self.repo.write("EXCEPTIONS.md", "1.0.0 legacy-tag v1.0.0: old naming scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertIn("version file reads '0.9.0' at the tag", output)
+        self.assertIn("archive releases/fw/v1.0.0/ missing", output)
+
+    def test_current_version_on_an_annotated_matching_legacy_tag_with_archive_passes(self) -> None:
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.tag("v1.0.0")
+        self.repo.archive("1.0.0")
+        self.repo.write("EXCEPTIONS.md", "1.0.0 legacy-tag v1.0.0: old naming scheme\n")
+        code, output = self.run_without_changelog("--require-current")
+        self.assertEqual(code, 0, output)
+        self.assertRegex(output, r"PASS\s+1\.0\.0: tag v1\.0\.0 -> \w+; version file matches; archive verified")
+        self.assertRegex(output, r"PASS\s+1\.0\.0: current version is tagged \(v1\.0\.0\)\n")
+
+    def test_older_version_reached_only_through_a_legacy_tag_exception_is_checked(self) -> None:
+        # The probe: no changelog, no --check-history, the older release visible only through its
+        # legacy-tag line, on a lightweight tag with no archive; it used to pass unseen.
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.tag("v1.0.0", annotated=False)
+        self.repo.commit_version("1.1.0", changelog("1.1.0", "1.0.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.write("EXCEPTIONS.md", "1.0.0 legacy-tag v1.0.0: old naming scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: tag v1\.0\.0 is lightweight; it must be annotated")
+        self.assertIn("archive releases/fw/v1.0.0/ missing", output)
+
+    def test_legacy_tag_exception_naming_a_missing_tag_fails(self) -> None:
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.write("EXCEPTIONS.md", "1.0.0 legacy-tag v1.0.0: old naming scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: no tag fw-v1\.0\.0, and the legacy tag v1\.0\.0 that the "
+                                 r"exceptions file names does not exist")
+
+    def test_versions_named_by_no_archive_or_no_tag_exceptions_are_checked_for_the_rest(self) -> None:
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        # no-archive excuses the archive only: the release still needs its tag.
+        self.repo.write("EXCEPTIONS.md", "1.0.0 no-archive: built before the archive scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: no tag fw-v1\.0\.0")
+        # no-tag excuses the tag: the release is listed as an excused warning, not silently skipped.
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n"
+                                         "0.9.0 no-archive: before the archive scheme\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 0, output)
+        self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused")
+
     def test_untagged_release_excused_as_no_tag_is_a_warning(self) -> None:
         self.repo.commit_version("1.0.1", changelog("1.0.1", "0.9.0"))
         self.repo.tag("fw-v1.0.1")
         self.repo.archive("1.0.1")
         code, output = self.run_checker()
         self.assertEqual(code, 1, output)
-        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n"
+                                         "0.9.0 no-archive: before the archive scheme\n")
         code, output = self.run_checker("--exceptions", "EXCEPTIONS.md")
         self.assertEqual(code, 0, output)
         self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused")
+
+    def test_no_tag_does_not_excuse_the_archive(self) -> None:
+        # The review probe: 0.9.0 no-tag with no archive used to exit 0.
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertRegex(output, r"FAIL\s+0\.9\.0: untagged, excused by the exceptions file; archive releases/fw/v0\.9\.0/ missing")
+
+    def test_no_tag_release_with_its_archive_is_an_excused_warning(self) -> None:
+        self.repo.commit_version("1.1.0", changelog("1.1.0"))
+        self.repo.tag("fw-v1.1.0")
+        self.repo.archive("1.1.0")
+        self.repo.archive("0.9.0")
+        self.repo.write("EXCEPTIONS.md", "0.9.0 no-tag: before the repository\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 0, output)
+        self.assertRegex(output, r"WARN\s+0\.9\.0: untagged, excused by the exceptions file; archive verified")
+
+    def test_current_version_named_by_an_exception_is_not_pending(self) -> None:
+        # The current version with a no-tag line is a release: its archive is still required, and it is
+        # not waved through as a pending release.
+        self.repo.commit_version("1.0.0", changelog("1.0.0"))
+        self.repo.write("EXCEPTIONS.md", "1.0.0 no-tag: tagged elsewhere\n")
+        code, output = self.run_without_changelog()
+        self.assertEqual(code, 1, output)
+        self.assertNotIn("pending release", output)
+        self.assertRegex(output, r"FAIL\s+1\.0\.0: untagged, excused by the exceptions file; archive releases/fw/v1\.0\.0/ missing")
 
     def test_tag_contents_must_match_the_version(self) -> None:
         self.repo.commit_version("1.0.0", changelog("1.0.0"), code_version="0.9.9")
