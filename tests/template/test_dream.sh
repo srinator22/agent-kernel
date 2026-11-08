@@ -594,6 +594,48 @@ assert_contains "scorecard: rows beyond 20 are counted" "  ... 220 more not show
 case "$OUT" in *row-15-1-a*) t_ok "scorecard: the newest report's rows come first" ;; *) t_bad "scorecard: the newest report's rows come first" "$OUT" ;; esac
 case "$OUT" in *"$LONG$LONG"*) t_bad "scorecard: cells are cut to 80 characters" "$OUT" ;; *) t_ok "scorecard: cells are cut to 80 characters" ;; esac
 
+# Each lesson id and row prints once: repeated in one Change line, across
+# reports, and a row cell differing only in case or backticks.
+ST13="$FIX/state13"
+mkdir -p "$ST13"
+printf '%s\n' '# r' '## Proposals' '1. [counter] twice in one line' \
+  '   Change: INDEX.md add [L404] and set L404 last; BACKLOG.md row "Zeta repeated row | P2 | x | open"' \
+  '## Outcome 2026-08-01' 'Applied: 1' 'Declined: none' > "$ST13/2026-08-01-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [counter] again in a later report' \
+  '   Change: INDEX.md L404; BACKLOG.md row "`zeta REPEATED row` | P2 | y | open"' \
+  '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$ST13/2026-08-02-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$ST13"
+assert_eq "scorecard: a lesson repeated across reports prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+# The repeat inside one Change line alone (an earlier report would hide it).
+ST13B="$FIX/state13b"
+mkdir -p "$ST13B"
+cp "$ST13/2026-08-01-report.md" "$ST13B/"
+run bash scripts/dream.sh scorecard --state-dir "$ST13B"
+assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
+
+# Kind rows and skipped lines are capped too: 30 kinds and 30 bad reports.
+ST14="$FIX/state14"
+mkdir -p "$ST14"
+for k in $(seq 1 30); do
+  printf '%s\n' '# r' '## Proposals' "1. [kind-$k] one" '## Outcome 2026-07-01' 'Applied: 1' 'Declined: none' \
+    > "$ST14/2026-07-$(printf '%02d' "$k")-report.md"
+  printf '%s\n' '# r' '## Proposals' '1. [x] a' '1. [x] b' > "$ST14/2026-06-$(printf '%02d' "$k")-report.md"
+done
+run bash scripts/dream.sh scorecard --state-dir "$ST14"
+assert_eq "scorecard: at most 20 kind rows" 20 "$(printf '%s\n' "$OUT" | grep -c '^  kind-[0-9]*: approved')"
+assert_eq "scorecard: at most 20 skipped lines" 20 "$(printf '%s\n' "$OUT" | grep -c '^skipped ')"
+assert_contains "scorecard: the remaining kinds are counted" "  ... 10 more kinds not shown"
+assert_contains "scorecard: the remaining skipped reports are counted" "... 10 more skipped reports not shown"
+
+# A repository with no commits yet still names its branch.
+UNBORN="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.unborn.XXXXXX")"
+git -C "$UNBORN" init -q -b fresh >/dev/null 2>&1 || git -C "$UNBORN" init -q >/dev/null 2>&1
+UB="$(git -C "$UNBORN" symbolic-ref --short HEAD 2>/dev/null)"
+run bash scripts/dream.sh scorecard --state-dir "$ST11" --root "$UNBORN"
+assert_contains "scorecard: an unborn branch is named" "(branch $UB)"
+rm -rf "$UNBORN"
+
 # --- feedback log and repeats (A9) ---
 # The log is <main checkout>/.work/feedback/log.jsonl; the digest reads it from a saved
 # offset into state.next.json and done commits that offset, as for transcripts.
