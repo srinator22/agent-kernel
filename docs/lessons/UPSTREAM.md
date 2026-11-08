@@ -68,3 +68,17 @@ Entry format (all five fields required):
   and repository.
 - retire-when: a helper hands each agent its own scratch folder.
 - applies to: core
+
+### The pull request's CI run is the full gate when local runs crawl
+
+- what happened: a full local ./scripts/check.sh took over an hour on a
+  loaded Windows machine, while CI ran the same script on the pushed head in
+  about 2 minutes and also caught a Linux-only failure (2026-11-09, feedback
+  loop).
+- what check should have caught it: none, this note is the guard.
+- what was added: push the branch, open the PR and use the CI run on the
+  exact head as the check.sh evidence for the reviewer; run only the touched
+  test files locally.
+- retire-when: scripts/selftest.sh runs its test files in parallel and a
+  local full gate takes under 10 minutes.
+- applies to: core
