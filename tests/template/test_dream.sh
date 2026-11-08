@@ -52,6 +52,16 @@ elif kind == "vis":
     o = dict(base, type="user", isVisibleInTranscriptOnly=True, message={"role": "user", "content": text})
 elif kind == "userp":
     o = dict(base, type="user", message={"role": "user", "content": text})
+elif kind == "human":
+    o = dict(base, type="user", origin={"kind": "human"}, promptSource="sdk", message={"role": "user", "content": text})
+elif kind == "peer":
+    o = dict(base, type="user", origin={"kind": "peer", "from": "local_x"}, promptSource="system",
+             message={"role": "user", "content": text})
+elif kind == "brief":
+    o = dict(base, type="user", promptSource="sdk", turnOrigin="sdk", message={"role": "user", "content": text})
+elif kind == "queuednotif":
+    o = dict(base, type="attachment", attachment={"type": "queued_command", "prompt": text,
+                                                  "origin": {"kind": "task-notification"}})
 elif kind in ("raw", "rawp", "nl"):
     o = None
 else:
@@ -102,6 +112,11 @@ mk "$S1" err       2026-11-07T10:12:00.000Z "$LONGERR"
 mk "$S1" raw       2026-11-07T10:13:00.000Z "{\"cwd\": \"$(printf '%s' "$NATIVE" | sed 's/\\/\\\\/g')\" broken"
 mk "$S1" compact   2026-11-07T10:14:00.000Z "This session is being continued from a previous conversation compact summary"
 mk "$S1" vis       2026-11-07T10:15:00.000Z "visible only in the transcript text"
+mk "$S1" human     2026-11-07T10:16:00.000Z "typed by the owner in a new client"
+mk "$S1" peer      2026-11-07T10:17:00.000Z "another session's words must not appear"
+mk "$S1" brief     2026-11-07T10:18:00.000Z "Task (from the session that started this one): a brief must not appear"
+mk "$S1" user      2026-11-07T10:19:00.000Z "Background (from the session that started this one): an old brief must not appear"
+mk "$S1" queuednotif 2026-11-07T10:20:00.000Z "a queued notification must not appear"
 mk "$S2" user      2026-11-07T11:00:00.000Z "from another project folder"
 mk "$S2" user      2026-11-07T11:01:00.000Z "other repo must not appear" "$NATIVE-other/dir"
 mk "$S1" rawp      2026-11-07T11:30:00.000Z "$(printf '%s' '{"type":"user","timestamp":"2026-11-07T11:30:00.000Z","cwd":"')$(printf '%s' "$NATIVE" | sed 's/\\/\\\\/g')\",\"gitBranch\":\"main\",\"message\":{\"content\":\"the partial line\"}}"
@@ -134,6 +149,11 @@ assert_file_has "repeated error collapses with a count" "$D" "Exit code 1 compil
 assert_file_lacks "isMeta line excluded" "$D" "meta line must not appear"
 assert_file_lacks "compaction summary excluded" "$D" "This session is being continued"
 assert_file_lacks "transcript-only line excluded" "$D" "visible only in the transcript text"
+assert_file_has "owner line (origin human) included" "$D" "typed by the owner in a new client"
+assert_file_lacks "another session's message excluded" "$D" "another session's words must not appear"
+assert_file_lacks "a session brief excluded" "$D" "a brief must not appear"
+assert_file_lacks "an old-format session brief excluded" "$D" "an old brief must not appear"
+assert_file_lacks "a queued notification excluded" "$D" "a queued notification must not appear"
 run git -C "$FIX" status --porcelain -uall -- .work/dream
 assert_eq "state folder never shows in git status" "" "$OUT"
 assert_file_lacks "wrapper text excluded" "$D" "wrapper must not appear"

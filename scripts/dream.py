@@ -2,7 +2,8 @@
 
 Purpose: an offline, model-free pass over this repository's session transcripts.
 It keeps only user-visible signal (corrections, messages, interrupts, denials,
-hook blocks, failed tool calls), reads each transcript line once ever, and
+hook blocks, failed tool calls; a message counts only when is_human says the
+owner wrote it), reads each transcript line once ever, and
 reports memory-file hygiene. A model reads only the resulting digest.
 
 Inputs: JSONL transcripts at <projects>/<dir>/<session>.jsonl (top level only;
@@ -48,6 +49,13 @@ DENIED = ("permission for this action was denied", "doesn't want to proceed",
           "was rejected", "denied by")
 HOOK = ("hook error", "blocked by")
 PRIORITY = {"C": 0, "D": 0, "H": 0, "I": 0, "E": 1, "U": 2, "M": 2}
+# Text that clients put in a user turn on someone else's behalf, in
+# transcripts written before lines carried an origin.
+MACHINE_PREFIXES = ("Task (from the session that started this one)",
+                    "Background (from the session that started this one)",
+                    "Another Claude session sent", "Base directory for this skill:",
+                    "This session is being continued", "I hit my usage limit while you were working",
+                    "The app was quit while you were working")
 HYGIENE_FILES = ["AGENTS.md", "BACKLOG.md", "docs/DEFECT_MEMORY.md",
                  "docs/lessons/INDEX.md", "docs/lessons/PENDING.md",
                  "docs/lessons/UPSTREAM.md", "docs/lessons/QUARANTINE.md"]
@@ -197,6 +205,22 @@ def is_correction(s):
     return CORRECTION.match(s.strip().replace("\u2019", "'")) is not None
 
 
+def is_human(holder, text=""):
+    """True when a user line (or a queued_command attachment) holds the owner's
+    own words. Newer transcripts say so in origin.kind; another session's
+    message is "peer", a background result "task-notification". Older lines
+    have only turnOrigin, or nothing, so known machine-written openings decide."""
+    o = holder.get("origin")
+    if isinstance(o, dict) and o.get("kind"):
+        return o.get("kind") == "human"
+    t = holder.get("turnOrigin")
+    if t:
+        return t == "human"
+    if holder.get("promptSource") == "system":
+        return False
+    return not text.lstrip().startswith(MACHINE_PREFIXES)
+
+
 def extract(obj):
     """Yield (kind, text) signals from one parsed transcript line."""
     t = obj.get("type")
@@ -205,7 +229,7 @@ def extract(obj):
         content = msg.get("content") if isinstance(msg, dict) else None
         for s in texts(content):
             s = s.strip()
-            if not s or s.startswith("<"):
+            if not s or s.startswith("<") or not is_human(obj, s):
                 continue
             if s.startswith("[Request interrupted by user"):
                 yield "I", clean(s, MSG_LIMIT)
@@ -229,7 +253,7 @@ def extract(obj):
         att = obj.get("attachment")
         if isinstance(att, dict) and att.get("type") == "queued_command":
             p = att.get("prompt")
-            if isinstance(p, str) and p.strip() and not p.strip().startswith("<"):
+            if isinstance(p, str) and p.strip() and not p.strip().startswith("<") and is_human(att, p):
                 yield ("C" if is_correction(p) else "M"), clean(p, MSG_LIMIT)
 
 

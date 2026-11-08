@@ -233,6 +233,8 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_template_release.sh tests/template/test_fleet.sh
     scripts/dream.sh scripts/dream.py tests/template/test_dream.sh docs/procedures/dream.md
     .claude/agents/dreamer.md .codex/agents/dreamer.toml
+    scripts/taste.py tests/template/test_taste.sh
+    .claude/agents/taste-dreamer.md .codex/agents/taste-dreamer.toml
     .claude/skills/dream/SKILL.md .agents/skills/dream/SKILL.md
     scripts/quickgate.sh scripts/selftest.sh
     tests/template/lib.sh tests/template/test_kernel_hash.sh
