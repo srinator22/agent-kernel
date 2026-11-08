@@ -42,7 +42,7 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
 
 ## Gates
 
-| Gate | Command (wire in check.sh and CI) | Pass | Rule |
+| Gate | Command (wire in stack-check.sh and CI) | Pass | Rule |
 |---|---|---|---|
 | Kernel hash | `./scripts/kernel-hash.sh --verify` | exit 0 | kernel |
 | Line budget | `wc -l < AGENTS.md` at most 180 | exit 0 | kernel 10 |

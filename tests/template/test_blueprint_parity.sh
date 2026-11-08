@@ -85,10 +85,17 @@ assert_not_contains "section 1 fences are not read" "before.md"
 assert_not_contains "section 3 fences are not read" "after.md"
 
 # The real blueprint and the real required list agree in both directions, run
-# from the repository root.
-cd "$T_ROOT" || exit 1
-mapfile -t REAL < <(sed -n '/^  required=(/,/^  )/p' "$T_CHECK" | sed '1d;$d' | tr -s ' ' '\n' | sed '/^$/d')
-parity docs/BLUEPRINT.md "${REAL[@]}"
-assert_eq "the real blueprint and required list agree" "" "$OUT"
+# from the repository root. This is a fact about the template's own tree, so
+# like check.sh step 5j it holds only in template mode: a started project
+# carries a different tree (no docs/library, its own ADRs) and checks it with
+# its own ./scripts/check.sh run.
+if [[ -f "$T_ROOT/.start-done" ]]; then
+  t_na "the real blueprint and required list agree: this repository is a started project (.start-done); covered by check.sh step 5j in the template"
+else
+  cd "$T_ROOT" || exit 1
+  mapfile -t REAL < <(sed -n '/^  required=(/,/^  )/p' "$T_CHECK" | sed '1d;$d' | tr -s ' ' '\n' | sed '/^$/d')
+  parity docs/BLUEPRINT.md "${REAL[@]}"
+  assert_eq "the real blueprint and required list agree" "" "$OUT"
+fi
 
 t_finish

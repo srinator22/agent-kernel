@@ -37,7 +37,7 @@ Detail files: `LAYOUT_PROCESS.md` (order of layout work), `CHECKS.md` (ledger).
 
 Exit codes for every command: 0 pass, 1 check failed, 2 could not run (never a pass). Results are recorded in `analysis/<date>_GATE.md`. Commands are placeholders the project supplies.
 
-| Gate | Command (wire in check.sh and CI) | Pass | Rule |
+| Gate | Command (wire in stack-check.sh and CI) | Pass | Rule |
 |---|---|---|---|
 | Quick gate (during work, no CAD application) | `<pcb-gate> --quick` | exit 0; not a release pass | PCB-6 |
 | Full gate (before commit of design files and before any order) | `<pcb-gate>` (adds ERC, DRC with zones refilled, analyzers) | exit 0, result recorded | PCB-6 |
@@ -60,6 +60,7 @@ All tools take `--help` and exit 0 pass, 1 fail, 2 could not run; numbers come f
 - check_doc_sync: shipped; superseded-terms table (term, superseding decision, history words), hole coordinates, connector-wall edge, and dash typography; FAIL on a stale term.
 - check_bom: shipped; construction policy (size, capacitor type, datasheet, grade).
 - check_part_roles: shipped; each named MPN fitted (FAIL if absent, WARN if only the alternate); unlisted MPN is WARN.
+- check_quotes: shipped; every quoted string followed by a citation such as `[datasheets/<file>.pdf p.12]` appears in the cited document on the cited page (text compared without case, spacing or punctuation; PDF pages need the optional `pymupdf`, otherwise UNCHECKED and exit 2, never a pass) (PCB-2).
 - check_ratings, calc_trace_width: shipped; ratings against operating values with derating margin; copper width and temperature rise for a current.
 - check_connectors: shipped; allocation, pin counts, keying, cross-plug and mis-mating hazards.
 - check_power_branch: shipped (example branch in `tools/examples/`); a fused DC branch: capacitor inrush I2t against fuse I2t, fast fuse against pulsed loads, wire and holder ratings, source fault clearing, overshoot and regeneration, clamp window, sizing-basis drift; UNKNOWN is reported, never assumed (PCB-19, PCB-21).

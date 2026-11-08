@@ -39,7 +39,7 @@ Replace the EXAMPLE rows with project rows; delete this sentence then.
 |---|---|---|---|---|
 | M-000 EXAMPLE | Export dropped the last record; found by a human reading the output | Loop bound used `< n - 1` | `test_export_includes_final_record` plus a property test on record counts | fixed (abc1234) |
 | I-000 EXAMPLE | Run restarted after a power cycle and reused an old file; found by a fault sweep | Recovery matched on file name alone, not on session identity | Recovery requires the session id in the file header; `test_recovery_rejects_foreign_file` | fixed (def5678) |
-| W-000 EXAMPLE | Release built locally but failed in a fresh clone; found at release review | An untracked local file was imported | Fresh-clone build step in `scripts/check.sh` | fixed (0123abc) |
+| W-000 EXAMPLE | Release built locally but failed in a fresh clone; found at release review | An untracked local file was imported | Fresh-clone build step in `scripts/stack-check.sh` | fixed (0123abc) |
 
 ## Review output record
 

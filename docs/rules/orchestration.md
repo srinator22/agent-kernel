@@ -8,7 +8,7 @@ Roles:
 - Worker: one bounded task with exact paths, schemas and pitfalls. Never
   commits or pushes.
 - Reviewer: fresh context. Receives the diff, `.work/TASK.md` and the
-  verify output, never the implementer's reasoning.
+  complete verify output (missing: FAIL), never the implementer's reasoning.
 - Monitor: watches the exact pushed SHA to a terminal state, in the
   foreground, with the maximum timeout. Queued or running is not success.
 - Explorer: read-only search; returns file:line and where it looked.

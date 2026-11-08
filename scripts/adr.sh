@@ -60,8 +60,8 @@ cmd_check() {
       errs+=("$f: title number ${BASH_REMATCH[1]} does not match the file number $num")
     fi
     header="$(awk 'NR > 1 && /^## / { exit } { sub(/\r$/, ""); print }' "$f")"
-    date="$(printf '%s\n' "$header" | sed -n 's/^Date: *//p' | head -n 1)"
-    status="$(printf '%s\n' "$header" | sed -n 's/^Status: *//p' | head -n 1)"
+    date="$(printf '%s\n' "$header" | sed -n 's/^Date: *//p' | sed -n 1p)"
+    status="$(printf '%s\n' "$header" | sed -n 's/^Status: *//p' | sed -n 1p)"
     if [[ ! "$date" =~ ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$ ]]; then
       errs+=("$f: needs a 'Date: YYYY-MM-DD' line before the first section, found '${date:-none}'")
     fi

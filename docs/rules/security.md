@@ -3,7 +3,7 @@
 - Private by default: proprietary code and data stay private until a human
   authorizes otherwise.
 - Never commit passwords, tokens, keys, certificates, connection strings,
-  or production data. The gitleaks scan in check.sh is not optional.
+  or production data. The gitleaks scan in stack-check.sh is not optional.
 - Secrets live in the approved store for the project - never in code, in
   committed config, in logs, in build artifacts, or in screenshots.
 - Least privilege per identity: each token and service account is scoped
