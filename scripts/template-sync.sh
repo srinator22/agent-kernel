@@ -69,10 +69,12 @@
 # AGENTS.rules-index.diff, a kernel difference prints "KERNEL CHANGE: needs owner
 # approval and scripts/kernel-hash.sh --update", and the project's .kernel.hash
 # is never touched. After applying, the script re-runs
-# scripts/kernel-hash.sh --verify.
+# scripts/kernel-hash.sh --verify, then scripts/lessons.sh skills: a project
+# over its kernel rule 10 skills cap gets an "ACTION: skills cap" line.
 #
 # Exit: 0 clean or applied, 1 conflicts or a kernel change pending (or a failed
-# clone, ref or kernel verification), 2 usage or guard failure.
+# clone, ref or kernel verification, or the skills cap exceeded after the
+# sync), 2 usage or guard failure.
 #
 # Test hook: TEMPLATE_SYNC_TODAY=YYYY-MM-DD overrides today's date.
 set -euo pipefail
@@ -120,7 +122,7 @@ usage_text() {
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
-  echo "  exit: 0 clean or applied, 1 conflicts or kernel change pending, 2 usage or guard failure"
+  echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending or skills cap exceeded, 2 usage or guard failure"
 }
 usage() { usage_text >&2; exit 2; }
 
@@ -603,6 +605,20 @@ main() {
   else
     echo "template-sync: scripts/kernel-hash.sh is not present or not executable; kernel not verified" >&2
     rc=1
+  fi
+
+  # A synced core skill can take the project over its kernel rule 10 skills
+  # cap; the synced lessons.sh counts it, and a breach is the owner's call.
+  if [[ -x scripts/lessons.sh ]]; then
+    local cap_out cap_rc=0
+    cap_out="$(./scripts/lessons.sh skills 2>&1)" || cap_rc=$?
+    printf '%s
+' "$cap_out" | sed -n '1s/^/template-sync: /p'
+    if (( cap_rc )); then
+      echo "ACTION: skills cap: $(printf '%s
+' "$cap_out" | sed -n 's/^lessons: //p'). Merge or archive a project skill (docs/procedures/maintain.md); the sync is recorded."
+      rc=1
+    fi
   fi
   return $rc
 }

@@ -146,11 +146,18 @@ done
 run ./scripts/lessons.sh check
 assert_rc "9 skills with no profile skill set fail" 1
 assert_contains "cap of 8 is named" "the cap is 8"
+run ./scripts/lessons.sh skills
+assert_rc "skills exits 1 over the cap" 1
+assert_contains "skills prints the count and the cap" "skills: 9 (cap 8 = 8 core + 0 skills listed by the adopted profiles)"
+assert_contains "skills names the breach" "lessons: .claude/skills has 9 skills; the cap is 8"
 mkdir -p docs/profiles/p1
 printf 'Profile p1\nSkills: s9-extra\n' > docs/profiles/p1/PROFILE.md
 ship_skill p1 s9-extra
 run ./scripts/lessons.sh check
 assert_rc "9 skills with one declared profile skill set pass" 0
+run ./scripts/lessons.sh skills
+assert_rc "skills exits 0 within the cap" 0
+assert_contains "skills counts the profile skill" "skills: 9 (cap 9 = 8 core + 1 skills listed by the adopted profiles)"
 printf -- '- Profiles: other\n' > AGENTS.md
 run ./scripts/lessons.sh check
 assert_rc "a profile that is not adopted does not raise the cap" 1

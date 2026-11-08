@@ -5,7 +5,8 @@
 # set, header-only lessons files, adopted profiles and ci.yml as DIFF only, the
 # KERNEL and Rules index diffs from AGENTS.md, conflicts reported on every run
 # until merged and never recorded as synced, and the exit codes (0 clean or
-# applied, 1 conflicts or kernel change pending, 2 usage or guard failure).
+# applied, 1 conflicts, kernel change pending or skills cap exceeded, 2 usage or
+# guard failure), and the skills cap reported after a sync.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -404,6 +405,49 @@ assert_rc "no recorded sync fails" 1
 assert_contains "the missing record is explained" "no sync recorded"
 rm -f .start-done
 cp "$FIX/agents.profiles" AGENTS.md
+
+# ---- (p) skills cap after a sync (kernel rule 10, scripts/lessons.sh skills) ----
+# The template adds a core skill in v2; the project already holds its own
+# skills. The sync applies the skill and then reports the cap result.
+TPL3="$FIX/template3"
+PRJ3="$FIX/project3"
+put_skill() { local d; for d in .claude/skills .agents/skills; do put "$d/$1/SKILL.md" "# $1"; done; }
+mkdir -p "$TPL3" && cd "$TPL3" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
+mkdir -p scripts
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" scripts/
+put_agents "Kernel v1." "rule index v1"
+sed -i.bak "s|^- Template:.*|- Template: $TPL3 v1|" AGENTS.md && rm -f AGENTS.md.bak
+for s in c1 c2 c3 c4 c5 c6; do put_skill "$s"; done
+commit_all v1 && git tag v1
+put_skill c7
+commit_all v2 && git tag v2
+mkdir -p "$PRJ3" && cd "$PRJ3" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email p@example.invalid; git config user.name p; git config core.autocrlf false
+git -C "$TPL3" archive --format=tar v1 | tar -x -C "$PRJ3"
+put_skill own1
+put_skill own2
+put docs/lessons/MAINTENANCE.log "template-sync: v1 2026-09-01"
+chmod +x scripts/*.sh
+./scripts/kernel-hash.sh --update >/dev/null
+proj_commit "project at v1"
+git checkout -q -b sync-skills
+run ./scripts/lessons.sh skills
+assert_rc "before the sync the project is at its skills cap" 0
+run ./scripts/template-sync.sh --template "$TPL3" --ref v2
+assert_contains "the new core skill is applied" "ADD       .claude/skills/c7/SKILL.md"
+assert_contains "the skills count is reported after the sync" "template-sync: skills: 9 (cap 8"
+assert_contains "the cap breach is an action item" "ACTION: skills cap: .claude/skills has 9 skills; the cap is 8"
+assert_rc "a sync that leaves the project over its skills cap exits 1" 1
+proj_commit "sync to v2"
+rm -rf .claude/skills/own2 .agents/skills/own2
+proj_commit "drop own2"
+run ./scripts/template-sync.sh --template "$TPL3" --ref v2
+assert_rc "a sync within the skills cap exits 0" 0
+assert_not_contains "no action item within the cap" "ACTION: skills cap"
+cd "$PRJ" || exit 1
 
 # ---- usage ----
 run ./scripts/template-sync.sh --bogus
