@@ -95,16 +95,32 @@ assert_rc "a malformed register: exits 0" 0
 assert_contains "a malformed register still prints the Preferences line" "[session-context] Preferences: "
 assert_contains "a malformed register keeps the other lines" "Kernel rule 7"
 rm -f docs/preferences/bad.md
-# No Python: the same PATH minus every directory that holds a python.
+# No Python: the same PATH with every python taken out. A directory that holds
+# a python is dropped, unless it also holds bash (Linux keeps both in /usr/bin):
+# then a mirror of it without the pythons takes its place.
 NOPY_PATH=""
+NOPY_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.nopy.XXXXXX")"
 IFS=: read -r -a path_dirs <<< "$PATH"
+n=0
 for d in "${path_dirs[@]}"; do
-  if [[ -x "$d/python" || -x "$d/python3" || -x "$d/python.exe" || -x "$d/python3.exe" ]]; then continue; fi
+  if [[ -x "$d/python" || -x "$d/python3" || -x "$d/python.exe" || -x "$d/python3.exe" ]]; then
+    [[ -x "$d/bash" ]] || continue
+    n=$((n + 1)); mkdir -p "$NOPY_ROOT/$n"
+    for f in "$d"/*; do
+      case "${f##*/}" in python*|py|py.exe) continue ;; esac
+      [[ -f "$f" ]] && ln -s "$f" "$NOPY_ROOT/$n/${f##*/}" 2>/dev/null
+    done
+    d="$NOPY_ROOT/$n"
+  fi
   NOPY_PATH="${NOPY_PATH:+$NOPY_PATH:}$d"
 done
-run env PATH="$NOPY_PATH" bash scripts/session-context.sh
+if PATH="$NOPY_PATH" command -v python3 >/dev/null 2>&1 || PATH="$NOPY_PATH" command -v python >/dev/null 2>&1; then
+  t_bad "no python: the test PATH still finds a python" "$NOPY_PATH"
+fi
+run env PATH="$NOPY_PATH" "$BASH" scripts/session-context.sh
 assert_rc "registers with no python on PATH: exits 0" 0
 assert_contains "no python: the summary still prints" "[session-context] Preferences: film, ui (4 rules, 3 Review)"
+case "$NOPY_ROOT" in */template-selftest.nopy.*) rm -rf "$NOPY_ROOT" ;; esac
 # The unwired hook warning.
 echo '#!/usr/bin/env bash' > scripts/feedback-log.sh
 mkdir -p .claude

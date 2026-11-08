@@ -195,8 +195,8 @@ def run():
         "said": said,
     })
     if kind == "deferral":
-        print("Owner deferral logged (script guess): record it as a note (BACKLOG.md or the plan) "
-              "and do not start the work.")
+        print("Owner deferral logged (script guess): if the owner put work off, record it as a note "
+              "(BACKLOG.md or the plan) and do not start the work.")
     elif kind != "message":
         line = "Owner feedback logged (%s, script guess)." % kind
         if os.path.exists(os.path.join(root, ".start-done")):
