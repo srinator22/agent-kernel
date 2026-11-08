@@ -43,3 +43,17 @@ Entry format (all five fields required):
 - retire-when: the stdin hook is wired with its test and the shell tool
   runs long commands or reports its length limit.
 - applies to: core
+
+### A fixture for an outside folder sits outside the fixture repository
+
+- what happened: a test faked the per-user projects folder inside its fixture
+  git repository; git listed the fake memory notes as untracked files, so
+  the check passed through git and the memory comparison it meant to cover
+  could be deleted with every check green (2026-11-08, dream outcome fixes;
+  found by review round 1).
+- what check should have caught it: a mutation run that removes the code
+  path a new test is meant to cover; this one did, once run.
+- what was added: the fake folder moved next to the fixture, not inside it.
+- retire-when: the test helpers create outside-repo folders through one
+  function that places them outside the fixture.
+- applies to: core

@@ -53,3 +53,5 @@ with a reason. Priorities P0-P3 per docs/procedures/audit.md.
 | Self-test asserts every script a fixture writes is executable on disk | P2 | a Windows-green gate passed while Linux CI failed on a missing exec bit | open |
 | adr.sh check compares new ADR numbers with origin/main (fetch first) | P2 | ADR numbers collided across parallel branches twice, last on 2026-11-08 | open |
 | tasklint: name an indented continuation line under a criterion and say evidence sits on its first line; resolve a bare file name in a parenthesis or skip it | P3 | two spurious tasklint failures rewritten by hand, 2026-11-08 | open |
+| test_dream.sh: cover the "git cannot compare" outcome branch and remove the -p11 and worktree folders on an early exit (trap) | P3 | dream-outcome-fixes review 2 notes, 2026-11-08 | open |
+| dream.py due counts task retros by .work/done file modification time, so a fresh worktree checkout makes every archived record look new and a dream "due" right after one; count by git commit date of each record instead | P3 | seen 2026-11-08: 14 retros counted minutes after a dream, from a new worktree | open |
