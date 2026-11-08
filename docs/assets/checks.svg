@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" width="1200" height="280" role="img" aria-labelledby="t d">
+  <title id="t">Every change goes through the same checks</title>
+  <desc id="d">A change passes six gates in a row: the rulebook is unchanged, the writing is clean, the tests pass, no secrets leak, memory stays within its limits, and a second agent reviews it. Only then does it ship, after the same checks pass on GitHub.</desc>
+  <style>
+    text { font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    .ink { stroke: #13203A; }
+    .ink-fill { fill: #13203A; }
+    .muted { fill: #5A6782; }
+    .lane { stroke: #B8C2D6; }
+    .card { fill: #FFFFFF; stroke: #13203A; }
+    .code { stroke: #B8C2D6; }
+    .ok { fill: #1C9E73; }
+    .ok-stroke { stroke: #1C9E73; }
+    .gate { fill: none; stroke: #13203A; }
+    .label { font-size: 17px; font-weight: 600; }
+    .sub { font-size: 15px; font-weight: 400; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #DCE3F2; }
+      .ink-fill { fill: #DCE3F2; }
+      .muted { fill: #9AA6BF; }
+      .lane { stroke: #3A4560; }
+      .card { fill: #161D2E; stroke: #DCE3F2; }
+      .code { stroke: #4A5675; }
+      .ok { fill: #3CCB97; }
+      .ok-stroke { stroke: #3CCB97; }
+      .gate { stroke: #DCE3F2; }
+    }
+  </style>
+
+  <line class="lane" x1="160" y1="150" x2="1020" y2="150" stroke-width="2" stroke-dasharray="1 8" stroke-linecap="round"/>
+
+  <rect class="card" x="40" y="108" width="120" height="84" rx="10" stroke-width="2"/>
+  <g class="code" stroke-width="5" stroke-linecap="round">
+    <line x1="60" y1="130" x2="128" y2="130"/>
+    <line x1="72" y1="148" x2="140" y2="148"/>
+    <line x1="72" y1="166" x2="116" y2="166"/>
+  </g>
+  <text class="label ink-fill" x="100" y="228" text-anchor="middle">your change</text>
+
+  <g stroke-width="2.5" stroke-linecap="round">
+    <path class="gate" d="M 218 192 V 140 A 32 32 0 0 1 282 140 V 192"/>
+    <path class="gate" d="M 348 192 V 140 A 32 32 0 0 1 412 140 V 192"/>
+    <path class="gate" d="M 478 192 V 140 A 32 32 0 0 1 542 140 V 192"/>
+    <path class="gate" d="M 608 192 V 140 A 32 32 0 0 1 672 140 V 192"/>
+    <path class="gate" d="M 738 192 V 140 A 32 32 0 0 1 802 140 V 192"/>
+    <path class="gate" d="M 868 192 V 140 A 32 32 0 0 1 932 140 V 192"/>
+  </g>
+
+  <g class="ok-stroke" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 241 85 L 248 92 L 260 78"/>
+    <path d="M 371 85 L 378 92 L 390 78"/>
+    <path d="M 501 85 L 508 92 L 520 78"/>
+    <path d="M 631 85 L 638 92 L 650 78"/>
+    <path d="M 761 85 L 768 92 L 780 78"/>
+    <path d="M 891 85 L 898 92 L 910 78"/>
+  </g>
+
+  <g text-anchor="middle">
+    <text class="label ink-fill" x="250" y="228">rulebook</text><text class="sub muted" x="250" y="250">unchanged</text>
+    <text class="label ink-fill" x="380" y="228">writing</text><text class="sub muted" x="380" y="250">clean</text>
+    <text class="label ink-fill" x="510" y="228">tests</text><text class="sub muted" x="510" y="250">pass</text>
+    <text class="label ink-fill" x="640" y="228">secrets</text><text class="sub muted" x="640" y="250">none leaked</text>
+    <text class="label ink-fill" x="770" y="228">memory</text><text class="sub muted" x="770" y="250">within limits</text>
+    <text class="label ink-fill" x="900" y="228">review</text><text class="sub muted" x="900" y="250">a second agent</text>
+  </g>
+
+  <circle class="ok" cx="1070" cy="150" r="34"/>
+  <path d="M 1055 151 L 1066 162 L 1086 140" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="label ink-fill" x="1070" y="228" text-anchor="middle">ships</text>
+  <text class="sub muted" x="1070" y="250" text-anchor="middle">once GitHub agrees</text>
+</svg>

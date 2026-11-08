@@ -61,6 +61,7 @@ cliff.toml                    # git-cliff config: Conventional Commits -> CHANGE
 docs/
   BLUEPRINT.md                # this file, saved verbatim
   DEFECT_MEMORY.md            # confirmed defects: what happened, why, the check that prevents it
+  assets/                     # the template README's illustrations (hero.svg, checks.svg, learning.svg); start may drop them
   preferences/
     README.md                 # register format, check grammar, ladder, baselines; other files here are project-owned
   ARCHITECTURE.md             # {{FILLED_BY_START}}: modules, boundaries, data flow
