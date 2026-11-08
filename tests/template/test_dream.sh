@@ -477,4 +477,82 @@ assert_file_has "impact: and counts this one" "$D10" "  this dream: U 1"
 DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --state-dir "$ST10"
 assert_rc "impact: done without a report still works" 0
 
+# --- outcome files are checked against what changed; memory from a worktree ---
+# Files lists a named file only when git (against the digest's commit) or the
+# auto-memory folder shows it changed; the memory folder is the main checkout's.
+# BACKLOG.md is tracked and its change is committed before done (the usual
+# path: edits land on a branch); UPSTREAM.md stays untracked (a change shows
+# by stat); untracked fixture files stay untouched and must not be claimed.
+# The projects folder sits outside the fixture repository, as ~/.claude does,
+# so memory notes are decided by the memory stat alone, never by git.
+git add -u >/dev/null 2>&1
+git add BACKLOG.md >/dev/null 2>&1
+git commit -q -m before-dream11 >/dev/null 2>&1
+PROJ11="$FIX-p11"
+ST11="$FIX/state11"
+MEM11="$PROJ11/$SLUG/memory"
+mkdir -p "$MEM11"
+printf '%s\n' '---' 'name: note-a' '---' 'waiting on a merge' > "$MEM11/note-a.md"
+printf '%s\n' '---' 'name: note-b' '---' 'still true' > "$MEM11/note-b.md"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-09T08:00:00.000Z "the outcome named files nobody touched"
+DREAM_NOW="2026-11-09T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST11"
+assert_rc "files: digest exits 0" 0
+printf '%s\n' '| A new row | P3 | test | open |' >> "$FIX/BACKLOG.md"
+printf '%s\n' '' '### New upstream entry' >> "$FIX/docs/lessons/UPSTREAM.md"
+printf '%s\n' 'merged now' >> "$MEM11/note-a.md"
+git add BACKLOG.md >/dev/null 2>&1
+git commit -q -m dream-row >/dev/null 2>&1
+R11="$ST11/2026-11-09-report.md"
+printf '%s\n' '# Dream report 2026-11-09' '## Proposals' \
+  '1. [mechanize] Two rows' \
+  '   Change: BACKLOG.md row "Wire the hook into .claude/settings.json | P2 | open"; add the entry to UPSTREAM.md; separately the owner decides whether AGENTS.md records an override' \
+  '2. [stale] Memory notes' '   Change: in note-a.md replace the waiting line, and note-b.md likewise' \
+  '3. [mechanize] Declined' '   Change: edit README.md' > "$R11"
+DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST11" --report "$R11" --applied 1 2
+assert_rc "files: done exits 0" 0
+if grep -qx -- "Files: BACKLOG.md, UPSTREAM.md, note-a.md" "$R11"; then
+  t_ok "files: only the named files that changed, a bare name matched by its last components"
+else
+  t_bad "files: expected exactly 'Files: BACKLOG.md, UPSTREAM.md, note-a.md'"; grep -- "^Files" "$R11" | sed 's/^/       | /'
+fi
+grep -- "^Files" "$R11" > "$ST11/files-line"
+assert_file_lacks "files: a name quoted inside row text is not claimed" "$ST11/files-line" "settings.json"
+assert_file_lacks "files: an owner decision is not claimed" "$ST11/files-line" "AGENTS.md"
+assert_file_lacks "files: an untouched memory note is not claimed" "$ST11/files-line" "note-b.md"
+
+ST12="$FIX/state12"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-10T08:00:00.000Z "an older digest state"
+DREAM_NOW="2026-11-10T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST12"
+assert_rc "files: second digest exits 0" 0
+"$PY" -c 'import json,sys;p=sys.argv[1];s=json.load(open(p));s.pop("head",None);s.pop("memory",None);json.dump(s,open(p,"w"))' "$ST12/state.next.json"
+R12="$ST12/2026-11-10-report.md"
+printf '%s\n' '# Dream report 2026-11-10' '## Proposals' '1. [stale] One' '   Change: edit BACKLOG.md' > "$R12"
+DREAM_NOW="2026-11-10T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST12" --report "$R12" --applied 1
+assert_rc "files: done on an older digest state exits 0" 0
+assert_file_has "files: an older digest state says the files were not checked" "$R12" "Files: BACKLOG.md (named in the Change lines; not checked: the digest recorded no commit)"
+
+git add -u >/dev/null 2>&1
+git commit -q -m dream11 >/dev/null 2>&1
+WT3="$FIX-wt3"
+git worktree add -q --detach "$WT3" >/dev/null 2>&1
+run bash "$WT3/scripts/dream.sh" hygiene --projects-dir "$PROJ11"
+assert_rc "worktree memory: hygiene exits 0" 0
+assert_contains "worktree memory: a linked worktree reads the main checkout's memory folder" "auto-memory: 2 files"
+git worktree remove --force "$WT3" >/dev/null 2>&1
+
+# done in a checkout whose history lacks the digest's commit cannot compare.
+ST13="$FIX/state13"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-11T08:00:00.000Z "a digest on a later commit"
+DREAM_NOW="2026-11-11T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST13"
+assert_rc "files: third digest exits 0" 0
+WT4="$FIX-wt4"
+git worktree add -q --detach "$WT4" HEAD~1 >/dev/null 2>&1
+R13="$ST13/2026-11-11-report.md"
+printf '%s\n' '# Dream report 2026-11-11' '## Proposals' '1. [stale] One' '   Change: edit BACKLOG.md' > "$R13"
+DREAM_NOW="2026-11-11T12:00:00Z" run bash "$WT4/scripts/dream.sh" done --projects-dir "$PROJ11" --state-dir "$ST13" --report "$R13" --applied 1
+assert_rc "files: done on another history exits 0" 0
+assert_file_has "files: another history says the files were not checked" "$R13" "not checked: the digest's commit is not in this checkout's history"
+git worktree remove --force "$WT4" >/dev/null 2>&1
+case "$PROJ11" in */template-selftest.*-p11) rm -rf "$PROJ11" ;; esac
+
 t_finish
