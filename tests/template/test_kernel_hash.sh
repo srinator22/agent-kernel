@@ -2,7 +2,7 @@
 # kernel-hash.sh: verify passes on a pristine kernel, fails after an edit, and
 # passes again after --update; edits outside the kernel and CRLF do not drift.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 cp_script kernel-hash.sh

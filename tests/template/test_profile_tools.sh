@@ -6,7 +6,7 @@
 # discovery (isolated mode, no bytecode written); test_*.sh files run with bash.
 # Without python the Python folders are reported and skipped; CI has python3.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 cd "$T_ROOT" || exit 1
 PY=""

@@ -2,7 +2,7 @@
 # lessons.sh: lesson cap, required fields, PENDING and QUARANTINE entries,
 # skills mirror and cap, rules file size, use, expire --apply, stats.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 cp_script lessons.sh

@@ -5,7 +5,7 @@
 # minimal AGENTS.md; a clean fixture reaches the unwired stack block and fails
 # there. Template mode is a fixture with every required file stubbed and exits 0.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 EM="$(printf '\xe2\x80\x94')"
 STACK_MSG="scripts/stack-check.sh is missing"

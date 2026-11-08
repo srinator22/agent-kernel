@@ -7,7 +7,7 @@
 # until merged and never recorded as synced, and the exit codes (0 clean or
 # applied, 1 conflicts or kernel change pending, 2 usage or guard failure).
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 TPL="$FIX/template"

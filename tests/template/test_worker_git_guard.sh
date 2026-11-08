@@ -3,7 +3,7 @@
 # from both shells the harness offers (Bash and PowerShell), and the worker
 # agent's hook wiring (matcher covers both shells, command runs the script).
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 GUARD="$T_ROOT/scripts/worker-git-guard.sh"
 WORKER="$T_ROOT/.claude/agents/worker.md"

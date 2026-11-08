@@ -4,7 +4,7 @@
 # when every criterion is ticked, caches a green run by working-tree state,
 # and allows when no quick lane is wired. A fake quickgate.sh records its runs.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 # stop [PAYLOAD]: run the hook with PAYLOAD on stdin (default: a plain Stop).
 stop() {

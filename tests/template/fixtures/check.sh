@@ -260,7 +260,7 @@ if [[ ! -f .start-done ]]; then
     scripts/doc-eval.sh docs/procedures/doc-eval.md tests/docs/questions.md
     tests/template/test_destructive_guard.sh tests/template/test_stop_gate.sh
     tests/template/test_tasklint.sh tests/template/test_doc_eval.sh
-    tests/template/test_session_context.sh
+    tests/template/test_session_context.sh tests/template/test_test_files.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"

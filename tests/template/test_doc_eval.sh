@@ -3,7 +3,7 @@
 # minimum counts) and the brief, which must never carry the key or sources.
 # Also checks the shipped tests/docs/questions.md is valid.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 HDR='| id | kind | question | answer key | sources |
 |---|---|---|---|---|'

@@ -180,6 +180,7 @@ tests/
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
     test_selftest.sh          # quarantine list, n/a lines, summary counts
     test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
+    test_test_files.sh        # guarded lib.sh load in every test, exec bits
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network

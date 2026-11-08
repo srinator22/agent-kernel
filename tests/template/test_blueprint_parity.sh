@@ -4,7 +4,7 @@
 # walking the tree's indentation), not by file name alone. The function is
 # extracted from check.sh between its blueprint-parity markers.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 FUNC="$(sed -n '/^# BEGIN blueprint-parity/,/^# END blueprint-parity/p' "$T_CHECK")"

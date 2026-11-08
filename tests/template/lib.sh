@@ -3,6 +3,8 @@
 # never run directly (scripts/selftest.sh only runs test_*.sh). Tests are plain
 # bash with no network; each builds a throwaway git repo fixture under the
 # system temp dir and removes it on exit.
+# Each test loads this file with the guarded source line of test_test_files.sh,
+# so a test that cannot load it stops before writing anything.
 
 T_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # The pristine template check.sh. After start wires scripts/check.sh to a stack,

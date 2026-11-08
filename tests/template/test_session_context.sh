@@ -3,7 +3,7 @@
 # block (branch, capped status, last 10 commits), the in-progress task, and
 # graceful output outside a git repository.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 cp_script session-context.sh
