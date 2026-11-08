@@ -84,7 +84,7 @@ files; no model writes it, so the dreamer cannot grade itself. It shows:
 is expected. Candidates are signals that share two or more words with a
 lesson, the same matcher as Impact, not proof of recurrence. A report that
 cannot be read or has a malformed Outcome is listed as skipped. Kind rows
-and skipped lines are capped at 20 as well. A lesson id is L with three or
+and skipped lines are capped at 20 as well, and long values are cut. A lesson id is L with three or
 more digits, as INDEX.md writes them, read as written: a range such as
 "L011-L013" counts L011 and L013 only.
 

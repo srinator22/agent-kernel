@@ -606,13 +606,24 @@ printf '%s\n' '# r' '## Proposals' '1. [counter] again in a later report' \
   '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$ST13/2026-08-02-report.md"
 run bash scripts/dream.sh scorecard --state-dir "$ST13"
 assert_eq "scorecard: a lesson repeated across reports prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
 # The repeat inside one Change line alone (an earlier report would hide it).
 ST13B="$FIX/state13b"
 mkdir -p "$ST13B"
 cp "$ST13/2026-08-01-report.md" "$ST13B/"
 run bash scripts/dream.sh scorecard --state-dir "$ST13B"
 assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
-assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
+
+# A long used or last value in INDEX.md is cut, so a lesson line stays short.
+LR="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.longlast.XXXXXX")"
+mkdir -p "$LR/docs/lessons"
+printf '%s\n' "- [L404] Long values - x (used: $(printf '9%.0s' $(seq 1 60)), last: $(printf 'z%.0s' $(seq 1 200)), retire-when: y)" \
+  > "$LR/docs/lessons/INDEX.md"
+run bash scripts/dream.sh scorecard --state-dir "$ST13" --root "$LR"
+LINE="$(printf '%s\n' "$OUT" | grep '^  L404: ')"
+assert_contains "scorecard: the long lesson is listed" "  L404: used "
+if (( ${#LINE} <= 100 )); then t_ok "scorecard: long used and last values are cut (${#LINE} characters)"; else t_bad "scorecard: long used and last values are cut" "$LINE"; fi
+rm -rf "$LR"
 
 # Kind rows and skipped lines are capped too: 30 kinds and 30 bad reports.
 ST14="$FIX/state14"

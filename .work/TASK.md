@@ -68,6 +68,10 @@ PASS. Reviewer plan review, round 3, 2026-11-08: B1 is closed by A10's dedupe an
 - 2026-11-08 fail-first: tests/template/test_dream.sh 168 passed, 39 failed (every new scorecard case; the 10 negative cases pass with no section), dream.py: error: invalid choice: 'scorecard'
 - 2026-11-08 implemented: test_dream.sh 207 passed, 0 failed; size fixture 3695 bytes (ceiling 6000)
 - 2026-11-08 real data (A12), read-only, state folder checksums unchanged: scorecard --state-dir "C:/dev/work/New Project/.work/dream" --root "C:/dev/work/New Project" gives 2026-11-07 proposals 11, no Outcome recorded; 2026-11-08 proposals 12, approved 9, declined 3; mechanize 3/1 (75%), pending approve 2/0, pending merge 2/0, pending reject 1/0, stale 1/0, upstream 0/1, none 0/1; L011-L013 not in INDEX.md and 6 BACKLOG rows not found on main (PR 15 unmerged), decided 12 of 30/50
+- 2026-11-08 change review round 1: FAIL. A lesson id repeated inside one Change line printed twice; kind rows and skipped lines had no cap; an unborn branch printed no name. Fixed in 9724587 with tests ST13, ST13B (the repeat in one line alone, since a later report masked it in ST13), ST14 and the unborn case
+- 2026-11-09 after the fix: test_dream.sh 215 passed, 0 failed; ./scripts/check.sh exit 0, selftest 22 passed, 0 failed, 0 quarantined
+- 2026-11-09 change review round 2: FAIL. B1: the round-1 fix put the ST13B run before the cross-report row assertion, so it read a one-report run and could not fail. Non-blocking N1 (an unreadable state.json stops the read-only scorecard, left as an explicit error) and N2 (skipped lines and lesson used and last values had no length cut)
+- 2026-11-09 B1 and N2 fixed: the row assertion runs on ST13's two reports again; skipped lines are cut to 160 characters, used to 20 and last to 40, with a long-values test. Fail-first with the row dedupe disabled and no cut: 215 passed, 2 failed (the row assertion, the long values); after: 217 passed, 0 failed; ruff check and format clean from scripts/dream
 
 ## Review verdict
 

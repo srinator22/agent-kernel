@@ -552,7 +552,7 @@ def scorecard_lines(c, sigs=None):
             props, outcomes = read_report(os.path.join(c.state_dir, name))
             dec = parse_outcome(outcomes[-1], props) if outcomes else None
         except ReportError as e:
-            skipped.append("skipped %s: %s" % (name, e.msg))
+            skipped.append(cut("skipped %s: %s" % (name, e.msg), 2 * CARD_CELL))
             continue
         reports.append((name[:10], props, dec))
     older, recent = reports[:-CARD_REPORTS], reports[-CARD_REPORTS:]
@@ -607,7 +607,7 @@ def scorecard_lines(c, sigs=None):
             out.append("  %s: not in INDEX.md" % lid)
             continue
         text, used, last = idx[lid]
-        out.append("  %s: used %s, last %s%s" % (lid, used, last, "" if sigs is None
+        out.append("  %s: used %s, last %s%s" % (lid, cut(str(used), 20), cut(last, 40), "" if sigs is None
                                                   else "; candidates %d" % len(lesson_hits(text, sigs))))
     if not lessons:
         out.append("  none")
