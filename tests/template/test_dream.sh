@@ -449,8 +449,8 @@ run bash scripts/dream.sh done --state-dir "$ST10" --report "$R10" --applied 1 1
 assert_rc "outcome: a repeated approved number exits 2" 2
 assert_contains "outcome: the repeated number is named" "proposal 1 is approved twice"
 RD10="$ST10/dup-report.md"
-printf '%s
-' '# Dream report 2026-11-07' '## Proposals' '1. [stale] one' '   Change: edit BACKLOG.md'   '1. [stale] two' '   Change: edit README.md' > "$RD10"
+printf '%s\n' '# Dream report 2026-11-07' '## Proposals' '1. [stale] one' '   Change: edit BACKLOG.md' \
+  '1. [stale] two' '   Change: edit README.md' > "$RD10"
 run bash scripts/dream.sh done --state-dir "$ST10" --report "$RD10" --applied 1
 assert_rc "outcome: a report that numbers two proposals alike exits 2" 2
 assert_contains "outcome: the report's repeated number is named" "numbers proposal 1 twice"

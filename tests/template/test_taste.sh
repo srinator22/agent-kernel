@@ -289,8 +289,9 @@ assert_rc "a repeated approved number exits 1" 1
 assert_contains "the repeated number is named" "proposal 10 is approved twice"
 assert_no_file "a repeated number writes nothing" "$TD/working.md"
 RDUP="$ST/reports/2026-11-09-dup.md"
-printf '%s
-' '# Taste report 2026-11-09' '## Proposals'   '1. add working: Ask before large refactors.' "   Evidence: $SID_O"   '1. add design: Prefer roomy layouts.' "   Evidence: $SID_P" > "$RDUP"
+printf '%s\n' '# Taste report 2026-11-09' '## Proposals' \
+  '1. add working: Ask before large refactors.' "   Evidence: $SID_O" \
+  '1. add design: Prefer roomy layouts.' "   Evidence: $SID_P" > "$RDUP"
 ta apply --report "$RDUP" 1
 assert_rc "a report that numbers two proposals alike exits 2" 2
 assert_contains "the report's repeated number is named" "numbers proposal 1 twice"

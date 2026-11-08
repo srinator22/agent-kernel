@@ -159,8 +159,8 @@ Builder's calls (the owner checks these when approving):
 - [x] Caps: `check` and `apply` fail above 160 characters a line or 6000 bytes in total, naming the file and line -> tests/template/test_taste.sh
 - [x] Safety: `apply` refuses a taste folder inside a git work tree; a state with a newer format version is refused with "update the template"; the tests write only under a temporary `TASTE_HOME` -> tests/template/test_taste.sh
 - [x] Agent and Codex twin, procedure section, ADR 0010, check.sh required list, BLUEPRINT tree and BACKLOG rows are in place -> scripts/check.sh
-- [ ] No tracked file holds a profile line, a real quote or a private project name -> judgment: reviewer reads the diff
-- [ ] `./scripts/check.sh` green and the reviewer's PASS recorded below -> judgment: verify output and Review verdict
+- [x] No tracked file holds a profile line, a real quote or a private project name -> judgment: reviewer reads the diff
+- [x] `./scripts/check.sh` green and the reviewer's PASS recorded below -> judgment: verify output and Review verdict
 - [x] Taste outcome: `taste done --report` appends applied and declined numbers, the changes and files touched, and profile lines and bytes before and after -> tests/template/test_taste.sh
 - [x] Taste impact: the next digest lists profile changes since the last pass, lines seen again, word-overlap candidates and a trend of fresh signals by kind per pass -> tests/template/test_taste.sh
 - [x] Project outcome: `dream.sh done --report R --applied N...` appends applied and declined numbers, files named in the applied Change lines and hygiene numbers before and after -> tests/template/test_dream.sh
@@ -178,8 +178,8 @@ Builder's calls (the owner checks these when approving):
 | N2 | N1 | scripts/dream/taste.py, scripts/dream/dream.py, scripts/dream.sh | advisor | done |
 | N3 | - | .claude/agents/taste-dreamer.md, .codex/agents/taste-dreamer.toml, docs/procedures/dream.md, docs/decisions/0010-personal-taste-profile.md, .claude/skills/dream/SKILL.md, .agents/skills/dream/SKILL.md | advisor | done |
 | N4 | N2, N3 | scripts/check.sh, tests/template/fixtures/check.sh, docs/BLUEPRINT.md, BACKLOG.md, README.md | advisor | done |
-| N5 | N4 | .work/TASK.md | reviewer | todo |
-| N6 | N5 | none tracked: ~/.claude/taste/.dream/ only | advisor | todo |
+| N5 | N4 | .work/TASK.md | reviewer | done |
+| N6 | N5 | none tracked: ~/.claude/taste/.dream/ only | advisor | done |
 
 ## Plan verdict
 <!-- autopilot only: the reviewer's plan review of Goal, Assumptions,
@@ -208,9 +208,15 @@ Builder's calls (the owner checks these when approving):
 - 2026-11-08 real project digest (scratch state): 258573 lines in 3.1 s, 102 signals; impact lists 5 lessons sharing words with new failures, no retire candidate (no approved used: 0 line older than 45 days)
 - 2026-11-08 ./scripts/check.sh exit 0: selftest 22/22, template self-test OK (146 required files, ruff 0.16.10 contract, blueprint parity)
 - 2026-11-08 review round 1 FAIL: a repeated approved number applied twice, and a report numbering two proposals alike silently kept the later. Failing tests first (taste 129/149, dream 151/158), then fixed: apply and done refuse both (taste 149/149, dream 158/158). Also from the review: a .git entry git cannot read now counts as a repository for the guard (failing test first); design call 2 corrected to the rule is_human applies. Accepted as is: taste parse_report reads only the first line of a proposal, since the agent format forbids wrapping, and apply's line cap still bounds what lands
+- 2026-11-08 review round 2 PASS on 7202d81 (verdict below); the cosmetic printf note fixed after it (format strings only; taste 149/149, dream 158/158)
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
+Round 1 (reviewer, 2026-11-08, HEAD f50a390, diff against task/fleet-sync-fixes, 19 files): FAIL. Blocking: a duplicate approved number was applied twice (taste.py cmd_apply checked the ledger only before its update), and a report numbering two proposals alike silently kept the later (taste.py and dream.py parse_report); no test covered either. Non-blocking: design call 2 text did not match is_human; inside_git failed open on a git error such as dubious ownership; parse_report reads only a proposal's first line; the fleet-sync-fixes record belongs to that branch's retro; commit bodies of 7d680f4 and a6cb0ac not readable without git.
+
+Round 2 (reviewer, 2026-11-08, HEAD 7202d81): PASS. The round-1 blocker is fixed with failing-first tests and nothing new blocks. cmd_apply records a repeated approved number as a problem (exit 1, nothing written, all-or-nothing); both parse_report functions exit 2 on a repeated proposal number; dream.py outcome_text refuses a repeated --applied number before any state write. Design call 2 now states the rule is_human applies. inside_git walks up for any .git entry before asking git; the real home has no .git above it. Non-blocking: two printf format strings held a literal line break instead of \n (cosmetic; fixed after the verdict). Both judgment criteria may be ticked: no profile line, real quote or private project name in any added tracked text; private names appear only in removed base TASK.md lines.
+
+Evidence checked: check3.log in full (every stage OK; selftest 22 passed, 0 failed, 0 quarantined; template ruff 0.16.10; template self-test OK, 146 required files; exit 0); review2.diff in full (5 files); review.diff in full (round 1, 19 files); scripts/dream/taste.py 182-211 in the tree; .work/TASK.md criteria; COMMIT_EDITMSG for 7202d81 (no trailers); grep of both diffs for em/en dashes and curly quotes (none); the home folder and drive root hold no .git; the RDUP and RD10 test blocks.
 
 ## Retro
 <!-- filled by docs/procedures/retro.md -->
