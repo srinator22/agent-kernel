@@ -310,6 +310,8 @@ cd "$TPL" || exit 1
 put docs/library/item.md "library item v3"
 put docs/roster/agent.md "roster agent v3"
 put scripts/stack-check.sh "echo template stub"
+put docs/preferences/README.md "preferences readme v3"
+put docs/preferences/ui.md "template row that must never reach a project"
 commit_all v3 && git tag v3
 cd "$PRJ" || exit 1
 run ./scripts/template-sync.sh --template "$TPL" --ref v3 --dry-run
@@ -321,6 +323,19 @@ run ./scripts/template-sync.sh --template "$TPL" --ref v3 --dry-run
 assert_contains "a carried library syncs" "ADD       docs/library/item.md"
 assert_contains "an uncarried roster is still announced" "docs/roster/ is not carried"
 rmdir docs/library
+
+# ---- (k2) docs/preferences: only README.md is template-owned ----
+put docs/preferences/ui.md "project register"
+put docs/preferences/film.md "project film register"
+run ./scripts/template-sync.sh --template "$TPL" --ref v3 --dry-run
+assert_contains "docs/preferences/README.md is synced" "ADD       docs/preferences/README.md"
+assert_not_contains "another docs/preferences file in the template is not offered" "docs/preferences/ui.md"
+assert_not_contains "a project register is never listed" "docs/preferences/film.md"
+assert_eq "a same-named project register is untouched" "project register" "$(cat docs/preferences/ui.md)"
+./scripts/template-sync.sh --list-set > "$FIX/set.out"
+assert_file_has "the core set lists the preferences README" "$FIX/set.out" "core docs/preferences/README.md"
+assert_file_lacks "the core set does not list the whole folder" "$FIX/set.out" "docs/preferences/ "
+rm -rf docs/preferences
 
 # ---- (l) --baseline replaces the recorded previous version ----
 put docs/lessons/MAINTENANCE.log "template-sync: v1 2026-09-01"

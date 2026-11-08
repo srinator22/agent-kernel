@@ -84,6 +84,25 @@ write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 commit_fixture
 
+# ---- 4i: the preference register check runs in the always section ----
+# A stand-in prints its arguments, so the run is observable, and exits with
+# PREFS_RC. Without the script (every fixture above) the step is skipped.
+printf '#!/usr/bin/env bash
+echo "preferences stub ran: $*"
+echo "warning: stub warning line"
+exit "${PREFS_RC:-0}"
+' > scripts/preferences.sh
+commit_fixture
+run ./scripts/check.sh --quick
+assert_contains "the register check runs in the always section, even with --quick" "preferences stub ran: check"
+assert_contains "its warning lines are shown" "warning: stub warning line"
+assert_contains "a passing register check reaches the stack block" "$STACK_MSG"
+PREFS_RC=1 run ./scripts/check.sh --quick
+assert_rc "a failing register check fails project mode" 1
+assert_contains "the register failure is named" "scripts/preferences.sh check failed"
+assert_not_contains "the stack block is not reached after a register failure" "$STACK_MSG"
+git rm -q -f scripts/preferences.sh && git commit -q -m "remove preferences stub" >/dev/null 2>&1
+
 printf 'bad %s dash\n' "$EM" > notes.txt
 commit_fixture
 run ./scripts/check.sh
@@ -286,6 +305,38 @@ assert_contains "template mode ran the always section" "lessons: OK"
 assert_contains "the ruff step names the fake runner and its version" "template ruff: TEMPLATE_RUFF ($TEMPLATE_RUFF), ruff 0.16.10 (fake-ruff.sh)"
 run ./scripts/check.sh --quick
 assert_rc "template mode with --quick exits 0" 0
+
+# ---- 4i in template mode, and the register files in the required list ----
+for f in scripts/feedback-log.sh scripts/preferences.sh scripts/dream/feedback.py scripts/dream/preferences.py          docs/preferences/README.md docs/procedures/preferences.md tests/template/test_feedback.sh tests/template/test_preferences.sh; do
+  req=0
+  for r in "${REQUIRED[@]}"; do [[ "$r" == "$f" ]] && req=1; done
+  assert_eq "$f is in the required list" "1" "$req"
+done
+printf '#!/usr/bin/env bash
+echo "preferences stub ran: $*"
+exit "${PREFS_RC:-0}"
+' > scripts/preferences.sh
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "template mode with a passing register check exits 0" 0
+assert_contains "template mode runs the register check" "preferences stub ran: check"
+PREFS_RC=1 run ./scripts/check.sh --quick
+assert_rc "a failing register check fails template mode" 1
+assert_contains "template mode names the register failure" "scripts/preferences.sh check failed"
+printf '#!/usr/bin/env bash
+exit 0
+' > scripts/preferences.sh
+commit_fixture
+
+# A13: the shipped settings wire the feedback hook for UserPromptSubmit with a
+# 5 second budget. Read from the real tree: a started project customises its
+# own settings and merges the entry by hand (docs/procedures/upstream.md).
+if [[ -f "$T_ROOT/.start-done" ]]; then
+  t_na "the real settings.json wires the feedback hook with timeout 5: this repository is a started project (.start-done); its settings are its own"
+else
+  wired="$(awk '/"UserPromptSubmit"/{u=1} /"PreToolUse"/{u=0} u && /scripts\/feedback-log\.sh/{f=1} f && /"timeout": 5,?$/{print "wired"; exit}' "$T_ROOT/.claude/settings.json")"
+  assert_eq "the real settings.json runs scripts/feedback-log.sh on UserPromptSubmit with timeout 5" "wired" "$wired"
+fi
 
 # ---- 5k: template Python, under a folder ruff.toml, passes the pinned ruff ----
 RLOG="$FIX/ruff.log"

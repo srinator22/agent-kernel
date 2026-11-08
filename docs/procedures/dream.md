@@ -32,8 +32,10 @@ Taste pass below. Prefer the gap between tasks.
    owner's own messages count, never another session's message or a
    background notification, and compaction summaries, which the model
    wrote, are skipped), capped at 40 KB, plus
-   hygiene numbers (`scripts/dream.sh hygiene`). Exit 3 means nothing new to
-   dream about: say so and stop; no model runs. The state lives in the main
+   hygiene numbers (`scripts/dream.sh hygiene`) and the Feedback and Repeats
+   sections below. Exit 3 means neither a new signal nor a new feedback line
+   of kind deferral, correction, preference or approval: say so and stop; no
+   model runs. The state lives in the main
    checkout's `.work/dream/`, shared by every worktree, and the folder
    carries its own `.gitignore`. A worktree root seen by any digest is
    remembered; for a worktree created and removed between two digests, pass
@@ -86,6 +88,40 @@ lesson, the same matcher as Impact, not proof of recurrence. A report that
 cannot be read or has a malformed Outcome is listed as skipped. Lesson ids
 are read as written, so a range such as "L011-L013" counts L011 and L013
 only.
+
+## Feedback and Repeats
+
+Two more sections follow the Scorecard. They read the owner's feedback log,
+`.work/feedback/log.jsonl` in the main checkout (written by the
+UserPromptSubmit hook, gitignored, never committed).
+- "## Feedback": the log lines added since the last dream, of kind deferral,
+  correction, preference or approval (plain messages already appear in
+  Signals). Order is that kind order, then newest first; ids are f1, f2, and
+  so on. Each line shows date, session, branch, task and edited files, with
+  the text clipped to 400 characters. The section holds at most 12000 bytes
+  and shows how many lines the cap dropped. The kind is the hook's guess by
+  word lists, not a verdict.
+- "## Repeats": for each shown correction or preference, the rules in
+  `docs/preferences/*.md` (rules tables only, fenced examples skipped) that
+  share two or more words with it, as `<rule ID> <- f<N> (words)`, at most 40
+  lines and a count of the rest. These are word-overlap candidates, not
+  proof; the dreamer judges each. Repeats counts change only through an
+  approved proposal.
+
+The log offset is read at digest time into `state.next.json` (key
+"feedback"); `done` commits it, then renames a log over 5 MB to
+`log.1.jsonl` (one kept) and resets the offset to 0. A digest that exits 3
+commits offsets itself and rotates the same way. A line without its
+newline waits for the next run, a malformed line is counted, and a log
+shorter than the saved offset is read again from 0. A missing log is not an
+error.
+
+The dreamer adds three proposal kinds:
+- `[preference]`: a new register row whose Source quotes the owner's words
+  and the date;
+- `[escalate]`: a rule with repeats moves from Review to a named check,
+  through a BACKLOG row or a test;
+- `[baseline]`: an approved deliverable becomes a baselines row.
 
 ## Taste pass
 

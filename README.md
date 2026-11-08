@@ -88,6 +88,29 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
   `scripts/template-release.sh`; a project built from it is tagged
   `vX.Y.Z`. Projects sync to the latest `template-v` tag.
 
+## How it learns what you want
+
+- **Capture.** In Claude Code, a hook logs each message you send with its
+  situation (task, branch, files being worked on, what the agent just said) to
+  `.work/feedback/log.jsonl`. The log stays on your machine and is never
+  committed. A script guesses the kind: correction, preference, approval,
+  deferral or plain message.
+- **Registers.** Lasting preferences live in `docs/preferences/<area>.md`.
+  Each rule carries its source (the date and your words) and either a named
+  check that fails when the rule is broken, or `Review`.
+  `scripts/preferences.sh check` runs inside `./scripts/check.sh`. When you
+  state a preference outright, the agent adds the row in the same turn and
+  shows it so you can veto it; everything it infers waits for the dream.
+- **Repeats.** The dream reads the log and flags feedback that repeats an
+  existing rule, then proposes moving that rule from `Review` to a named check.
+- **Baselines.** An approved deliverable is recorded as the baseline for its
+  kind, and a new variant starts from it.
+- **Draft review.** Before you see a first draft, a reviewer checks it against
+  the registers that apply and reports with evidence.
+
+The template ships the format, the tools and the procedure
+(`docs/procedures/preferences.md`); each project owns its rows.
+
 ## Keep a project in sync with the template
 
 A project's session start says `Template update available` when a newer
@@ -189,6 +212,7 @@ All in `docs/procedures/`, portable to any agent.
 - doc-eval: a fresh agent answers a question set by navigation; traps must be declined.
 - longjob: checkpointed background work.
 - upstream: lessons up, template sync down, adoption.
+- preferences: capture owner feedback, registers, baselines, draft review.
 
 ## Harness support
 

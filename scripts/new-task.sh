@@ -114,6 +114,41 @@ Date: $DATE_UTC
 TEMPLATE
 
 echo "new-task: created $TASK_FILE on branch $BRANCH (mode: $MODE)"
+
+# Owner preferences that bear on this task (docs/procedures/preferences.md):
+# a register area whose name is a word of the slug, and the baselines of that
+# area or whose Kind has a word in the slug. Nothing without registers.
+slug_words="-$SLUG-"
+for reg in docs/preferences/*.md; do
+  [[ -f "$reg" ]] || continue
+  area="$(basename "$reg" .md)"
+  [[ "$area" == "README" ]] && continue
+  area_hit=0
+  if [[ "$slug_words" == *"-$area-"* ]]; then
+    area_hit=1
+    echo "new-task: preferences: $area ($reg) - read its rules before starting; see docs/procedures/preferences.md"
+  fi
+  awk -v hay="$slug_words" -v area_hit="$area_hit" '
+    function trim(s) { gsub(/\r/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    /^[ \t]*```/ { fence = !fence; t = 0; next }
+    fence { next }
+    /^[ \t]*\|[ \t]*Kind[ \t]*\|[ \t]*Reference[ \t]*\|/ { t = 1; skip = 1; next }
+    t && /^[ \t]*\|/ {
+      if (skip) { skip = 0; next }
+      n = split($0, c, "|")
+      kind = trim(c[2]); ref = trim(c[3]); owns = trim(c[4])
+      gsub(/`/, "", ref)
+      hit = area_hit
+      w = split(tolower(kind), words, /[^a-z0-9]+/)
+      for (i = 1; i <= w; i++)
+        if (length(words[i]) >= 3 && index(hay, "-" words[i] "-")) hit = 1
+      if (hit && kind != "")
+        print "new-task: preferences: baseline " kind ": " ref " (owns: " owns ") - start from it; see docs/procedures/preferences.md"
+      next
+    }
+    { t = 0 }
+  ' "$reg" || true
+done
 echo "Next steps:"
 echo "  1. Fill Goal, Assumptions, Acceptance criteria, and Plan in $TASK_FILE."
 echo "  2. Unless the mode is autopilot, get the criteria and assumptions approved by the human (kernel rule 4)."
