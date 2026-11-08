@@ -55,3 +55,4 @@ with a reason. Priorities P0-P3 per docs/procedures/audit.md.
 | tasklint: name an indented continuation line under a criterion and say evidence sits on its first line; resolve a bare file name in a parenthesis or skip it | P3 | two spurious tasklint failures rewritten by hand, 2026-11-08 | open |
 | test_dream.sh: cover the "git cannot compare" outcome branch and remove the -p11 and worktree folders on an early exit (trap) | P3 | dream-outcome-fixes review 2 notes, 2026-11-08 | open |
 | dream.py due counts task retros by .work/done file modification time, so a fresh worktree checkout makes every archived record look new and a dream "due" right after one; count by git commit date of each record instead | P3 | seen 2026-11-08: 14 retros counted minutes after a dream, from a new worktree | open |
+| Scorecard: a test for the 160-character cut on skipped report lines | P3 | dream-scorecard review round 3 note N3, 2026-11-09 | open |
