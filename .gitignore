@@ -33,6 +33,7 @@ target/
 .work/template-sync/
 # Dream digest, offsets and reports: local only, they quote session transcripts
 .work/dream/
+.work/feedback/
 
 # Render outputs and caches stay outside git (docs/library/procedures/product-render.md);
 # these catch accidental copies inside a project tree.

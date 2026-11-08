@@ -802,6 +802,26 @@ assert_rc "feedback: only plain messages exits 3" 3
 assert_file "feedback: a big message-only log is rotated at exit 3" "$FIX/.work/feedback/log.1.jsonl"
 assert_eq "feedback: and its offset resets" "0" "$(fboff "$STF/state.json")"
 
+# A line logged between the digest and done (the owner approving proposals)
+# survives the rotation: the next digest reads it from log.1.jsonl first.
+ROTROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.rot.XXXXXX")"
+RLOG="$ROTROOT/.work/feedback/log.jsonl"
+fbl "$RLOG" pad 2026-11-08T14:00:00Z 5300000
+fbl "$RLOG" correction 2026-11-08T14:01:00Z "no, before the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the rotation fixture digest exits 0" 0
+fbl "$RLOG" correction 2026-11-08T14:05:00Z "no, typed during the dream" sessGGGG task/r t5 ""
+run bash scripts/dream.sh done --root "$ROTROOT" --state-dir "$ROTROOT/st"
+assert_rc "feedback: done on the rotation fixture exits 0" 0
+assert_file "feedback: the fixture log was rotated" "$ROTROOT/.work/feedback/log.1.jsonl"
+fbl "$RLOG" correction 2026-11-08T15:00:00Z "no, after the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the digest after rotation exits 0" 0
+assert_file_has "feedback: a line typed during the dream survives the rotation" "$ROTROOT/st/digest.md" "typed during the dream"
+assert_file_has "feedback: the new log is read too" "$ROTROOT/st/digest.md" "after the dream"
+assert_file_lacks "feedback: a line read before the rotation is not read again" "$ROTROOT/st/digest.md" "before the dream"
+case "$ROTROOT" in */template-selftest.rot.*) rm -rf "$ROTROOT" ;; esac
+
 # Caps: 12000 bytes of feedback lines, 40 repeat lines, each with its dropped count.
 CAPROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.cap.XXXXXX")"
 for n in $(seq 10 69); do

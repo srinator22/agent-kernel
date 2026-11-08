@@ -131,6 +131,11 @@ class Checker:
             self._row(rel, i, kind, cells, ids)
 
     def _row(self, rel, lineno, kind, cells, ids):
+        if kind == "rules-extra":
+            self.rules += 1
+            self.err(rel, lineno, "%s: the table header has columns other than ID, Rule, Source, Check "
+                     "and an optional Repeats" % (cells[0] if cells and cells[0] else "(no ID)"))
+            return
         if kind == "rules":
             self.rules += 1
             rid = cells[0] if cells else ""
@@ -171,17 +176,19 @@ def main(argv=None):
     root = Path(args.root).resolve()
     pdir = root / "docs" / "preferences"
     files = sorted(pdir.glob("*.md")) if pdir.is_dir() else []
-    if not any(f.name != "README.md" for f in files):
+    others = sorted(p for p in pdir.rglob("*") if p.is_file() and p != pdir / "README.md") if pdir.is_dir() else []
+    template_mode = not (root / ".start-done").exists()
+    if template_mode and others:
+        ck = Checker(root)
+        for f in others:
+            ck.err(f.relative_to(root).as_posix(), 1, "template mode (no .start-done): only README.md may live in docs/preferences, so the owner's words stay out of the template")
+    elif not any(f.name != "README.md" for f in files):
         print("preferences: no registers")
         return 0
-    template_mode = not (root / ".start-done").exists()
-    ck = Checker(root)
-    for f in files:
-        rel = f.relative_to(root).as_posix()
-        if template_mode and f.name != "README.md":
-            ck.err(rel, 1, "template mode (no .start-done): only README.md may live in docs/preferences, so the owner's words stay out of the template")
-            continue
-        ck.check_file(f)
+    else:
+        ck = Checker(root)
+        for f in files:
+            ck.check_file(f)
     if ck.errors:
         for e in ck.errors:
             print(e, file=sys.stderr)

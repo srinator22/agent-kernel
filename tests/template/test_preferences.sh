@@ -187,6 +187,29 @@ assert_rc "template mode: a non-README register fails" 1
 assert_contains "template mode: the file is named" "docs/preferences/ui.md"
 assert_contains "template mode: the reason is given" "template mode"
 
+fresh
+mkdir -p docs/preferences/old
+printf 'owner words\n' > docs/preferences/film.txt
+rm -f .start-done
+chk
+assert_rc "template mode: a non-md file in docs/preferences fails" 1
+assert_contains "template mode: the non-md file is named" "docs/preferences/film.txt"
+rm -f docs/preferences/film.txt
+reg old/film "$HDR
+| F-001 | A rule. | 2026-11 | Review |"
+chk
+assert_rc "template mode: a register in a subfolder fails" 1
+assert_contains "template mode: the subfolder file is named" "docs/preferences/old/film.md"
+
+# ---- a rules table with an extra column is checked, not skipped ----
+fresh
+reg ui "| ID | Rule | Source | Check | Notes |
+|---|---|---|---|---|
+| U-001 |  | no date | \`tests/no_such_file.py\` | x |"
+chk
+assert_rc "an extra column does not hide a rules table" 1
+assert_contains "the extra-column row is named" "U-001"
+
 # ---- the unwired-hook warning ----
 fresh
 printf '#!/usr/bin/env bash\n' > scripts/feedback-log.sh

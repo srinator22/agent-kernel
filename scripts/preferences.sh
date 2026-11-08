@@ -29,11 +29,15 @@ if [[ -f "$ROOT/scripts/feedback-log.sh" ]]; then
 fi
 
 registers=0
-for f in "$ROOT"/docs/preferences/*.md; do
+# Any file below docs/preferences but its top README.md counts (bash globbing,
+# so it needs no find on PATH); template mode then reaches the Python check.
+shopt -s globstar nullglob dotglob
+for f in "$ROOT"/docs/preferences/**/*; do
   [[ -f "$f" ]] || continue
-  [[ "${f##*/}" == "README.md" ]] && continue
+  [[ "$f" == "$ROOT/docs/preferences/README.md" ]] && continue
   registers=$((registers + 1))
 done
+shopt -u globstar nullglob dotglob
 if (( registers == 0 )); then
   echo "preferences: no registers"
   exit 0

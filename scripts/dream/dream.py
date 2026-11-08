@@ -778,17 +778,9 @@ def feedback_dir(root):
     return os.path.join(main_worktree(root), ".work", "feedback")
 
 
-def read_feedback(c):
-    """(entries, new offset, lines read, malformed, log exists) for the lines
-    added to the feedback log since the saved offset. A partial last line waits."""
-    path = os.path.join(feedback_dir(c.root), "log.jsonl")
-    off = (c.state.get("feedback") or {}).get("offset", 0)
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return [], 0, 0, 0, False
-    if not isinstance(off, int) or off < 0 or off > size:
-        off = 0
+def read_log_lines(path, off):
+    """(entries, end offset, lines read, malformed) from byte off to the last
+    complete line of one feedback log file; a partial last line waits."""
     entries, n, bad = [], 0, 0
     with open(path, "rb") as f:
         f.seek(off)
@@ -809,12 +801,43 @@ def read_feedback(c):
                 bad += 1
                 continue
             entries.append(obj)
-    return entries, off, n, bad, True
+    return entries, off, n, bad
+
+
+def read_feedback(c):
+    """(entries, new offset, lines read, malformed, log exists) for the lines
+    added to the feedback log since the saved offset. After a rotation the
+    saved "carry" offset says where reading stopped in log.1.jsonl; those
+    remaining lines come first, so lines logged during a dream are not lost."""
+    folder = feedback_dir(c.root)
+    saved = c.state.get("feedback") or {}
+    entries, n, bad, exists = [], 0, 0, False
+    carry = saved.get("carry")
+    old = os.path.join(folder, "log.1.jsonl")
+    if isinstance(carry, int) and carry >= 0:
+        try:
+            if carry <= os.path.getsize(old):
+                e1, _, n1, b1 = read_log_lines(old, carry)
+                entries, n, bad, exists = e1, n1, b1, True
+        except OSError:
+            pass
+    path = os.path.join(folder, "log.jsonl")
+    off = saved.get("offset", 0)
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return entries, 0, n, bad, exists
+    if not isinstance(off, int) or off < 0 or off > size:
+        off = 0
+    e2, off, n2, b2 = read_log_lines(path, off)
+    return entries + e2, off, n + n2, bad + b2, True
 
 
 def rotate_feedback(c, state):
     """Rename a log over 5 MB to log.1.jsonl (one kept) and reset the saved
-    offset; called only after the offset was committed."""
+    offset; called only after the offset was committed. The committed offset
+    becomes the carry: lines the hook appended after the digest read the log
+    stay in log.1.jsonl past it, and the next digest reads them first."""
     folder = feedback_dir(c.root)
     path = os.path.join(folder, "log.jsonl")
     try:
@@ -823,7 +846,8 @@ def rotate_feedback(c, state):
         os.replace(path, os.path.join(folder, "log.1.jsonl"))
     except OSError:
         return
-    state["feedback"] = {"offset": 0}
+    carry = (state.get("feedback") or {}).get("offset", 0)
+    state["feedback"] = {"offset": 0, "carry": carry if isinstance(carry, int) else 0}
     write_json(c.sp("state.json"), state)
 
 
@@ -836,14 +860,16 @@ def feedback_line(i, e):
 
 
 def register_table_kind(cells):
-    """'rules', 'baselines' or None for a register table header row; the one
-    header test for the register check (preferences.py) and the dream."""
+    """'rules', 'rules-extra' (a rules header with columns other than an optional
+    Repeats, which the register check reports), 'baselines' or None for a
+    register table header row; the one header test for the register check
+    (preferences.py) and the dream."""
     low = [c.lower() for c in cells]
     if len(low) >= 4 and low[0] == "id" and low[1] == "rule" and low[2].startswith("source") \
             and low[3].startswith("check"):
         if len(low) == 4 or (len(low) == 5 and low[4].startswith("repeats")):
             return "rules"
-        return None
+        return "rules-extra"
     if len(low) == 4 and low[:3] == ["kind", "reference", "owns"] and low[3].startswith("check"):
         return "baselines"
     return None
@@ -879,7 +905,7 @@ def register_rules(root):
         if area.lower() == "readme":
             continue
         for _, kind, cells in register_rows(read_text(path)):
-            if kind == "rules" and len(cells) >= 2 and cells[0]:
+            if kind in ("rules", "rules-extra") and len(cells) >= 2 and cells[0]:
                 out.append(("%s:%s" % (area, cells[0]), cells[1]))
     return out
 

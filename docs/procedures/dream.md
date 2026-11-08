@@ -116,7 +116,9 @@ UserPromptSubmit hook, gitignored, never committed).
 
 The log offset is read at digest time into `state.next.json` (key
 "feedback"); `done` commits it, then renames a log over 5 MB to
-`log.1.jsonl` (one kept) and resets the offset to 0. A digest that exits 3
+`log.1.jsonl` (one kept) and resets the offset to 0, keeping the committed
+offset as a carry: lines logged between the digest and `done` stay in
+`log.1.jsonl` past it, and the next digest reads them first. A digest that exits 3
 commits offsets itself and rotates the same way. A line without its
 newline waits for the next run, a malformed line is counted, and a log
 shorter than the saved offset is read again from 0. A missing log is not an
