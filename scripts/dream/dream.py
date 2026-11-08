@@ -522,10 +522,16 @@ def branch_label(root):
                            capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return "N/A - not a git checkout"
-    if r.returncode != 0:
+    if r.returncode == 0:
+        b = r.stdout.strip()
+        return "detached" if b == "HEAD" else b
+    # A repository with no commits yet has no HEAD to resolve, but its branch name.
+    try:
+        s = subprocess.run(["git", "-C", root, "symbolic-ref", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
         return "N/A - not a git checkout"
-    b = r.stdout.strip()
-    return "detached" if b == "HEAD" else b
+    return s.stdout.strip() if s.returncode == 0 and s.stdout.strip() else "N/A - not a git checkout"
 
 
 def scorecard_lines(c, sigs=None):
@@ -561,7 +567,9 @@ def scorecard_lines(c, sigs=None):
             out.append("  %s: proposals %d, no Outcome recorded" % (date, len(props)))
         else:
             out.append("  %s: proposals %d, approved %d, declined %d" % (date, len(props), len(dec[0]), len(dec[1])))
-    out += skipped
+    out += skipped[:CARD_LINES]
+    if len(skipped) > CARD_LINES:
+        out.append("... %d more skipped reports not shown" % (len(skipped) - CARD_LINES))
     kinds = {}
     for _, props, dec in reports:
         for num, (kind, _) in props.items() if dec else ():
@@ -569,17 +577,21 @@ def scorecard_lines(c, sigs=None):
             k[0] += num in dec[0]
             k[1] += num in dec[1]
     out.append("by kind (every report with an Outcome):")
-    for kind in sorted(kinds):
+    for kind in sorted(kinds)[:CARD_LINES]:
         a, d = kinds[kind]
         out.append("  %s: approved %d, declined %d, rate %s"
-                   % (kind, a, d, "%d%%" % round(100 * a / (a + d)) if a + d else "N/A - none decided"))
+                   % (cut(kind, 40), a, d, "%d%%" % round(100 * a / (a + d)) if a + d else "N/A - none decided"))
     if not kinds:
         out.append("  none")
+    if len(kinds) > CARD_LINES:
+        out.append("  ... %d more kinds not shown" % (len(kinds) - CARD_LINES))
     lessons, rows = [], []
     for _, props, dec in reversed(recent):
         for num in sorted(dec[0]) if dec else ():
             for ch in props[num][1]:
-                lessons += [lid for lid in LESSON_ID.findall(ch) if lid not in lessons]
+                for lid in LESSON_ID.findall(ch):
+                    if lid not in lessons:
+                        lessons.append(lid)
                 if "BACKLOG.md" not in ch:
                     continue
                 for q in re.findall(r'"([^"]*)"', ch):
