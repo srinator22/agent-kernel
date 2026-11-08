@@ -15,6 +15,8 @@ keeps this section equal to that output.
   never applied
 - `CLAUDE.md`, `CONTRIBUTING.md`, `manifest.md`, `cliff.toml`
 - `docs/BLUEPRINT.md`, `docs/DEFECT_MEMORY.md`
+- `docs/preferences/README.md`: the register format; the other files there
+  are project-owned
 - `docs/procedures/`, `docs/rules/`, `docs/profiles/`
 - `docs/lessons/INDEX.md`, `docs/lessons/PENDING.md`,
   `docs/lessons/QUARANTINE.md`, `docs/lessons/UPSTREAM.md`: the format
@@ -119,7 +121,10 @@ last), so check.sh itself stays the template's and syncs cleanly.
         to "direct-to-main, on master"; new-task.sh warns on such a line;
       - merge the adopted-profile DIFF of the hardware-pcb tool tests, then
         drop a ruff exclusion of `docs/profiles` or `docs/library`: the
-        folder `ruff.toml` files carry the template's own lint contract.
+        folder `ruff.toml` files carry the template's own lint contract;
+      - when `.claude/settings.json` conflicts, merge the `UserPromptSubmit`
+        entry that runs `scripts/feedback-log.sh` (with `"timeout": 5`) by
+        hand; session-context warns until it is wired.
 
    The script never touches the Project decisions section, re-verifies the
    kernel hash after applying, and refuses a real apply on main or on a

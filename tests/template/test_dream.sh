@@ -647,6 +647,216 @@ run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$UNBORN"
 assert_contains "scorecard: an unborn branch is named" "(branch $UB)"
 rm -rf "$UNBORN"
 
+# --- feedback log and repeats (A9) ---
+# The log is <main checkout>/.work/feedback/log.jsonl; the digest reads it from a saved
+# offset into state.next.json and done commits that offset, as for transcripts.
+touch "$FIX/.start-done"
+mkdir -p "$FIX/docs/preferences"
+printf '%s\n' '# UI' '| ID | Rule | Source | Check |' '|---|---|---|---|' \
+  '| U1 | Keep titles short and avoid decorative gradients | 2026-11 "owner words" | Review |' \
+  '| U2 | Never commit rendered footage | 2026-11-02 "owner words" | Review |' \
+  '```' '| ID | Rule | Source | Check |' '|---|---|---|---|' \
+  '| X9 | fenced example about gradients decorative | 2026-11 | Review |' '```' > "$FIX/docs/preferences/ui.md"
+cat > "$FIX/mkfb.py" <<'PYEOF'
+import json, os, sys
+f, kind, ts, text = sys.argv[1:5]
+rest = sys.argv[5:9]
+sess, branch, task, files = rest + ["sessXXXX", "main", "-", ""][len(rest):]
+os.makedirs(os.path.dirname(f), exist_ok=True)
+eol = "" if os.environ.get("NOEOL") else "\n"
+with open(f, "a", encoding="utf-8", newline="\n") as fh:
+    if kind == "raw":
+        fh.write(text + eol)
+    elif kind == "nl":
+        fh.write("\n")
+    elif kind == "pad":
+        n = 0
+        while n < int(text):
+            s = json.dumps({"v": 1, "ts": ts, "session": "pad", "branch": "b", "task": "-", "kind": "message",
+                            "text": "p" * 900, "files": [], "said": ""}) + "\n"
+            fh.write(s)
+            n += len(s)
+    else:
+        fh.write(json.dumps({"v": 1, "ts": ts, "session": sess[:8], "branch": branch, "task": task, "kind": kind,
+                             "text": text, "files": [x for x in files.split(",") if x], "said": ""}) + eol)
+PYEOF
+fbl() { "$PY" "$FIX/mkfb.py" "$@"; }
+fboff() { "$PY" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("feedback",{}).get("offset"))' "$1"; }
+FBLOG="$FIX/.work/feedback/log.jsonl"
+PROJE="$FIX/projectse"
+mkdir -p "$PROJE"
+STF="$FIX/statef"
+FD="$STF/digest.md"
+
+# No log: the section says so and a digest with a transcript signal still works.
+dg --projects-dir "$PROJ3" --state-dir "$FIX/statef0"
+assert_rc "feedback: a missing log is not an error" 0
+D0="$FIX/statef0/digest.md"
+assert_file_has "feedback: no log is one line" "$D0" "no feedback log yet"
+ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Feedback\|Repeats\|Signals\)$' "$D0" | cut -d: -f2 | tr '\n' ',')"
+assert_eq "feedback: sections follow the Scorecard before Signals" "## Impact since the last dream,## Scorecard,## Feedback,## Repeats,## Signals," "$ORDER"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: no log and no signal exits 3" 3
+
+fbl "$FBLOG" deferral   2026-11-07T09:00:00Z "not now, later: decorative gradients" sessAAAA task/x t1 ""
+fbl "$FBLOG" correction 2026-11-07T09:10:00Z "no the gradients look cheap and decorative" sessAAAA task/x t1 "a.py,b.md"
+fbl "$FBLOG" correction 2026-11-07T09:40:00Z "wrong: you did commit rendered footage" sessBBBB task/y t2 "c.md"
+fbl "$FBLOG" preference 2026-11-07T10:00:00Z "always keep titles short, never decorative $(printf 'q%.0s' $(seq 1 500))" sessAAAA task/x t1 ""
+fbl "$FBLOG" approval   2026-11-07T10:10:00Z "perfect" sessBBBB task/y t2 ""
+fbl "$FBLOG" message    2026-11-07T10:20:00Z "run the tests again" sessBBBB task/y t2 ""
+fbl "$FBLOG" raw        2026-11-07T10:30:00Z "{not json"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: new log lines make the digest exit 0 with no transcript signal" 0
+assert_file_has "feedback: heading" "$FD" "## Feedback"
+assert_file_has "feedback: line counts" "$FD" "log: 7 new lines read, 1 malformed; 5 shown, 0 dropped by the 12000 byte cap"
+assert_file_has "feedback: a deferral line carries the situation" "$FD" "- f1 [deferral] 2026-11-07 sessAAAA task/x task t1: not now, later: decorative gradients; files: -"
+assert_file_has "feedback: newest correction first, with its files" "$FD" "- f2 [correction] 2026-11-07 sessBBBB task/y task t2: wrong: you did commit rendered footage; files: c.md"
+assert_file_has "feedback: older correction, files joined" "$FD" "- f3 [correction] 2026-11-07 sessAAAA task/x task t1: no the gradients look cheap and decorative; files: a.py, b.md"
+assert_file_has "feedback: preference line is clipped at 400" "$FD" "qqqqqqqq...; files: -"
+assert_file_lacks "feedback: and not longer" "$FD" "$(printf 'q%.0s' $(seq 1 400))"
+assert_file_has "feedback: approval line" "$FD" "- f5 [approval] 2026-11-07 sessBBBB task/y task t2: perfect; files: -"
+assert_file_lacks "feedback: a plain message is not listed" "$FD" "run the tests again"
+KORD="$(grep -o '^- f[0-9]* \[[a-z]*\]' "$FD" | tr '\n' ',')"
+assert_eq "feedback: kind priority, then newest first" "- f1 [deferral],- f2 [correction],- f3 [correction],- f4 [preference],- f5 [approval]," "$KORD"
+assert_file_has "feedback: repeats heading says candidates" "$FD" "word-overlap candidates, not proof"
+assert_file_has "feedback: a correction repeats a rule" "$FD" "ui:U2 <- f2 (commit footage rendered)"
+assert_file_has "feedback: another correction repeats a rule" "$FD" "ui:U1 <- f3 (decorative gradients)"
+assert_file_has "feedback: a preference repeats a rule" "$FD" "ui:U1 <- f4 (decorative short titles)"
+assert_file_lacks "feedback: a deferral is not matched" "$FD" "<- f1 "
+assert_file_lacks "feedback: a fenced example is not a rule" "$FD" "X9 <-"
+LOGSIZE="$(wc -c < "$FBLOG" | tr -d ' ')"
+assert_eq "feedback: the digest proposes the log size as the offset" "$LOGSIZE" "$(fboff "$STF/state.next.json")"
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done exits 0" 0
+assert_eq "feedback: done commits the offset" "$LOGSIZE" "$(fboff "$STF/state.json")"
+assert_file "feedback: a small log is not rotated" "$FBLOG"
+assert_no_file "feedback: and no rotated copy exists" "$FIX/.work/feedback/log.1.jsonl"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: nothing new exits 3" 3
+
+# A line appended between digest and done is read by the next digest.
+fbl "$FBLOG" correction 2026-11-08T08:00:00Z "no, the zebra border is wrong" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: appended line digest exits 0" 0
+assert_file_has "feedback: appended line read" "$FD" "the zebra border is wrong"
+fbl "$FBLOG" preference 2026-11-08T08:05:00Z "from now on use zebra borders" sessCCCC task/z t3 ""
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done after a late append exits 0" 0
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the late line is read by the next digest" 0
+assert_file_has "feedback: late line present" "$FD" "from now on use zebra borders"
+assert_file_lacks "feedback: and the committed line is not read again" "$FD" "the zebra border is wrong"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A partial last line waits for the next run.
+NOEOL=1 fbl "$FBLOG" correction 2026-11-08T09:00:00Z "no, the partial feedback" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a partial line alone exits 3" 3
+fbl "$FBLOG" nl 2026-11-08T09:00:00Z ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the completed line is read" 0
+assert_eq "feedback: read exactly once" "1" "$(grep -c 'the partial feedback' "$FD")"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A malformed line is counted, not fatal.
+fbl "$FBLOG" raw 2026-11-08T09:10:00Z "{broken"
+fbl "$FBLOG" correction 2026-11-08T09:11:00Z "no, the margin is wrong" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a malformed line does not stop the digest" 0
+assert_file_has "feedback: malformed counted" "$FD" "log: 2 new lines read, 1 malformed; 1 shown"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A log shorter than the offset is read again from the start.
+: > "$FBLOG"
+fbl "$FBLOG" correction 2026-11-08T10:00:00Z "no, short rewrite feedback" sessDDDD task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a shrunk log exits 0" 0
+assert_file_has "feedback: a shrunk log is re-read from 0" "$FD" "short rewrite feedback"
+assert_file_has "feedback: from the first line" "$FD" "log: 1 new lines read"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# done rotates a log over 5 MB after committing the offset; the next digest reads the new log from 0.
+fbl "$FBLOG" pad 2026-11-08T11:00:00Z 5300000
+fbl "$FBLOG" correction 2026-11-08T11:01:00Z "no, the big log feedback" sessEEEE task/z t3 ""
+BIGSIZE="$(wc -c < "$FBLOG" | tr -d ' ')"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a big log digest exits 0" 0
+assert_file_has "feedback: the big log's correction is shown" "$FD" "the big log feedback"
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done with a big log exits 0" 0
+assert_file "feedback: a log over 5 MB is rotated to log.1.jsonl" "$FIX/.work/feedback/log.1.jsonl"
+assert_eq "feedback: the rotated copy is the whole old log" "$BIGSIZE" "$(wc -c < "$FIX/.work/feedback/log.1.jsonl" | tr -d ' ')"
+assert_no_file "feedback: the active log starts empty" "$FBLOG"
+assert_eq "feedback: the offset resets to 0" "0" "$(fboff "$STF/state.json")"
+fbl "$FBLOG" correction 2026-11-08T12:00:00Z "no, the fresh log feedback" sessEEEE task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the new log is read" 0
+assert_file_has "feedback: the new log is read from 0" "$FD" "log: 1 new lines read, 0 malformed; 1 shown"
+assert_file_has "feedback: new line shown" "$FD" "the fresh log feedback"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# Plain messages alone are not a reason to dream; a big message-only log is still rotated.
+fbl "$FBLOG" pad 2026-11-08T13:00:00Z 5300000
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: only plain messages exits 3" 3
+assert_file "feedback: a big message-only log is rotated at exit 3" "$FIX/.work/feedback/log.1.jsonl"
+assert_eq "feedback: and its offset resets" "0" "$(fboff "$STF/state.json")"
+
+# A line logged between the digest and done (the owner approving proposals)
+# survives the rotation: the next digest reads it from log.1.jsonl first.
+ROTROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.rot.XXXXXX")"
+RLOG="$ROTROOT/.work/feedback/log.jsonl"
+fbl "$RLOG" pad 2026-11-08T14:00:00Z 5300000
+fbl "$RLOG" correction 2026-11-08T14:01:00Z "no, before the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the rotation fixture digest exits 0" 0
+fbl "$RLOG" correction 2026-11-08T14:05:00Z "no, typed during the dream" sessGGGG task/r t5 ""
+run bash scripts/dream.sh done --root "$ROTROOT" --state-dir "$ROTROOT/st"
+assert_rc "feedback: done on the rotation fixture exits 0" 0
+assert_file "feedback: the fixture log was rotated" "$ROTROOT/.work/feedback/log.1.jsonl"
+fbl "$RLOG" correction 2026-11-08T15:00:00Z "no, after the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the digest after rotation exits 0" 0
+assert_file_has "feedback: a line typed during the dream survives the rotation" "$ROTROOT/st/digest.md" "typed during the dream"
+assert_file_has "feedback: the new log is read too" "$ROTROOT/st/digest.md" "after the dream"
+assert_file_lacks "feedback: a line read before the rotation is not read again" "$ROTROOT/st/digest.md" "before the dream"
+case "$ROTROOT" in */template-selftest.rot.*) rm -rf "$ROTROOT" ;; esac
+
+# Caps: 12000 bytes of feedback lines, 40 repeat lines, each with its dropped count.
+CAPROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.cap.XXXXXX")"
+for n in $(seq 10 69); do
+  fbl "$CAPROOT/.work/feedback/log.jsonl" correction "2026-11-08T10:$(printf '%02d' $((n - 10))):00Z" "no cap-test entry $n $(printf 'p%.0s' $(seq 1 380))" sessFFFF task/c t4 ""
+done
+dg --root "$CAPROOT" --projects-dir "$PROJE" --state-dir "$CAPROOT/st"
+assert_rc "feedback: the cap fixture exits 0" 0
+DC="$CAPROOT/st/digest.md"
+CAPBYTES="$(grep '^- f[0-9]' "$DC" | wc -c | tr -d ' ')"
+if (( CAPBYTES <= 12000 && CAPBYTES > 6000 )); then t_ok "feedback: lines stay within 12000 bytes ($CAPBYTES)"; else t_bad "feedback: lines stay within 12000 bytes ($CAPBYTES)"; fi
+assert_file_has "feedback: the cap reports its dropped count" "$DC" "dropped by the 12000 byte cap"
+assert_file_lacks "feedback: and the count is not zero" "$DC" " 0 dropped by the 12000"
+assert_file_has "feedback: the newest entry is kept" "$DC" "no cap-test entry 69"
+assert_file_lacks "feedback: the oldest entry is dropped" "$DC" "no cap-test entry 10 "
+assert_file_has "feedback: no register means no repeats" "$DC" "no register rules"
+REPROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.rep.XXXXXX")"
+mkdir -p "$REPROOT/docs/preferences"
+{ printf '%s\n' '| ID | Rule | Source | Check |' '|---|---|---|---|'
+  for n in $(seq 10 54); do echo "| R$n | Rule $n about decorative gradients | 2026-11 | Review |"; done
+} > "$REPROOT/docs/preferences/big.md"
+fbl "$REPROOT/.work/feedback/log.jsonl" correction 2026-11-08T10:00:00Z "no decorative gradients please" sessFFFF task/c t4 ""
+dg --root "$REPROOT" --projects-dir "$PROJE" --state-dir "$REPROOT/st"
+assert_rc "feedback: the repeats fixture exits 0" 0
+DR="$REPROOT/st/digest.md"
+assert_eq "feedback: repeats are capped at 40 lines" "40" "$(grep -c '^big:R[0-9]* <- f1 ' "$DR")"
+assert_file_has "feedback: the repeats cap reports the rest" "$DR" "5 more not shown"
+rm -rf "$CAPROOT" "$REPROOT"
+
+# --- dreamer definitions (A10) ---
+for f in .claude/agents/dreamer.md .codex/agents/dreamer.toml; do
+  for w in "docs/preferences" "[preference]" "[escalate]" "[baseline]"; do
+    assert_file_has "dreamer: $f names $w" "$T_ROOT/$f" "$w"
+  done
+done
+
 # --- outcome files are checked against what changed; memory from a worktree ---
 # Files lists a named file only when git (against the digest's commit) or the
 # auto-memory folder shows it changed; the memory folder is the main checkout's.

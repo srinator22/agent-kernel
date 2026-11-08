@@ -44,6 +44,52 @@ if [[ -f .work/TASK.md ]] && ! grep -q '{{title}}' .work/TASK.md; then
   cat .work/TASK.md
 fi
 
+# Owner preferences (docs/procedures/preferences.md): one line with the
+# register areas, the rule count and how many rules are still Review, counted
+# with bash and awk so it works without Python. Prints nothing without
+# registers. Also warns while the feedback hook script exists but
+# .claude/settings.json does not wire it. Every command is guarded: this hook
+# must exit 0 whatever the registers hold.
+preferences_block() {
+  local f area areas="" counts rules=0 review=0 settings=""
+  for f in docs/preferences/*.md; do
+    [[ -f "$f" ]] || continue
+    area="$(basename "$f" .md)"
+    [[ "$area" == "README" ]] && continue
+    areas="${areas:+$areas, }$area"
+  done
+  if [[ -n "$areas" ]]; then
+    counts="$(LC_ALL=C awk '
+      FNR == 1 { fence = 0; t = 0 }
+      /^[ \t]*```/ { fence = !fence; t = 0; next }
+      fence { next }
+      /^[ \t]*\|[ \t]*ID[ \t]*\|[ \t]*Rule[ \t]*\|/ { t = 1; skip = 1; next }
+      t && /^[ \t]*\|/ {
+        if (skip) { skip = 0; next }
+        n = split($0, c, "|")
+        chk = c[5]; gsub(/\r/, "", chk); gsub(/^[ \t]+/, "", chk)
+        rules++
+        if (chk ~ /^Review/) review++
+        next
+      }
+      { t = 0 }
+      END { print rules + 0, review + 0 }
+    ' docs/preferences/*.md 2>/dev/null || true)"
+    if [[ "$counts" =~ ^([0-9]+)\ ([0-9]+)$ ]]; then
+      rules="${BASH_REMATCH[1]}"; review="${BASH_REMATCH[2]}"
+    fi
+    echo "[session-context] Preferences: $areas ($rules rules, $review Review)"
+  fi
+  if [[ -f scripts/feedback-log.sh ]]; then
+    if [[ -f .claude/settings.json ]]; then settings="$(cat .claude/settings.json 2>/dev/null || true)"; fi
+    if [[ "$settings" != *feedback-log.sh* ]]; then
+      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 9)."
+    fi
+  fi
+  return 0
+}
+preferences_block || true
+
 # Template update awareness. Project mode: tell the human when a newer
 # template-v* tag exists than the last recorded sync. Template mode: tell the
 # maintainer when synced-set commits have landed since the newest tag.

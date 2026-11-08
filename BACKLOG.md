@@ -56,3 +56,8 @@ with a reason. Priorities P0-P3 per docs/procedures/audit.md.
 | test_dream.sh: cover the "git cannot compare" outcome branch and remove the -p11 and worktree folders on an early exit (trap) | P3 | dream-outcome-fixes review 2 notes, 2026-11-08 | open |
 | dream.py due counts task retros by .work/done file modification time, so a fresh worktree checkout makes every archived record look new and a dream "due" right after one; count by git commit date of each record instead | P3 | seen 2026-11-08: 14 retros counted minutes after a dream, from a new worktree | open |
 | Scorecard: a test for the 160-character cut on skipped report lines | P3 | dream-scorecard review round 3 note N3, 2026-11-09 | open |
+| Feedback hook: shorter internal git timeouts (about 1 s) so a slow git cannot push the hook past its 5 s budget and drop the line | P3 | feedback-loop review note N2, 2026-11-09 | open |
+| session-context.sh and new-task.sh register counters: split on unescaped pipes, as the Python reader does | P3 | feedback-loop review note N4, 2026-11-09 | open |
+| test_feedback.sh: pin the classifier order between correction and preference, and preference and approval | P3 | feedback-loop review note N5, 2026-11-09 | open |
+| scripts/selftest.sh runs its test files one at a time; run them in parallel to cut the local gate several-fold | P2 | a full local check.sh took over an hour on 2026-11-09 | open |
+| CI: actions/checkout@v4 runs on deprecated Node 20, and ubuntu-latest moves to Ubuntu 26 | P3 | CI annotations, 2026-11-09 | open |

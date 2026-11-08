@@ -41,8 +41,19 @@ so activity in unrelated projects never makes a dream due. Unseen transcripts
 count for "due" only in folders named exactly after a root (the repository, a
 git worktree, a saved root) or under <slug(root)>--claude-worktrees-; sibling
 names such as Foo-bar for Foo never match.
+Feedback: each digest also reads the owner's feedback log, <main checkout>/
+.work/feedback/log.jsonl (written by scripts/dream/feedback.py, which this
+module never imports), from the offset saved in state.json key "feedback"
+{"offset": n}; lines must end in a newline, malformed lines are counted, a log
+shorter than the offset is read again from 0. "## Feedback" lists lines of kind
+deferral, correction, preference or approval (capped at 12000 bytes);
+"## Repeats" lists word-overlap candidates between correction or preference
+lines and the rules in docs/preferences/*.md (at most 40 lines). done commits
+the offset, then rotates a log over 5 MB to log.1.jsonl (one kept) and resets
+the offset to 0; the exit-3 digest, which commits offsets itself, rotates the
+same way so a log of plain messages cannot grow without bound.
 Exit codes: 0 ok (due: due); 1 not due; 2 usage error or ordering error;
-3 digest found no new signal. Dependencies: Python 3 standard library, git
+3 digest found neither a new signal nor a new feedback line to show. Dependencies: Python 3 standard library, git
 (optional, for worktrees). Assumption: a transcript line is complete only when
 it ends in a newline; a partial last line is left for the next run. Malformed
 lines are counted only among lines that pass the raw path prefilter.
@@ -92,6 +103,12 @@ STOP = {"about", "after", "again", "always", "never", "their", "there", "these",
         "while", "would", "should", "could", "where", "every", "other", "being", "prefer", "instead",
         "without", "using", "really", "think", "thing", "things", "something", "because", "before",
         "still", "first", "owner"}
+# Feedback: kinds shown in the digest in priority order (plain messages already
+# appear in Signals), the caps, and the log rotation size.
+FEEDBACK_KINDS = ("deferral", "correction", "preference", "approval")
+REPEAT_KINDS = ("correction", "preference")
+FEEDBACK_BYTES, REPEAT_LINES, LOG_ROTATE = 12000, 40, 5 * 1024 * 1024
+PREF_DIR = os.path.join("docs", "preferences")
 HYGIENE_FILES = ["AGENTS.md", "BACKLOG.md", "docs/DEFECT_MEMORY.md",
                  "docs/lessons/INDEX.md", "docs/lessons/PENDING.md",
                  "docs/lessons/UPSTREAM.md", "docs/lessons/QUARANTINE.md"]
@@ -460,16 +477,23 @@ def impact_lines(c, sigs, counts):
     return out
 
 
-def lesson_hits(text, sigs):
-    """(signal id, shared words) for each C, D, H, I or E signal sharing two or
-    more words with a lesson; the one matcher for Impact and the scorecard."""
+def word_hits(text, items):
+    """(id, shared words) for each (id, item text) pair sharing two or more
+    distinctive words with text; the one matcher for Impact, the scorecard and
+    Repeats."""
     w = words(text)
     out = []
-    for sid, s in sigs:
-        common = w & words(s["text"]) if s["kind"] in MECHANIZE_KINDS else set()
+    for iid, t in items:
+        common = w & words(t)
         if len(common) >= 2:
-            out.append((sid, common))
+            out.append((iid, common))
     return out
+
+
+def lesson_hits(text, sigs):
+    """(signal id, shared words) for each C, D, H, I or E signal sharing two or
+    more words with a lesson."""
+    return word_hits(text, [(sid, s["text"]) for sid, s in sigs if s["kind"] in MECHANIZE_KINDS])
 
 
 def hygiene_numbers(text):
@@ -749,6 +773,182 @@ def outcome_text(c, path, applied, s):
                      + ["Unchanged: %s" % (", ".join(same) or "none"), ""])
 
 
+def feedback_dir(root):
+    """The folder feedback.py writes to: the main checkout's .work/feedback."""
+    return os.path.join(main_worktree(root), ".work", "feedback")
+
+
+def read_log_lines(path, off):
+    """(entries, end offset, lines read, malformed) from byte off to the last
+    complete line of one feedback log file; a partial last line waits."""
+    entries, n, bad = [], 0, 0
+    with open(path, "rb") as f:
+        f.seek(off)
+        for line in f:
+            if not line.endswith(b"\n"):
+                break
+            off += len(line)
+            if not line.strip():
+                continue
+            n += 1
+            try:
+                obj = json.loads(line.decode("utf-8", errors="replace"))
+            except ValueError:
+                bad += 1
+                continue
+            if not isinstance(obj, dict) or not isinstance(obj.get("kind"), str) \
+                    or not isinstance(obj.get("text"), str):
+                bad += 1
+                continue
+            entries.append(obj)
+    return entries, off, n, bad
+
+
+def read_feedback(c):
+    """(entries, new offset, lines read, malformed, log exists) for the lines
+    added to the feedback log since the saved offset. After a rotation the
+    saved "carry" offset says where reading stopped in log.1.jsonl; those
+    remaining lines come first, so lines logged during a dream are not lost."""
+    folder = feedback_dir(c.root)
+    saved = c.state.get("feedback") or {}
+    entries, n, bad, exists = [], 0, 0, False
+    carry = saved.get("carry")
+    old = os.path.join(folder, "log.1.jsonl")
+    if isinstance(carry, int) and carry >= 0:
+        try:
+            if carry <= os.path.getsize(old):
+                e1, _, n1, b1 = read_log_lines(old, carry)
+                entries, n, bad, exists = e1, n1, b1, True
+        except OSError:
+            pass
+    path = os.path.join(folder, "log.jsonl")
+    off = saved.get("offset", 0)
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return entries, 0, n, bad, exists
+    if not isinstance(off, int) or off < 0 or off > size:
+        off = 0
+    e2, off, n2, b2 = read_log_lines(path, off)
+    return entries + e2, off, n + n2, bad + b2, True
+
+
+def rotate_feedback(c, state):
+    """Rename a log over 5 MB to log.1.jsonl (one kept) and reset the saved
+    offset; called only after the offset was committed. The committed offset
+    becomes the carry: lines the hook appended after the digest read the log
+    stay in log.1.jsonl past it, and the next digest reads them first."""
+    folder = feedback_dir(c.root)
+    path = os.path.join(folder, "log.jsonl")
+    try:
+        if os.path.getsize(path) <= LOG_ROTATE:
+            return
+        os.replace(path, os.path.join(folder, "log.1.jsonl"))
+    except OSError:
+        return
+    carry = (state.get("feedback") or {}).get("offset", 0)
+    state["feedback"] = {"offset": 0, "carry": carry if isinstance(carry, int) else 0}
+    write_json(c.sp("state.json"), state)
+
+
+def feedback_line(i, e):
+    files = e.get("files")
+    files = ", ".join(x for x in files if isinstance(x, str)) if isinstance(files, list) else ""
+    return "- f%d [%s] %s %s %s task %s: %s; files: %s" % (
+        i, e["kind"], str(e.get("ts") or "")[:10], e.get("session") or "-", e.get("branch") or "-",
+        e.get("task") or "-", clean(e["text"], MSG_LIMIT), files or "-")
+
+
+def register_table_kind(cells):
+    """'rules', 'rules-extra' (a rules header with columns other than an optional
+    Repeats, which the register check reports), 'baselines' or None for a
+    register table header row; the one header test for the register check
+    (preferences.py) and the dream."""
+    low = [c.lower() for c in cells]
+    if len(low) >= 4 and low[0] == "id" and low[1] == "rule" and low[2].startswith("source") \
+            and low[3].startswith("check"):
+        if len(low) == 4 or (len(low) == 5 and low[4].startswith("repeats")):
+            return "rules"
+        return "rules-extra"
+    if len(low) == 4 and low[:3] == ["kind", "reference", "owns"] and low[3].startswith("check"):
+        return "baselines"
+    return None
+
+
+def register_rows(text):
+    """(line number, table kind, cells) for each data row of a register's
+    tables; fenced blocks are skipped and cells split on unescaped pipes."""
+    fence, kind = False, None
+    for n, row in enumerate(text.splitlines(), 1):
+        if row.lstrip().startswith(("```", "~~~")):
+            fence, kind = not fence, None
+            continue
+        if fence:
+            continue
+        if not row.lstrip().startswith("|"):
+            kind = None
+            continue
+        cells = table_cells(row)
+        head = register_table_kind(cells)
+        if head:
+            kind = head
+        elif kind and cells and not all(set(x) <= set(":- ") for x in cells):
+            yield n, kind, cells
+
+
+def register_rules(root):
+    """(area:rule ID, rule text) from the rules tables of docs/preferences/*.md;
+    the area is the file name, since IDs are unique only within one file."""
+    out = []
+    for path in sorted(glob.glob(os.path.join(root, PREF_DIR, "*.md"))):
+        area = os.path.splitext(os.path.basename(path))[0]
+        if area.lower() == "readme":
+            continue
+        for _, kind, cells in register_rows(read_text(path)):
+            if kind in ("rules", "rules-extra") and len(cells) >= 2 and cells[0]:
+                out.append(("%s:%s" % (area, cells[0]), cells[1]))
+    return out
+
+
+def feedback_sections(c, entries, nread, bad, exists):
+    """(lines of the Feedback and Repeats sections, number of entries of a shown kind)."""
+    out = ["", "## Feedback"]
+    if not exists:
+        out.append("no feedback log yet")
+    elif not nread:
+        out.append("no new feedback lines")
+    shown = [e for e in entries if e["kind"] in FEEDBACK_KINDS]
+    shown.sort(key=lambda e: str(e.get("ts") or ""), reverse=True)
+    shown.sort(key=lambda e: FEEDBACK_KINDS.index(e["kind"]))  # stable: newest first in a kind
+    kept, used = [], 0
+    for i, e in enumerate(shown, 1):
+        line = feedback_line(i, e)
+        cost = len(line.encode("utf-8")) + 1
+        if used + cost > FEEDBACK_BYTES:
+            break
+        used += cost
+        kept.append(line)
+    if nread:
+        out.append("log: %d new lines read, %d malformed; %d shown, %d dropped by the %d byte cap"
+                   % (nread, bad, len(kept), len(shown) - len(kept), FEEDBACK_BYTES))
+    out += kept
+    out += ["", "## Repeats",
+            "word-overlap candidates, not proof: a correction or preference sharing two or more words "
+            "with a register rule in docs/preferences/*.md; each may be a repeat or a coincidence"]
+    rules = register_rules(c.root)
+    hits = []
+    for i, e in enumerate(shown[:len(kept)], 1):
+        if e["kind"] in REPEAT_KINDS:
+            hits += ["%s <- f%d (%s)" % (rid, i, " ".join(sorted(common)))
+                     for rid, common in word_hits(e["text"], rules)]
+    if not hits:
+        out.append("none" if rules else "no register rules")
+    out += hits[:REPEAT_LINES]
+    if len(hits) > REPEAT_LINES:
+        out.append("... %d more not shown" % (len(hits) - REPEAT_LINES))
+    return out, len(shown)
+
+
 def count_lines(b):
     return b.count(b"\n") + (1 if b and not b.endswith(b"\n") else 0)
 
@@ -918,13 +1118,16 @@ def cmd_digest(c, a):
     dropped = len(ordered) - len(kept)
     kept.sort(key=lambda s: s["ts"])
 
-    nextstate = {"version": 1, "files": newfiles,
+    fb_entries, fb_off, fb_n, fb_bad, fb_exists = read_feedback(c)
+    fb_lines, fb_shown = feedback_sections(c, fb_entries, fb_n, fb_bad, fb_exists)
+    nextstate = {"version": 1, "files": newfiles, "feedback": {"offset": fb_off},
                  "known_roots": sorted(set(c.state["known_roots"]) | set(wts)),
                  "last_dream": c.state["last_dream"], "dreams": c.state["dreams"]}
     since = c.state["last_dream"] or "the first dream"
     nxt = c.sp("state.next.json")
-    if not raw:
+    if not raw and not fb_shown:
         write_json(c.sp("state.json"), nextstate)
+        rotate_feedback(c, nextstate)
         if os.path.exists(nxt):
             os.remove(nxt)
         print("dream: nothing to dream (no new signal since %s)" % since)
@@ -947,7 +1150,7 @@ def cmd_digest(c, a):
         "since: %s" % since,
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
-    ] + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + [
+    ] + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",
@@ -983,6 +1186,7 @@ def cmd_done(c, a):
         s["dreams"] = (s.get("dreams", []) + [this])[-10:]
     s["last_dream"] = iso(c.now)
     write_json(c.sp("state.json"), s)
+    rotate_feedback(c, s)
     os.remove(nxt)
     if os.path.exists(c.sp("offered")):
         os.remove(c.sp("offered"))

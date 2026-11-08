@@ -11,7 +11,12 @@ s2, ... from the session transcripts since the last dream, plus hygiene
 numbers; your only view of the transcripts, never open a transcript; its
 "Impact since the last dream" section gives a trend per dream, lessons
 unused for over 45 days as retire candidates, and lessons sharing words with
-new failures as mechanize candidates to judge), and
+new failures as mechanize candidates to judge; its "Feedback" section lists
+the owner's logged messages as f1, f2, ... and its "Repeats" section lists
+register rules that a correction or preference shares words with, candidates
+not proof), the preference registers docs/preferences/*.md (rules with
+Source, Check and Repeats; baselines; Repeats changes only through an
+approved proposal), and
 the memory files: docs/lessons/INDEX.md, PENDING.md, UPSTREAM.md,
 QUARANTINE.md, docs/DEFECT_MEMORY.md, BACKLOG.md, the task records in
 .work/done/ newer than the digest's "since" date, the Claude auto-memory
@@ -27,7 +32,12 @@ format of PENDING.md, preferring a check over prose; (3) stale or
 contradicted lessons, auto-memory notes or BACKLOG rows, with the fix;
 (4) lessons a script, test or lint could enforce, as BACKLOG rows;
 (5) process lessons for UPSTREAM.md with "applies to:"; (6) approved lessons
-the signals show were used.
+the signals show were used; (7) [preference]: owner feedback stating a
+lasting preference no register row holds, as a new row whose Source quotes
+the owner's words with the date; (8) [escalate]: a register rule with a
+Repeats candidate moves from Review to a named check through a BACKLOG row
+or a test, after judging the candidate; (9) [baseline]: an approved
+deliverable becomes a baselines row (Kind, Reference, Owns, Check).
 
 Every proposal cites evidence (signal ids or file:line); no evidence, no
 proposal. One-off trivia is not a lesson; duplicates are merges. At most 12
