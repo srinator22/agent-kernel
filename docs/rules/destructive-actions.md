@@ -22,6 +22,18 @@ steps, in order:
 7. Verify the result afterward and report exactly what was removed or
    changed, and how to recover it.
 
+In Claude Code, `scripts/destructive-guard.sh` (PreToolUse) refuses, before
+they run: removal of filesystem roots, the home directory, the workspace
+and their ancestors (by any spelling of the path), bare globs, a glob under
+an unresolved variable, a variable path when recursive, a recursive removal
+of a `.git` directory, and the git forms of kernel rule 6. It reads inside
+`bash -c`, PowerShell `-Command`, `cmd /c` (encoded PowerShell is refused),
+`$(...)`, backticks, subshells, braces and `if`/`for`/`while` bodies, and
+follows `cd`/`pushd`/`Set-Location` (a cd it cannot resolve refuses a
+recursive relative removal). Its split is quote-unaware, so separators and
+brackets inside quoted strings over-block. The seven steps still apply to
+what it cannot parse: script files, `eval`, aliases, functions, pipes.
+
 Examples of refused targets: `rm -rf /`, `rm -rf ~`, `rm -rf .` at the
 workspace root, `git clean -fdx` on the workspace root, `DROP DATABASE`
 without a verified backup, `rm "$BUILD_DIR"/*` while BUILD_DIR may be

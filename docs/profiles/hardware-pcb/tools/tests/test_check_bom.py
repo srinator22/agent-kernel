@@ -66,7 +66,9 @@ class ParserTests(unittest.TestCase):
         self.assertIsNone(cb.capacitance_farads("REG100"))
 
     def test_mpn_placeholders_and_value_fallback(self):
-        comp = lambda ref, value, mpn="": {"ref": ref, "value": value, "footprint": "", "fields": {"MPN": mpn}}
+        def comp(ref, value, mpn=""):
+            return {"ref": ref, "value": value, "footprint": "", "fields": {"MPN": mpn}}
+
         self.assertEqual(cb.component_mpn(comp("U1", "x", "REG100ABC")), "REG100ABC")
         self.assertIsNone(cb.component_mpn(comp("U1", "x", "pending")))
         self.assertEqual(cb.component_mpn(comp("U1", "REG100ABC")), "REG100ABC")

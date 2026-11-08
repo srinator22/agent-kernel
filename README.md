@@ -23,6 +23,10 @@ build before the first feature.
   changelog is written by hand.
 - python (python3 or python): validates `.claude/settings.json`. Without it
   that check is skipped locally and CI runs it.
+- ruff 0.16.10, template repository only: `check.sh` in template mode lints
+  the template's own Python with exactly this version, from `ruff` on PATH or
+  fetched through `uvx` or `pipx` (network on first use). Without any of them
+  that check fails. Started projects do not need it.
 - GNU grep or git grep with PCRE (`-P`): the no-dash scan. Without it the scan
   is deferred to CI.
 
@@ -40,7 +44,7 @@ Follow docs/procedures/discover.md and then docs/procedures/start.md with one ba
 4. What happens next: discover writes `docs/CAPABILITY_MAP.md` (what the
    agent automates, which CLI and MCP tools exist, which tools to build);
    start asks one batched interview, selects profiles, wires the stack
-   into `scripts/check.sh` and `.github/workflows/ci.yml`, fills the
+   into `scripts/stack-check.sh` and `.github/workflows/ci.yml`, fills the
    Project decisions in AGENTS.md, writes ARCHITECTURE and the first ADR,
    scaffolds tests, and rewrites this README for your project.
 5. The first commit and the `v0.1.0` tag are made by start once
@@ -55,7 +59,7 @@ Follow docs/procedures/discover.md and then docs/procedures/start.md with one ba
    URL and the latest `template-v` tag:
 
 ```
-Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository. Read its AGENTS.md and docs/procedures/upstream.md. First list every file you would add or change and stop for my approval. Then copy the core file set without overwriting existing files, run docs/procedures/discover.md and docs/procedures/start.md in existing-project mode with one batched interview, wire scripts/check.sh to this project's existing commands, quarantine any test that already fails with an owner task, and record the adoption as an ADR with the template tag. Do not touch CI, branch protection or tags without asking.
+Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository. Read its AGENTS.md and docs/procedures/upstream.md. First list every file you would add or change and stop for my approval. Then copy the core file set without overwriting existing files, run docs/procedures/discover.md and docs/procedures/start.md in existing-project mode with one batched interview, wire scripts/stack-check.sh to this project's existing commands, quarantine any test that already fails with an owner task, and record the adoption as an ADR with the template tag. Do not touch CI, branch protection or tags without asking.
 ```
 
 3. An existing AGENTS.md or CLAUDE.md is merged by hand, never replaced;
@@ -68,26 +72,38 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
 
 - Begin a task: `scripts/new-task.sh <slug> [standard|quick|autopilot]`
   creates the branch and `.work/TASK.md`.
-- While working run `./scripts/check.sh --quick`; before shipping run the
+- While working run `./scripts/check.sh --quick` (or `scripts/quickgate.sh`,
+  the same lane); before shipping run the
   full gauntlet (`./scripts/check.sh`). Shipping is a gated merge: the work
   goes through a branch and merges only after the gauntlet is green on CI.
 - At milestones run `docs/procedures/bughunt.md`; at the end of every task
   run `docs/procedures/retro.md`; run `docs/procedures/maintain.md` monthly.
-- Tags: the template is tagged `template-vX.Y.Z`; a project built from it is
-  tagged `vX.Y.Z`. Sync to the latest `template-v` tag.
+- When a session's work is done and a dream is due, Claude asks whether to
+  start dreaming (`/dream`, `docs/procedures/dream.md`): a script reduces the
+  session transcripts since the last dream to their signal, one agent checks
+  the memory against it, and you approve numbered proposals. Its taste pass
+  learns your tastes across every local project into a personal profile
+  under `~/.claude/taste/` that every session loads; you approve each line.
+- Tags: the template is tagged `template-vX.Y.Z` by
+  `scripts/template-release.sh`; a project built from it is tagged
+  `vX.Y.Z`. Projects sync to the latest `template-v` tag.
 
 ## Keep a project in sync with the template
 
-Run `scripts/template-sync.sh` on a branch with a clean working tree, dry run
-first: it fetches the template at a tag, reports the diff, and writes nothing
-until you apply it (`--help` lists the flags). The core file set is listed in
+A project's session start says `Template update available` when a newer
+`template-v` tag exists than its last sync; the `template-update` skill takes
+it from there: a branch, a dry run, `scripts/template-sync.sh --latest`,
+conflicts merged by hand, kernel changes stopped for the owner,
+`./scripts/check.sh`, and a PR. The core file set is listed in
 `docs/procedures/upstream.md`. Adopted profiles, the AGENTS.md kernel block
 and the rules index are shown as diffs and never applied; the rest of the
 core set applies only when the project's copy is untouched since the last
-sync. The Project decisions section is never touched. The script
-re-verifies the kernel hash afterwards and logs the run to
-`docs/lessons/MAINTENANCE.log`. Review the diff, run `./scripts/check.sh`,
-then commit.
+sync, and `docs/library/` and `docs/roster/` sync only where the project
+carries them. The Project decisions section and the project's own stack
+steps in `scripts/stack-check.sh` are never touched. A project with no
+usable sync record gets candidates from `--suggest-baseline`. In the
+template, `scripts/fleet.sh` lists every local project's version and status
+from a gitignored `fleet.local.list`.
 
 ## Send lessons back
 
@@ -102,11 +118,22 @@ Full contract: `docs/procedures/upstream.md`.
 `./scripts/check.sh` is the only gauntlet; CI runs the same script.
 
 - Always: kernel hash verify (`.kernel.hash`); AGENTS.md at most 180
-  lines; untracked-files report; the dash scan; the caps below; mirror
-  parity (`.claude/skills` and `.agents/skills` identical, every
-  `.claude/agents` file with a `.codex` counterpart or a recorded reason);
-  the task graph; ADR numbering and format (`scripts/adr.sh check`);
-  `scripts/selftest.sh` whenever `tests/template/` exists.
+  lines; untracked-files report; the dash and character scan (no em or en
+  dashes, curly quotes, ellipsis character, non-breaking space or mojibake);
+  the caps below; mirror parity (`.claude/skills` and `.agents/skills`
+  identical, every `.claude/agents` file with a `.codex` counterpart or a
+  recorded reason); the task graph; the task lint (`scripts/tasklint.sh
+  check`: ticked criteria name evidence, assumptions carry a status); ADR
+  numbering and format (`scripts/adr.sh check`); the documentation question
+  table (`scripts/doc-eval.sh check`); `scripts/selftest.sh` whenever
+  `tests/template/` exists. The full gate (not `--quick`) also runs
+  `scripts/tasklint.sh ship`: no open assumption, and an autopilot task has
+  a PASS plan verdict.
+- Claude Code hooks: `scripts/destructive-guard.sh` refuses destructive rm
+  and git forms before they run, in every session and subagent;
+  `scripts/stop-gate.sh` blocks a turn end on broken task state and runs the
+  quick gate once every criterion is ticked; `scripts/session-context.sh`
+  loads the mode, the branch, status, recent commits and the live task.
 - Template mode (before start): template integrity, including required
   files, placeholders, skill frontmatter, settings validity, executable
   bits, ADR references and BLUEPRINT tree parity.
@@ -119,9 +146,10 @@ Full contract: `docs/procedures/upstream.md`.
   archived on evidence, never deleted.
 - Self-tests: `scripts/selftest.sh` runs the fixtures in `tests/template/`
   against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`,
-  `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh` and
-  `worker-git-guard.sh`. `scripts/quickgate.sh` is the
-  fast in-work subset of the gauntlet.
+  `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`,
+  `worker-git-guard.sh`, `destructive-guard.sh`, `stop-gate.sh`,
+  `tasklint.sh`, `doc-eval.sh` and `session-context.sh`. `scripts/quickgate.sh` (it runs
+  `./scripts/check.sh --quick`) is the fast in-work subset of the gauntlet.
 
 ## Profiles
 
@@ -139,9 +167,11 @@ when the profile is adopted. Optional items proven in only one project live
 in `docs/library/` (agents, skills, procedures, tools, a shell hook) and are
 adopted by choice (ADR 0004). `docs/roster/` holds opt-in department
 agents (R&D leadership, programme, mechanical and product, electronics and
-firmware, quality and safety, production, documentation, video): read-only
-leads that review and decide, and specialists that each write one folder
-(ADR 0005).
+firmware, quality and safety, production, documentation, video, CG render):
+read-only leads that review and decide, and specialists that each write one
+folder (ADR 0005). Photoreal product stills, animation and product films use
+the render roles with the library `product-render` procedure, skill and
+tools (ADR 0007).
 
 ## Procedures
 
@@ -156,12 +186,13 @@ All in `docs/procedures/`, portable to any agent.
 - ship: done-gate, version, push, monitor CI to terminal state.
 - retro: end-of-task learning capture.
 - maintain: pruning, caps, freshness.
+- doc-eval: a fresh agent answers a question set by navigation; traps must be declined.
 - longjob: checkpointed background work.
 - upstream: lessons up, template sync down, adoption.
 
 ## Harness support
 
-- Claude Code: `CLAUDE.md` imports AGENTS.md; `.claude/` holds agents, skills and a SessionStart hook.
+- Claude Code: `CLAUDE.md` imports AGENTS.md; `.claude/` holds agents, skills and the SessionStart, PreToolUse and Stop hooks.
 - Codex: reads AGENTS.md; `.codex/agents/` and `.agents/skills/` carry the same accelerators.
 - Any other agent: AGENTS.md and `docs/procedures/` are sufficient; accelerators are optional.
 - Model choice: `docs/rules/models.md` defines tiers (cheap, standard, strong, inherit), never model names, with adapters per harness. Task decomposition and worker rules: `docs/rules/orchestration.md`.

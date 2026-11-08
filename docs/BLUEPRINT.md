@@ -69,6 +69,7 @@ docs/
     0003-self-improving-template.md
     0004-profile-agent-sets.md
     0005-department-agent-roster.md
+    0006-claude-code-hooks-enforce-the-destructive-action-rule-and-th.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -82,6 +83,8 @@ docs/
     tests.md                  # test harness and layers wired from day one
     upstream.md               # lessons up to the template, template sync down, adoption
     adr.md                    # record a decision: scripts/adr.sh new, format, superseding
+    doc-eval.md               # fresh agent answers tests/docs/questions.md by navigation; traps declined
+    dream.md                  # consolidate memory against session transcripts; proposals approved by number
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -93,6 +96,7 @@ docs/
     models.md                 # model tiers (cheap/standard/strong/inherit), harness adapters, parity
   profiles/                   # project-type bundles selected at start
     README.md                 # index and the selection procedure
+    ruff.toml                 # ruff contract for the profiles' Python: default rules, no format (synced)
     software/PROFILE.md       # always on
     scientific/PROFILE.md
     scientific/skills/        # shipped skill set, installed by start (ADR 0004)
@@ -109,12 +113,14 @@ docs/
     data-analysis/skills/     # shipped skill set
   library/                    # opt-in single-project items (ADR 0004)
     README.md                 # one-project-evidence rule, adoption, graduation, item table
+    ruff.toml                 # ruff contract for the library's Python: default rules, no format
     agents/                   # agents with Codex twins
     skills/                   # skills a project may adopt into free core slots
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
     hooks/                    # harness hooks with tests/
-  roster/                     # opt-in department agents, no project evidence yet (ADR 0005)
+    examples/                 # worked examples of library procedures (records only)
+  roster/                     # opt-in department agents (ADR 0005; render roles ADR 0007)
     README.md                 # department chart, kind, tier, folder, adoption
     agents/                   # leads (read-only) and specialists, each with a Codex twin
   lessons/
@@ -134,10 +140,21 @@ scripts/
   lessons.sh                  # lessons caps, counters and expiry, enforced mechanically
   taskgraph.sh                # validates the .work/TASK.md task graph
   template-sync.sh            # pull template updates into a project, never touching Project decisions
+  template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
+  fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
+  dream.sh                    # dream digest, due, done, status, hygiene, taste (wrapper for dream/dream.py and dream/taste.py)
+  dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
+    dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
+    taste.py                  # stdlib: cross-project taste digest, evidence pool, approved lines into ~/.claude/taste
+    ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ against the template's own scripts
   adr.sh                      # check (ADR numbering and format) | new <title>
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
+  destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
+  stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
+  tasklint.sh                 # check | ship: criteria evidence, assumption status, autopilot plan verdict
+  doc-eval.sh                 # check | brief: the documentation question table
 tests/
   template/                   # fixtures and tests for the scripts above; called from check.sh
     lib.sh                    # shared assertion helpers
@@ -153,8 +170,21 @@ tests/
     test_adr.sh
     test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
     test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
+    test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
+    test_stop_gate.sh         # Stop hook decisions against a fake quickgate
+    test_tasklint.sh
+    test_doc_eval.sh
+    test_session_context.sh   # mode line, git priming, task state, template update notice
+    test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
+    test_fleet.sh             # status rows against fixture projects
+    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
+    test_selftest.sh          # quarantine list, n/a lines, summary counts
+    test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
     fixtures/
       check.sh                # pristine template check.sh the tests run against
+      fake-ruff.sh            # ruff stand-in so no self-test reaches the network
+  docs/
+    questions.md              # question set and answer key for docs/procedures/doc-eval.md
 .work/
   TASK.md                     # current-task state (template with placeholders); committed
   done/                       # archived task files; committed
@@ -162,22 +192,26 @@ tests/
   jobs/                       # background-job STATE files and logs; GITIGNORED
     .gitkeep
 .claude/
-  settings.json               # attribution off; SessionStart hook -> scripts/session-context.sh
+  settings.json               # attribution off; hooks: SessionStart, PreToolUse guard, Stop gate
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
     worker.md                 # mechanical execution; model sonnet; Bash|PowerShell hook blocks git commit/push
     monitor.md                # post-push CI watcher; model haiku; runs scripts/ci-watch.sh
+    dreamer.md                # read-only dream: digest and memory files in, numbered proposals out; model sonnet
+    taste-dreamer.md          # read-only taste pass: taste digest and profile in, numbered profile lines out; model sonnet
   skills/
     start/SKILL.md            # thin wrapper -> docs/procedures/start.md
     ship/SKILL.md             # thin wrapper -> docs/procedures/ship.md
     retro/SKILL.md            # thin wrapper -> docs/procedures/retro.md
     maintain/SKILL.md         # thin wrapper -> docs/procedures/maintain.md
     adr/SKILL.md              # thin wrapper -> docs/procedures/adr.md
+    template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
+    dream/SKILL.md            # thin wrapper -> docs/procedures/dream.md
 .codex/
-  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml
+  agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml, taste-dreamer.toml
 .agents/
-  skills/                     # Codex skills: start, ship, retro, maintain, adr (same wrappers)
+  skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
 ```
@@ -288,8 +322,8 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
 - Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
-- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
-- Steps 6+ ({{FILLED_BY_START}}), each a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
+- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
+- The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
 
@@ -323,18 +357,18 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
    1. What is the project? Purpose, users, non-goals, system boundary (a paragraph is fine).
    2. Stack preference, or should I propose one from the reference table?
    3. Repo host and visibility (private/public), solo or team?
-   4. Git workflow: branch + gated merge (default), or direct-to-main as an explicit standing choice?
+   4. Git workflow: branch + gated merge (default), or direct-to-main as an explicit standing choice? (Recorded starting with the choice, such as "direct-to-main, <details>"; scripts/new-task.sh reads direct-to-main only before the end of the value or ; . : , ( or " - ".)
    5. Deploy target, or none for now? If deploying: private or public exposure, auth approach?
    6. Does it ship data or assets? (If yes: local-first data, self-hosted assets, and version-stamped caches become project defaults, recorded as an ADR - external sources are justified fallbacks with a written reason.)
    7. Risk profile: ordinary, scientific/numerical, safety-sensitive, or embedded? (Scientific wires golden-master fixtures, deterministic seeds, and promotes docs/rules/scientific-integrity.md in the index.)
    8. Default task mode: spec-approval or autopilot?
    9. Any hard invariants I should never violate (UX, performance, compliance, compatibility)?
    10. Is there confidential context that must not appear in the committed repo? (If yes: create a gitignored local instruction file, add the ignore line first, and never reference its existence in committed files.)
-3. Wire the stack: fill every `{{...}}` in `scripts/check.sh` and `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
+3. Wire the stack: write the stack steps into `scripts/stack-check.sh` and fill every `{{...}}` in `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
 4. Fill the Project decisions section of AGENTS.md; append stack-specific lines to Standards if needed (respect the 180-line budget).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write the next-numbered ADR under docs/decisions/ (stack choice, with rejected alternatives).
 6. Rewrite `README.md` for the project, present tense. Set repo description, homepage, and topics (gh) so the sidebar reads properly. Scaffold BACKLOG.md with the first milestones from the interview.
-7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into check.sh); branch protection if gated workflow.
+7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into `scripts/stack-check.sh`); branch protection if gated workflow.
 8. Verify a clean state: `./scripts/check.sh` passes for real (not template mode). Fix until it does. Completion rule: start may not declare itself complete if format/lint/typecheck/tests cannot actually execute.
 9. Write `.start-done` (date + summary), write `START_REPORT.md` (detected, wired, missing, degraded, manual steps), commit with conventional commits, tag `v0.1.0`, and if the workflow is gated, confirm CI on that SHA via `scripts/ci-watch.sh`.
 10. Never touch the kernel or `.kernel.hash`.
@@ -427,8 +461,14 @@ Date: {{date}}
 - Retries per failing step: {{max, default 2}}
 - Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
 
+## Assumptions
+<!-- Amendment 4: [confirmed] the human said so, [verified] -> evidence, [open];
+     scripts/tasklint.sh ship fails while any line is [open], except in quick mode -->
+- [open] {{assumption}}
+
 ## Acceptance criteria
-<!-- each maps to an executable test where possible; list test paths -->
+<!-- each maps to an executable test where possible; list test paths; a ticked
+     line needs -> an existing path or -> judgment: reason (scripts/tasklint.sh) -->
 - [ ] {{criterion}} -> {{test path or "judgment: reason"}}
 
 ## Plan
@@ -436,6 +476,9 @@ Date: {{date}}
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
 | {{node}} | {{- or node names}} | {{paths}} | {{cheap/standard/strong/advisor}} | todo |
+
+## Plan verdict
+<!-- Amendment 4, autopilot only: the reviewer's plan review before any node starts -->
 
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
@@ -455,7 +498,7 @@ Date: {{date}}
 
 ### 3.13 .claude/ - accelerators only; the repo must function without this directory
 
-- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule).
+- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule); since Amendment 4 it also prints the branch, `git status --short` (capped at 20 lines) and the last 10 commits. Amendment 4 adds a `PreToolUse` hook (matcher `Bash|PowerShell`) running `scripts/destructive-guard.sh` and a `Stop` hook (timeout 1200 seconds) running `scripts/stop-gate.sh` (VERIFY 2026-10-29: Stop stdin carries `stop_hook_active`, exit 2 blocks with stderr fed back, project hooks also run inside subagents).
 - **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives the diff, `.work/TASK.md`, the verify output (Amendment 3), and files it chooses to read; must not receive implementer reasoning; returns FAIL when the verify output is missing, truncated or not clean at every stage; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled, the AGENTS.md rules index and the adopted profiles' rules; writes PASS/FAIL ending with an Evidence checked list with specifics into the Review verdict section; gains nothing by being agreeable.
 - **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns conclusions with file:line, quotes a few lines at most, skips vendored, build and dependency folders, never modifies.
 - **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push blocked by a PreToolUse hook (Amendment 3: matcher `Bash|PowerShell`, body `scripts/worker-git-guard.sh`, VERIFY 2026-10-23; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; replies with files touched, each check's command and verbatim result ("could not run" stated as such) and conflicts; no version bump unless briefed; if its instruction conflicts with observed evidence, follows the evidence and says so.
@@ -506,7 +549,7 @@ Search: prefer rg for repository text search. Edits: patch-based, scoped, review
 
 ### 3.16 docs/profiles/ - project-type bundles (Amendment 2)
 
-A profile carries what a project type needs beyond the software baseline: rules to promote into the AGENTS.md rules index, gates to wire into `scripts/check.sh` and CI, tools to install or build, playbooks and defect-pattern checklists, an agent and skill set, parameters and record conventions, and additions to the definition of done. `docs/profiles/README.md` holds the index and the selection procedure; each profile is `docs/profiles/<name>/PROFILE.md`.
+A profile carries what a project type needs beyond the software baseline: rules to promote into the AGENTS.md rules index, gates to wire into `scripts/stack-check.sh` and CI, tools to install or build, playbooks and defect-pattern checklists, an agent and skill set, parameters and record conventions, and additions to the definition of done. `docs/profiles/README.md` holds the index and the selection procedure; each profile is `docs/profiles/<name>/PROFILE.md`.
 
 - `software`: always on; the baseline every project gets.
 - `scientific`: reference fixtures, golden masters, deterministic seeds, documented tolerances, validation status.
@@ -534,11 +577,12 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
 - `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
 - `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
+- `scripts/destructive-guard.sh`, `scripts/stop-gate.sh`, `scripts/tasklint.sh`, `scripts/doc-eval.sh` (Amendment 4): see the Amendment 4 entry below.
 - `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
 
 ---
 
-## 4. Stack reference table (start fills check.sh from this; verify tool currency at start time)
+## 4. Stack reference table (start fills stack-check.sh from this; verify tool currency at start time)
 
 | Role | Python | TypeScript/Node | Go | Rust |
 |---|---|---|---|---|
@@ -603,3 +647,17 @@ Why: four real projects exposed gaps that the original template could not catch.
 ## Amendment 3 (2026-10-23)
 
 Ten lessons approved by the owner on 2026-10-23 (L001 to L010 in `docs/lessons/INDEX.md`) applied to the core. The reviewer takes the verify output as input and fails without it, ends its verdict with an Evidence checked list, and checks the rules index and adopted profiles' rules. The worker replies in a fixed format with verbatim check results; its commit and push block moved into `scripts/worker-git-guard.sh` under matcher `Bash|PowerShell`. The monitor stays in the foreground and re-runs on timeout; `scripts/ci-watch.sh` derives the expected workflows from the changed files and path filters, with `--expect` and `--plan`. Explore returns conclusions. The retro records time-costing traps and routes durable decisions to ADRs; bugfix requires every regression test to fail first for the stated root cause. The library adr skill graduated to a core procedure, skill and `scripts/adr.sh`, wired into check.sh's always section (core skills: 5 of 8). Kernel untouched.
+
+## Amendment 4 (2026-10-29)
+
+Nine process ideas from a public knowledge base on agentic coding (coleam00/cole-medin-knowledge-base, no license, so ideas re-expressed and no text copied), approved by the owner on 2026-10-29. Hooks: `scripts/destructive-guard.sh` (PreToolUse, every session) refuses recursive removal of roots, home, the workspace, bare globs and unresolved variables, and destructive git forms (force push, `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, whole-tree checkout and restore, `stash drop` and `clear`), mechanizing kernel rules 6 and 11; `scripts/stop-gate.sh` (Stop) blocks a turn end on broken task state and runs `scripts/quickgate.sh` once every criterion is ticked, cached by working-tree state, because the quick lane takes minutes where template self-tests exist; `scripts/session-context.sh` primes the session with branch, status and the last 10 commits. Task state: TASK.md gains Assumptions and Plan verdict sections, and `scripts/tasklint.sh` (check in the always section, ship in the full gate only) requires evidence for ticked criteria, a status per assumption, no open assumption at ship, and a PASS plan verdict for an autopilot task that has started; the reviewer documents the plan review. Documentation: `docs/procedures/doc-eval.md` with `tests/docs/questions.md` and `scripts/doc-eval.sh` test that a fresh agent finds answers by navigation and declines trap questions; maintain runs it. Style: check.sh also fails on curly quotes, the ellipsis character, non-breaking space, the replacement character and mojibake. ADR 0006 records the hook decisions. The hardware-pcb profile ships `tools/check_quotes.py`, which verifies a cited quote against the stored document and page. Upgrade note: a project that syncs this while an autopilot task is already running (a node doing or done) adds a `## Plan verdict` section with the reviewer's plan review, or `scripts/tasklint.sh check` fails. Kernel untouched.
+
+## Amendment 5 (2026-10-29): product render capability
+
+ADR 0007. The roster gains a CG render department (four leads, seven
+specialists) and CG additions to five creative roles; the library gains the
+`product-render` procedure and skill, 19 render tools with stdlib cores and
+tests, and `docs/library/examples/product-render-sample/`. `scripts/lessons.sh
+check` now enforces roster twin parity and hand-off names. No profile yet
+(one-project evidence); the outline is the BACKLOG graduation target. Kernel
+untouched.

@@ -80,7 +80,7 @@ One gate script runs the rows in this order; quick stops after the static rows,
 full adds scenarios, sweeps, exports and builds. Commands are placeholders the
 project supplies.
 
-| Gate | Command (wire in check.sh and CI) | Pass | Rule |
+| Gate | Command (wire in stack-check.sh and CI) | Pass | Rule |
 |---|---|---|---|
 | Repository, settings and wiring contracts | `<contract-check>` | exit 0 | FW-12 |
 | Fakes tests and sketch lint (no host define) | `<sim-runner> --fakes-test` and `grep -rnE "#ifdef HOST" <firmware-src>` | exit 0, no match | FW-2, FW-3 |

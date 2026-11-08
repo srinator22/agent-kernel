@@ -2,7 +2,7 @@
 
 A profile is a bundle a project selects at start. It carries what a project
 type needs beyond the software baseline: rules to promote into the AGENTS.md
-rules index, gates to wire into `scripts/check.sh` and CI, tools to install or
+rules index, gates to wire into `scripts/stack-check.sh` and CI, tools to install or
 build, playbooks, an agent and skill set, parameters and record conventions,
 and additions to the definition of done. Profiles hold learned practice from
 real projects; each rule states the failure it prevents.
@@ -29,7 +29,7 @@ real projects; each rule states the failure it prevents.
    adds `data-analysis`. When the answer is unclear, start asks one follow-up.
 3. For each selected profile start, in order: copies its Rules into the
    AGENTS.md rules index as one line per rule file or ID range (the 180-line
-   budget holds); wires every Gates row into `scripts/check.sh` and
+   budget holds); wires every Gates row into `scripts/stack-check.sh` and
    `.github/workflows/ci.yml`; turns each Tools row marked `build` into a
    BACKLOG item; scaffolds the Parameters and records files; copies
    the Done means list into the Project decisions section of AGENTS.md.

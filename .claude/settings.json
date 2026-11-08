@@ -13,6 +13,28 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/destructive-guard.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/stop-gate.sh\"",
+            "timeout": 1200
+          }
+        ]
+      }
     ]
   }
 }

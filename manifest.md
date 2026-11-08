@@ -3,7 +3,7 @@
 Required for start to complete: git; a working language toolchain; ability to execute scripts/check.sh end to end. Native Windows shells run it via scripts\check.cmd (execution-policy safe) or scripts/check.ps1; both locate Git Bash and forward to the same script.
 Strongly recommended: gh CLI (checks, releases, branch protection, repo metadata); gitleaks; git-cliff.
 Recommended methodology plugin (Claude Code): Superpowers, via the official plugin marketplace (VERIFY current install command at start time; install command never verified by this template, last review 2026-10-09). Other harnesses: docs/procedures/ is the fallback methodology.
-A bash test runner is not required: scripts/selftest.sh and tests/template/ are plain bash, so the template's own checks need nothing beyond git and bash.
+bash 4.4 or newer is required (Git for Windows ships 5; on macOS, whose /bin/bash is 3.2, install a newer bash, for example with Homebrew): `scripts/destructive-guard.sh` refuses every command on an older bash after trying /opt/homebrew/bin/bash and /usr/local/bin/bash, and `scripts/ci-watch.sh` needs bash 4. A bash test runner is not required: scripts/selftest.sh and tests/template/ are plain bash, so the template's own checks need nothing beyond git and bash.
 Policy: CLI tools over MCP servers. MCP schemas cost resident context every turn; CLIs cost nothing until invoked. Add an MCP server only when no CLI equivalent exists; record the justification as an ADR.
 Search: prefer rg for repository text search. Edits: patch-based, scoped, reviewable. Non-interactive commands; deterministic scripts.
 

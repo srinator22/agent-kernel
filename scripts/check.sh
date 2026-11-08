@@ -2,7 +2,8 @@
 # check.sh - the single gauntlet. CI runs this exact script, so local and CI
 # cannot diverge. Usage: ./scripts/check.sh [--full-mutation] [--quick]
 # --quick is the working lane: the wired stack block skips mutation and the
-# production build when QUICK=1; the always section (step 4) never skips.
+# production build when QUICK=1; the always section (step 4) never skips,
+# except the ship-readiness half of the task lint (4e), which is full-gate only.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -107,15 +108,31 @@ fi
 gfail=0
 gerr() { echo "CHECK FAILED: $*" >&2; gfail=1; }
 
-# 4a. Style: plain hyphens only (kernel rule 20). Tracked files only.
+# 4a. Style: plain hyphens only (kernel rule 20), and no typographic or
+# mis-encoded characters. Tracked files only.
 # Needs grep with PCRE (GNU); where unavailable this defers to CI.
+# The first 20 matches are printed with sed, which reads all its input: a
+# pipe into head ends the writer with SIGPIPE under pipefail (exit 141) once
+# the list outgrows the pipe buffer.
 rc=0
 dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
 if (( rc == 0 )); then
-  printf '%s\n' "$dashes" | head -20
+  printf '%s\n' "$dashes" | sed -n '1,20p'
   gerr "em or en dash found; plain hyphens only"
 elif (( rc > 1 )); then
   echo "WARNING: git grep -P unavailable; dash check deferred to CI."
+fi
+# Typographic and mis-encoded characters: curly quotes, the ellipsis
+# character, non-breaking space, the replacement character, and UTF-8 that
+# was decoded as Latin-1 or Windows-1252 (an A-tilde or a-circumflex-euro
+# pair). They break greps and diffs and usually mean pasted or mangled text.
+rc=0
+chars="$(git grep -IPn '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' 2>/dev/null)" || rc=$?
+if (( rc == 0 )); then
+  printf '%s\n' "$chars" | sed -n '1,20p'
+  gerr "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
+elif (( rc > 1 )); then
+  echo "WARNING: git grep -P unavailable; character check deferred to CI."
 fi
 
 # 4b. Memory caps and mirror parity are mechanized (kernel rules 8 to 10):
@@ -129,10 +146,30 @@ fi
 # 4d. Decision records are numbered and formatted (docs/procedures/adr.md).
 ./scripts/adr.sh check || gerr "scripts/adr.sh check failed"
 
-# 4e. The template's own scripts are tested (docs/procedures/tests.md), in
+# 4e. Task state: ticked criteria name evidence, assumptions carry a status,
+# an autopilot task that started has a plan verdict. The full gate (not
+# --quick) also requires every assumption settled: an open one means the task
+# is not ready to ship.
+./scripts/tasklint.sh check || gerr "scripts/tasklint.sh check failed"
+if (( ! QUICK )); then
+  ./scripts/tasklint.sh ship || gerr "scripts/tasklint.sh ship failed (settle open assumptions; autopilot needs a PASS plan verdict)"
+fi
+
+# 4f. The documentation question set is well formed and its sources exist
+# (docs/procedures/doc-eval.md).
+./scripts/doc-eval.sh check || gerr "scripts/doc-eval.sh check failed"
+
+# 4g. The template's own scripts are tested (docs/procedures/tests.md), in
 # every mode, whenever the tests exist.
 if [[ -d tests/template ]]; then
   ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+fi
+
+# 4h. The "- Template: <url> <ref>" line names the last recorded template
+# sync (docs/procedures/upstream.md). Offline; nothing to check in template
+# mode; skipped where the project does not carry the sync script.
+if [[ -f scripts/template-sync.sh ]]; then
+  ./scripts/template-sync.sh --status || gerr "scripts/template-sync.sh --status failed (fix the - Template: line in AGENTS.md)"
 fi
 
 # Step 5: template-mode gate. Before start runs there is no stack to
@@ -194,6 +231,17 @@ if [[ ! -f .start-done ]]; then
     docs/profiles/hardware-pcb/CHECKS.md
     docs/profiles/data-analysis/PROFILE.md
     scripts/lessons.sh scripts/taskgraph.sh scripts/template-sync.sh
+    scripts/template-release.sh scripts/fleet.sh
+    .claude/skills/template-update/SKILL.md .agents/skills/template-update/SKILL.md
+    tests/template/test_template_release.sh tests/template/test_fleet.sh
+    scripts/dream.sh scripts/dream/dream.py scripts/dream/ruff.toml
+    tests/template/test_dream.sh docs/procedures/dream.md
+    docs/library/ruff.toml docs/profiles/ruff.toml
+    tests/template/test_selftest.sh tests/template/fixtures/fake-ruff.sh
+    .claude/agents/dreamer.md .codex/agents/dreamer.toml
+    scripts/dream/taste.py tests/template/test_taste.sh
+    .claude/agents/taste-dreamer.md .codex/agents/taste-dreamer.toml
+    .claude/skills/dream/SKILL.md .agents/skills/dream/SKILL.md
     scripts/quickgate.sh scripts/selftest.sh
     tests/template/lib.sh tests/template/test_kernel_hash.sh
     tests/template/test_new_task.sh tests/template/test_lessons.sh
@@ -203,10 +251,16 @@ if [[ ! -f .start-done ]]; then
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
+    docs/decisions/0006-claude-code-hooks-enforce-the-destructive-action-rule-and-th.md
     docs/procedures/adr.md scripts/adr.sh scripts/worker-git-guard.sh
     .claude/skills/adr/SKILL.md .agents/skills/adr/SKILL.md
     tests/template/test_adr.sh tests/template/test_ci_watch.sh
     tests/template/test_worker_git_guard.sh
+    scripts/destructive-guard.sh scripts/stop-gate.sh scripts/tasklint.sh
+    scripts/doc-eval.sh docs/procedures/doc-eval.md tests/docs/questions.md
+    tests/template/test_destructive_guard.sh tests/template/test_stop_gate.sh
+    tests/template/test_tasklint.sh tests/template/test_doc_eval.sh
+    tests/template/test_session_context.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -218,8 +272,10 @@ if [[ ! -f .start-done ]]; then
   # 5d. Template placeholders intact; nothing pretends to be started.
   grep -q '{{FILLED_BY_START}}' AGENTS.md || terr "AGENTS.md lost its {{FILLED_BY_START}} placeholders"
   grep -q 'Status: TEMPLATE' AGENTS.md || terr "AGENTS.md lost its template status line"
-  # Escaped regex so this line cannot match itself, only the real placeholder.
-  grep -Eq '\{\{FORMAT_CHECK_FILLED_BY_START\}\}' scripts/check.sh || terr "check.sh lost its stack placeholders"
+  # The stack steps belong to each project's own scripts/stack-check.sh, so
+  # the template carries the hand-off and never a stack-check.sh of its own.
+  grep -q '\./scripts/stack-check\.sh ' scripts/check.sh || terr "check.sh lost its hand-off to scripts/stack-check.sh"
+  [[ ! -e scripts/stack-check.sh ]] || terr "scripts/stack-check.sh is project-owned; the template must not ship one"
   # TASK.md is valid in two states: the pristine template, or a live
   # in-progress task file. Both must carry a declared Budget (ADR-0002).
   grep -q '^## Budget' .work/TASK.md || terr ".work/TASK.md lost its Budget section"
@@ -272,10 +328,75 @@ if [[ ! -f .start-done ]]; then
     if [[ -n "$msg" ]]; then terr "$msg"; fi
   done < <(blueprint_parity docs/BLUEPRINT.md "${required[@]}")
 
+  # 5k. Template Python carries its own ruff contract. Projects that run
+  # "ruff check ." or "ruff format --check ." with stricter rules must not
+  # fail on synced template files, so every tracked .py lies under a folder
+  # below the root with its own ruff.toml (ruff uses the closest config; a
+  # root config is never synced), and the pinned ruff passes check and
+  # format --check there. format --check guards the folders' format exclusion.
+  # The same two runs repeat from a scratch root whose config selects every
+  # rule, so the folder config must win over a strict project config.
+  # Runner: ruff on PATH at exactly RUFF_PIN, else uvx, else pipx (network on
+  # first use; pinned by exact version since the template has no lockfile).
+  # Test hook: TEMPLATE_RUFF names the ruff command (the self-tests' fake).
+  RUFF_PIN="0.16.10"
+  ruff_dirs=()
+  while IFS= read -r f; do ruff_dirs+=("${f%/ruff.toml}"); done < <(git ls-files -- '*/ruff.toml')
+  while IFS= read -r p; do
+    covered=0
+    for d in "${ruff_dirs[@]+"${ruff_dirs[@]}"}"; do
+      if [[ "$p" == "$d/"* ]]; then covered=1; break; fi
+    done
+    (( covered )) || terr "$p is template Python outside a folder with its own ruff.toml; projects would lint it with their own rules (move it under such a folder)"
+  done < <(git ls-files -- '*.py')
+  if (( ${#ruff_dirs[@]} > 0 )); then
+    ruff_cmd=(); ruff_via=""
+    if [[ -n "${TEMPLATE_RUFF:-}" ]]; then
+      ruff_cmd=("$TEMPLATE_RUFF"); ruff_via="TEMPLATE_RUFF ($TEMPLATE_RUFF)"
+    elif command -v ruff >/dev/null 2>&1 && [[ "$(ruff --version 2>/dev/null || true)" == "ruff $RUFF_PIN" ]]; then
+      ruff_cmd=(ruff); ruff_via="ruff on PATH"
+    elif command -v uvx >/dev/null 2>&1; then
+      ruff_cmd=(uvx "ruff@$RUFF_PIN"); ruff_via="uvx"
+    elif command -v pipx >/dev/null 2>&1; then
+      ruff_cmd=(pipx run "ruff==$RUFF_PIN"); ruff_via="pipx"
+    fi
+    if (( ${#ruff_cmd[@]} == 0 )); then
+      terr "ruff $RUFF_PIN is needed for the template's Python (${ruff_dirs[*]}): install exactly that version, or uv (uvx) or pipx"
+    elif ! ruff_ver="$("${ruff_cmd[@]}" --version 2>&1)"; then
+      terr "could not run ruff $RUFF_PIN through $ruff_via: $ruff_ver"
+    else
+      echo "template ruff: $ruff_via, $ruff_ver"
+      "${ruff_cmd[@]}" check --no-cache --quiet "${ruff_dirs[@]}" \
+        || terr "ruff check failed on the template's Python (${ruff_dirs[*]})"
+      "${ruff_cmd[@]}" format --no-cache --check --quiet "${ruff_dirs[@]}" \
+        || terr "ruff format --check failed on the template's Python; keep the [format] exclude in each folder ruff.toml"
+      scratch="$(mktemp -d "${TMPDIR:-/tmp}/template-ruff.XXXXXX")"
+      printf '[tool.ruff]\nline-length = 40\n\n[tool.ruff.lint]\nselect = ["ALL"]\n' > "$scratch/pyproject.toml"
+      while IFS= read -r f; do
+        mkdir -p "$scratch/$(dirname "$f")" && cp "$f" "$scratch/$f"
+      done < <(git ls-files -- '*/ruff.toml' '*.py')
+      if ! (cd "$scratch" && "${ruff_cmd[@]}" check --no-cache --quiet "${ruff_dirs[@]}" \
+            && "${ruff_cmd[@]}" format --no-cache --check --quiet "${ruff_dirs[@]}"); then
+        terr "a strict project-root ruff config overrides a folder ruff.toml; projects would lint template Python with their own rules"
+      fi
+      case "$scratch" in */template-ruff.*) rm -rf -- "$scratch" ;; esac
+    fi
+  fi
+
+  # 5l. No script pipes into head. Under pipefail the writer dies with
+  # SIGPIPE (exit 141) once its output outlives head, which turned a long dash
+  # list into a crash; use sed -n '1,Np', which reads all its input. Not
+  # linted, same mechanism: an early-exit grep -q or grep -m on a pipe.
+  heads="$(git grep -nE '\|[[:space:]]*head([[:space:]]|$)' -- 'scripts/*.sh' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
+  if [[ -n "$heads" ]]; then
+    printf '%s\n' "$heads"
+    terr "a script pipes into head (exit 141 under pipefail on long output); use sed -n '1,Np'"
+  fi
+
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity; always section: style, memory caps, task graph, ADR format, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
   exit 0
 fi
 
@@ -284,22 +405,32 @@ if (( gfail )); then
   fail "the always checks found the problems listed above"
 fi
 
-# Stack gauntlet. The start procedure (docs/procedures/start.md,
-# step 3) replaces this block with real commands from the stack reference
-# table in docs/BLUEPRINT.md section 4. Every role is filled or the gap is
-# logged in START_REPORT.md with a reason. FULL_MUTATION=1 selects the full
-# mutation run instead of changed-files-only; QUICK=1 (the --quick lane) skips
-# steps 10 and 11 and must be honoured by the filled block. The start
-# procedure also deletes the final fail line below once the block is wired.
+# Stack gauntlet. The project's own steps live in scripts/stack-check.sh,
+# which the project owns and template-sync never touches, so this file stays
+# the template's and syncs without conflicts. The start procedure
+# (docs/procedures/start.md, step 3) writes stack-check.sh from the stack
+# reference table in docs/BLUEPRINT.md section 4, one role per step below;
+# every role is filled or its gap is logged in START_REPORT.md with a reason.
+# It receives --full-mutation (the full mutation run instead of changed files
+# only) and --quick (skip the build and the mutation run) and must honour
+# both. It runs under bash, so it needs no executable bit: a bit set on a
+# Windows checkout never reaches git, and CI would then refuse the file.
 #
-#  5. Format check           {{FORMAT_CHECK_FILLED_BY_START}}
-#  6. Typecheck              {{TYPECHECK_FILLED_BY_START}}
-#  7. Lint + boundary rules  {{LINT_FILLED_BY_START}}
-#  8. Tests                  {{TESTS_FILLED_BY_START}}
-#  9. Secret scan (gitleaks) {{GITLEAKS_FILLED_BY_START}}
-# 10. Production build       {{BUILD_FILLED_BY_START, or remove if no build}}
-# 11. Mutation testing       {{MUTATION_FILLED_BY_START, honor FULL_MUTATION}}
-# 12. CHANGELOG freshness    {{CHANGELOG_FRESHNESS_FILLED_BY_START:
-#     regenerate with git-cliff to a temp path and diff; fail on drift}}
+#   - Format check
+#   - Typecheck
+#   - Lint + boundary rules
+#   - Tests (with each adopted profile's gates and each installed tool's tests)
+#   - Secret scan (gitleaks)
+#   - Production build (when the project has one)
+#   - Mutation testing
+#   - CHANGELOG freshness: regenerate with git-cliff to a temp path and diff;
+#     fail on drift
 
-fail ".start-done exists but the stack gauntlet is not wired. Complete docs/procedures/start.md step 3, or remove .start-done."
+if [[ ! -f scripts/stack-check.sh ]]; then
+  fail ".start-done exists but scripts/stack-check.sh is missing. Write the stack steps there (docs/procedures/start.md step 3), or remove .start-done."
+fi
+stack_args=()
+if (( FULL_MUTATION )); then stack_args+=(--full-mutation); fi
+if (( QUICK )); then stack_args+=(--quick); fi
+bash ./scripts/stack-check.sh ${stack_args[@]+"${stack_args[@]}"} || fail "scripts/stack-check.sh failed"
+echo "check: OK (always section and scripts/stack-check.sh)"

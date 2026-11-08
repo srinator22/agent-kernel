@@ -39,3 +39,5 @@ tells you.
    items off, discovered items on, with reasons); move TASK.md to
    `.work/done/YYYY-MM-DD-<slug>.md`; reset `.work/TASK.md` from the
    template (scripts/new-task.sh embeds it).
+8. When `scripts/dream.sh due --offer` exits 0, ask the human whether to
+   start dreaming (`docs/procedures/dream.md`); on yes, follow it.
