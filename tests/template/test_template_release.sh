@@ -22,6 +22,7 @@ fresh_repo() {
 commit_file() { # path subject
   mkdir -p "$(dirname "$1")"
   echo "$2" >> "$1"
+  [[ "$1" == *.sh ]] && chmod +x "$1"
   git add -A >/dev/null 2>&1 && git commit -q -m "$2" >/dev/null 2>&1
 }
 rel() { run bash scripts/template-release.sh "$@"; }
@@ -65,7 +66,7 @@ commit_file scripts/core1.sh "feat: core change"
 commit_file docs/library/lib1.md "feat: library change"
 commit_file random/other.md "chore: other change"
 mkdir -p scripts docs/library
-echo a >> scripts/both.sh; echo b >> docs/library/both.md
+echo a >> scripts/both.sh; chmod +x scripts/both.sh; echo b >> docs/library/both.md
 git add -A >/dev/null 2>&1 && git commit -q -m "feat: both" >/dev/null 2>&1
 rel
 assert_rc "grouping dry run exits 0" 0

@@ -41,7 +41,7 @@ mkdir -p .work/jobs && echo run >> .work/jobs/qg.log
 echo "QG-OUTPUT-LINE"
 exit "${QG_RC:-0}"
 QG
-printf '#!/usr/bin/env bash\n# accepts --quick\n' > scripts/check.sh
+printf '#!/usr/bin/env bash\n# accepts --quick\n' > scripts/check.sh; chmod +x scripts/check.sh
 printf '.work/jobs/*\n' > .gitignore
 echo src > src.txt
 git add -A && git commit -q -m fixture
@@ -110,7 +110,7 @@ assert_rc "a wired lane that exits 2 is a real failure: block" 2
 assert_contains "the exit status is named" "scripts/quickgate.sh failed (exit 2)"
 unset QG_RC
 
-printf '#!/usr/bin/env bash\n# no quick lane here\n' > scripts/check.sh
+printf '#!/usr/bin/env bash\n# no quick lane here\n' > scripts/check.sh; chmod +x scripts/check.sh
 before="$(qg_runs)"
 stop
 assert_rc "no quick lane wired (check.sh lacks the quick flag): allow" 0

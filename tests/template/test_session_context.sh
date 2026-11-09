@@ -122,7 +122,7 @@ assert_rc "registers with no python on PATH: exits 0" 0
 assert_contains "no python: the summary still prints" "[session-context] Preferences: film, ui (4 rules, 3 Review)"
 case "$NOPY_ROOT" in */template-selftest.nopy.*) rm -rf "$NOPY_ROOT" ;; esac
 # The unwired hook warning.
-echo '#!/usr/bin/env bash' > scripts/feedback-log.sh
+echo '#!/usr/bin/env bash' > scripts/feedback-log.sh; chmod +x scripts/feedback-log.sh
 mkdir -p .claude
 echo '{}' > .claude/settings.json
 run bash scripts/session-context.sh

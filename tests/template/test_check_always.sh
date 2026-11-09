@@ -30,6 +30,7 @@ write_agents() {
 AG
 }
 
+sec_project() {
 # ---- project mode ----
 make_fixture
 cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
@@ -222,8 +223,11 @@ assert_rc "a misnumbered ADR fails project mode, even with --quick" 1
 assert_contains "the ADR failure is reported" "scripts/adr.sh check failed"
 assert_contains "the ADR problem is named" "number 0002 breaks the sequence"
 assert_not_contains "the stack block is not reached after an ADR failure" "$STACK_MSG"
+t_check_exec "project mode"
 t_cleanup
+}
 
+sec_selftest() {
 # ---- project mode with tests/template present: selftest runs in the always section ----
 make_fixture
 cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh selftest.sh
@@ -233,16 +237,21 @@ touch .start-done
 write_task
 mkdir -p tests/template
 printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+chmod +x tests/template/test_ok.sh
 commit_fixture
 run ./scripts/check.sh
 assert_contains "selftest runs in project mode when tests/template exists" "selftest: 1 passed, 0 failed, 0 quarantined (1 test files)"
 printf '#!/usr/bin/env bash\nexit 1\n' > tests/template/test_ok.sh
+chmod +x tests/template/test_ok.sh
 commit_fixture
 run ./scripts/check.sh --quick
 assert_rc "a failing selftest fails project mode, even with --quick" 1
 assert_contains "the selftest failure is reported" "scripts/selftest.sh failed"
+t_check_exec "project mode with tests/template"
 t_cleanup
+}
 
+sec_template() {
 # ---- template mode: a clean fixture still exits 0 ----
 make_fixture
 cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh tasklint.sh
@@ -385,8 +394,11 @@ commit_fixture
 run ./scripts/check.sh
 assert_rc "a drifted check.sh fixture fails template mode" 1
 assert_contains "the drift is named" "tests/template/fixtures/check.sh is not identical to scripts/check.sh"
+t_check_exec "template mode"
 t_cleanup
+}
 
+sec_started() {
 # ---- a started project: the template tree, check.sh wired to a stack, passes ----
 # A fact about the template's own tree, so it runs only in template mode. In a
 # started project this repository IS the started project, and its own
@@ -427,7 +439,17 @@ else
   assert_not_contains "the stack block is wired" "$STACK_MSG"
   assert_contains "the nested parity test says its real-tree case does not apply" "n/a  the real blueprint and required list agree: this repository is a started project"
   assert_contains "the nested check-always test says its started-project case does not apply" "n/a  a started project passes check.sh with tests/template kept: this repository is a started project"
+  t_check_exec "started project"
   t_cleanup
 fi
+}
+
+# The four sections build their own fixtures and share nothing, so they run
+# side by side; the slow check.sh runs in each overlap.
+t_parallel "project mode" sec_project
+t_parallel "project mode with tests/template" sec_selftest
+t_parallel "template mode" sec_template
+t_parallel "started project" sec_started
+t_parallel_wait
 
 t_finish

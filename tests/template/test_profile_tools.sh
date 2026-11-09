@@ -8,6 +8,13 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# Every shipped bash test runs with its own empty TMPDIR and must leave it
+# empty: a folder one of them creates and forgets would otherwise pile up in
+# the real temp dir (a bare mktemp -d in a test is the usual cause). The Python
+# folders keep the real TMPDIR: a native Windows Python cannot open an msys
+# /tmp path.
+make_fixture
+nleak=0
 cd "$T_ROOT" || exit 1
 PY=""
 command -v python3 >/dev/null 2>&1 && PY=python3
@@ -29,8 +36,10 @@ for d in "${dirs[@]}"; do
     fi
   fi
   for t in "$d"/test_*.sh; do
-    run bash "$t"
+    nleak=$((nleak + 1)); LEAK="$FIX/leak$nleak"; mkdir -p "$LEAK"
+    run env TMPDIR="$LEAK" bash "$t"
     assert_rc "bash test passes: $t" 0
+    assert_eq "bash test leaves no temp folder: $t" "" "$(ls -A "$LEAK")"
   done
 done
 

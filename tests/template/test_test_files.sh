@@ -51,4 +51,53 @@ else
   assert_eq "every tracked tests/template/*.sh is executable in git" "" "${nonexec% }"
 fi
 
+
+# t_check_exec: a script without the executable bit is named; an exempt path
+# is not. Git Bash on Windows reports a shebang script as executable whatever
+# its mode, so there the bit cannot be removed and the case does not apply.
+make_fixture
+printf '#!/usr/bin/env bash
+' > scripts/fine.sh; chmod +x scripts/fine.sh
+printf '#!/usr/bin/env bash
+' > scripts/plain.sh; chmod -x scripts/plain.sh
+mkdir -p tests/template
+printf '#!/usr/bin/env bash
+' > tests/template/test_plain.sh; chmod -x tests/template/test_plain.sh
+if [[ -x scripts/plain.sh ]]; then
+  t_na "t_check_exec names a script without the executable bit: this platform reports every shebang script as executable; covered by Linux CI"
+else
+  OUT="$( T_PASS=0; T_FAIL=0; t_check_exec "case" ; echo "fail=$T_FAIL" )"
+  assert_contains "t_check_exec fails a fixture holding non-executable scripts" "fail=1"
+  assert_contains "it names a scripts/ file" "scripts/plain.sh"
+  assert_contains "it names a tests/template file" "tests/template/test_plain.sh"
+  assert_not_contains "it does not name an executable script" "scripts/fine.sh"
+  OUT="$( T_PASS=0; T_FAIL=0; t_check_exec "case" scripts/plain.sh tests/template/test_plain.sh ; echo "fail=$T_FAIL" )"
+  assert_contains "exempt paths pass" "fail=0"
+  # the fixture's own end-of-test check must not fail on the deliberate misses
+  chmod +x scripts/plain.sh tests/template/test_plain.sh
+fi
+
+# t_parallel runs sections side by side: output in call order, counts added,
+# a failing section fails the test, and the helper folder does not outlive it.
+PARTMP="$FIX/partmp"
+mkdir -p "$PARTMP"
+cat > "$FIX/par.sh" <<PAR
+#!/usr/bin/env bash
+source "$T_ROOT/tests/template/lib.sh"
+sec_one() { make_fixture; t_ok "one first"; t_ok "one second"; }
+sec_two() { make_fixture; t_bad "two fails"; }
+t_parallel "one" sec_one
+t_parallel "two" sec_two
+t_parallel_wait
+t_ok "after the sections"
+t_finish
+PAR
+# T_EXEC_CHECK is off here: the counts asserted below are the sections' own.
+run env T_EXEC_CHECK= TMPDIR="$PARTMP" bash "$FIX/par.sh"
+assert_rc "a failing section fails the test" 1
+assert_contains "the counts of every section are added" "par.sh: 3 passed, 1 failed"
+assert_contains "a section's lines are kept" "ok   one second"
+assert_eq "sections print in call order" "yes" "$([[ "$OUT" == *"one first"*"two fails"*"after the sections"* ]] && echo yes || echo no)"
+assert_eq "sections and the helper folder leave nothing in TMPDIR" "" "$(ls -A "$PARTMP")"
+
 t_finish
