@@ -6,7 +6,8 @@
 #   status                                    last dream, due state, pending files
 #   hygiene [--memory-dir DIR]                memory file sizes, ages, dangling links
 #   scorecard                                 the owner's decisions on past proposals (read-only)
-#   taste digest|done|apply|check|sync ...    the cross-project taste pass (scripts/dream/taste.py)
+#   taste [--root R] digest|done|apply|check  the project taste pass: this project's sessions into its
+#                                             preference registers (scripts/dream/taste.py)
 # Exit codes: 0 ok / due; 1 not due; 2 usage error or no Python; 3 nothing to
 # dream (digest found no new signal and no new feedback line). Without Python, "due" prints
 # "dream: not due (python not found)" (nothing with --quiet) and exits 1.

@@ -1,46 +1,55 @@
-"""taste.py - learn the owner's tastes from every local project, for a personal
-profile the owner approves line by line.
+"""taste.py - learn the owner's tastes from this project's own sessions, as
+rows in the project's preference registers the owner approves line by line.
 
 Purpose: the taste pass of a dream (docs/procedures/dream.md). A model-free
-digest reduces every project's Claude Code transcripts, and the feedback notes
-in every project's auto-memory, to the owner's own preference signals; a
-read-only agent proposes numbered profile lines from it; "apply" writes only
-the numbers the owner approved.
+digest reduces this project's Claude Code transcripts, and the feedback notes
+in this project's auto-memory, to the owner's own preference signals; a
+read-only agent proposes numbered register lines from it; "apply" writes only
+the numbers the owner approved, through the one register writer
+(preferences.write_rows).
 
 Inputs: <projects>/<dir>/<session>.jsonl (top level only) under the default
-projects folder and every --projects-dir; <projects>/<dir>/memory/*.md notes
-whose type is feedback or user. A message counts only when dream.is_human says
-it holds the owner's own words.
-Outputs, all user-level and never inside a repository (apply and sync refuse
-a taste folder inside a git work tree):
-  <home>/.claude/taste/<area>.md   the profile: "# Title", a purpose line,
-                                   then "- [Tnnn] <line>" items
-  <home>/.claude/CLAUDE.md         a managed block of @taste/<area>.md imports
-  <codex>/AGENTS.md                a managed block holding the profile text
-  <home>/.claude/taste/.dream/     state.json (offsets, notes read, the
-                                   evidence pool, last pass), state.next.json
-                                   (pending until done), ledger.json (next id,
-                                   used signals, applied report numbers),
-                                   digest.md, reports/
-<home> is TASTE_HOME or the home folder; <codex> is <home>/.codex when
-TASTE_HOME is set, else CODEX_HOME or ~/.codex; the default projects folder is
-DREAM_PROJECTS_DIR or <home>/.claude/projects. DREAM_NOW pins "now".
+projects folder and every --projects-dir, kept only when the session's first
+cwd is this project (the root, its worktrees, the roots the project dream
+remembers, this pass's own remembered roots and every --match path, matched
+as dream.py matches them); <projects>/<main checkout slug>/memory/*.md notes
+whose type is feedback or user (dream.memory_dir). A message counts only when
+dream.is_human says it holds the owner's own words.
+Outputs:
+  <main checkout>/.work/dream/taste/   state.json (offsets, notes read, the
+      evidence pool, known roots, last pass), state.next.json (pending until
+      done), ledger.json (used signals, applied report numbers, the highest
+      register number written per file), digest.md, reports/. The folder is
+      gitignored and holds this computer's transcripts only.
+  <root>/docs/preferences/<area>.md   rows written by apply: ID, the rule, a
+      Source (the signal's date and the owner's quoted words from a cited P or
+      O signal, else "YYYY-MM-DD: inferred from sessions <ids>"), Check Review.
+Nothing is written under the home folder: not ~/.claude/taste, ~/.claude/CLAUDE.md
+or ~/.codex/AGENTS.md. The default projects folder is DREAM_PROJECTS_DIR or
+~/.claude/projects. DREAM_NOW pins "now".
 Signal kinds: P stated preference, O own words in a question answer,
 C correction, D a rejected action and the owner's next message, A a picked
 option, R a short reaction with the reply it answers, T a taste-topic
 sentence, F an auto-memory feedback or user note (model-written, so it never
 counts as a session of evidence). Ids are "t" plus hex of a hash of the kind
 and text, so the same signal keeps its id in every run.
+Report format: "## Proposals", then "N. add <area>: <line>", "N. revise <area>
+<ID>: <line>" or "N. remove <area> <ID>: <reason>", each with an indented
+"Evidence:" line of signal ids.
 Evidence rule (apply): a proposal cites a P or O signal, or non-F signals
-from two or more sessions. Caps: a profile line holds at most 160 characters
-after its id; all area files together hold at most 6000 bytes.
-Exit codes: 0 ok; 1 refused (validation, caps, check problems); 2 usage, a
-state or ledger of a newer format, a taste folder inside a git work tree, or a
-broken managed block; 3 the digest stopped early (too few fresh signals, or
-under --min-days since the last pass), after saving what it read to the pool.
-Dependencies: Python 3 standard library, git (work-tree guard; without git the
-guard cannot see a repository), dream.py beside this file. Assumption: a
-transcript line is complete only when it ends in a newline.
+from two or more sessions. Cap: a rule holds at most 160 characters. An add
+whose rule text already exists in any register adds no row but counts as
+applied. Apply refuses in template mode (no .start-done).
+Profile size: the digest's "profile:" line is the registers' session-start
+print (scripts/session-context.sh) against its 4000-byte cap, computed as the
+header line per area plus " ID rule" per row; approximate, the reader decides.
+Exit codes: 0 ok; 1 refused (validation, evidence, template mode, register
+check problems); 2 usage, or a state or ledger of a newer format; 3 the digest
+stopped early (too few fresh signals, or under --min-days since the last
+pass), after saving what it read to the pool.
+Dependencies: Python 3 standard library, git (worktrees, main checkout),
+dream.py and preferences.py beside this file. Assumption: a transcript line is
+complete only when it ends in a newline.
 """
 import argparse
 import datetime as dt
@@ -49,33 +58,24 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import dream as D  # noqa: E402  (shared helpers; the folder is not on sys.path under -I)
+import preferences as P  # noqa: E402  (the register writer and check)
 
-FORMAT = 1
+FORMAT = 2
 LINE_MAX = 160
-PROFILE_MAX = 6000
+PRINT_CAP = 4000
 PRUNE_DAYS = 180
 SENT_LIMIT = 300
 RE_LIMIT = 160
 REACTION_MAX = 120
+CWD_SCAN_LINES = 200
 MAX_P, MAX_T = 8, 3
 PRIORITY = {"P": 0, "O": 0, "C": 1, "D": 1, "A": 2, "R": 2, "T": 3, "F": 3}
 EXPLICIT = ("P", "O")
-AREAS = [
-    ("communication", "Communication", "How to talk to me: tone, length, structure, what to lead with."),
-    ("writing", "Writing", "How I like text written: wording, style, punctuation."),
-    ("design", "Design", "Visual and interface design taste."),
-    ("art", "Art", "Art taste: styles, palettes, composition."),
-    ("code", "Code", "How I like code written and organised, beyond each repository's own rules."),
-    ("working", "Working style", "How to work with me: when to ask, how much autonomy, how much process."),
-]
-BEGIN = "<!-- taste:begin - managed by scripts/dream.sh taste; edit the files in ~/.claude/taste -->"
-BEGIN_KEY = "<!-- taste:begin"
-END = "<!-- taste:end -->"
 KIND_ORDER = "POCDARTF"
 KINDS = ("Kinds: P stated preference, O own words in an answer, C correction, D rejected action and "
          "the next message, A picked option, R reaction (re: the reply), T taste topic, "
@@ -106,12 +106,14 @@ REACTION = re.compile(
 TAG_BLOCK = re.compile(r"<([A-Za-z][\w-]*)(\s[^>]*)?>.*?</\1\s*>", re.S)
 IMAGE = re.compile(r"\[Image[^\]]*\]")
 SENT_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
-ID_LINE = re.compile(r"^- \[(T\d{3,})\] (.*)$")
+AREA = r"[a-z][a-z0-9-]{0,23}"
+RULE_ID = r"\S+?-\d+"
 ITEM = re.compile(r"^(\d+)\.\s+(.*\S)\s*$")
-ADD = re.compile(r"^add\s+([a-z][a-z0-9-]{0,23}):\s+(.+)$")
-REVISE = re.compile(r"^revise\s+(T\d{3,})\s+([a-z][a-z0-9-]{0,23}):\s+(.+)$")
-REMOVE = re.compile(r"^remove\s+(T\d{3,})(:.*)?$")
+ADD = re.compile(r"^add\s+(%s):\s+(.+)$" % AREA)
+REVISE = re.compile(r"^revise\s+(%s)\s+(%s):\s+(.+)$" % (AREA, RULE_ID))
+REMOVE = re.compile(r"^remove\s+(%s)\s+(%s)(:.*)?$" % (AREA, RULE_ID))
 SIG_ID = re.compile(r"\bt[0-9a-f]{6,12}\b")
+CWD_RE = re.compile(rb'"cwd":\s*("(?:[^"\\]|\\.)*")')
 
 
 def die(msg, code=2):
@@ -121,24 +123,30 @@ def die(msg, code=2):
 
 class Ctx:
     def __init__(self, a):
-        th = os.environ.get("TASTE_HOME")
-        self.home = os.path.abspath(th) if th else os.path.expanduser("~")
-        self.taste = os.path.join(self.home, ".claude", "taste")
-        self.state_dir = os.path.join(self.taste, ".dream")
-        self.claude_md = os.path.join(self.home, ".claude", "CLAUDE.md")
-        codex = os.path.join(self.home, ".codex") if th else (
-            os.environ.get("CODEX_HOME") or os.path.join(self.home, ".codex"))
-        self.codex_md = os.path.join(codex, "AGENTS.md")
-        default = os.environ.get("DREAM_PROJECTS_DIR") or os.path.join(self.home, ".claude", "projects")
+        here = os.path.dirname(os.path.realpath(__file__))
+        self.root = os.path.realpath(a.root) if a.root else os.path.dirname(os.path.dirname(here))
+        self.main = D.main_worktree(self.root)
+        self.state_dir = os.path.join(self.main, ".work", "dream", "taste")
+        default = os.environ.get("DREAM_PROJECTS_DIR") or os.path.join(os.path.expanduser("~"), ".claude", "projects")
         self.projects = []
         for p in [default] + list(getattr(a, "projects_dir", None) or []):
             p = os.path.abspath(p)
             if p not in self.projects:
                 self.projects.append(p)
+        self.match = [D.norm(os.path.abspath(m)) for m in getattr(a, "match", None) or []]
         self.now = D.now_utc()
 
     def sp(self, name):
         return os.path.join(self.state_dir, name)
+
+    def dream_roots(self):
+        """Roots the project dream remembers (its state.json), if it has any."""
+        try:
+            with open(os.path.join(self.main, ".work", "dream", "state.json"), encoding="utf-8") as f:
+                roots = json.load(f).get("known_roots", [])
+        except (OSError, ValueError, AttributeError):
+            return []
+        return [D.norm(r) for r in roots if isinstance(r, str)]
 
 
 def load_json(path, defaults):
@@ -163,12 +171,12 @@ def load_json(path, defaults):
 
 def load_state(c, name="state.json"):
     return load_json(c.sp(name), {"files": dict, "memory": dict, "pool": dict, "last_pass": None,
-                                  "passes": list, "history_seen": 0})
+                                  "passes": list, "history_seen": 0, "known_roots": list})
 
 
 def load_ledger(c):
-    return load_json(c.sp("ledger.json"), {"next_id": 1, "used": dict, "applied": list,
-                                           "history": list, "seen": dict})
+    return load_json(c.sp("ledger.json"), {"used": dict, "applied": list, "history": list,
+                                           "seen": dict, "high": dict})
 
 
 def pending_or_state(c):
@@ -176,40 +184,11 @@ def pending_or_state(c):
     return load_state(c, "state.next.json") if os.path.isfile(nxt) else load_state(c)
 
 
-def git_env():
-    # A git hook exports GIT_DIR and friends; they would make every folder look like that repository.
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-
-
-def inside_git(path):
-    p = os.path.abspath(path)
-    while not os.path.isdir(p):
-        parent = os.path.dirname(p)
-        if parent == p:
-            return False
-        p = parent
-    # A .git entry counts even when git cannot read it (dubious ownership,
-    # a broken repository), so the guard never fails open on a git error.
-    up = p
-    while True:
-        if os.path.lexists(os.path.join(up, ".git")):
-            return True
-        parent = os.path.dirname(up)
-        if parent == up:
-            break
-        up = parent
-    try:
-        r = subprocess.run(["git", "-C", p, "rev-parse", "--is-inside-work-tree"],
-                           capture_output=True, text=True, timeout=10, env=git_env())
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return r.returncode == 0 and r.stdout.strip() == "true"
-
-
-def guard_git(c):
-    if inside_git(c.taste):
-        die("taste: %s is inside a git work tree; the profile must stay outside every repository "
-            "(set TASTE_HOME to a folder outside it)" % c.taste)
+def scope_roots(c, state):
+    """This project's roots: the checkout, its worktrees, remembered roots, --match."""
+    wts = D.Ctx.worktrees(SimpleNamespace(root=c.root))
+    roots = {D.norm(c.root)} | set(wts) | set(state["known_roots"]) | set(c.dream_roots()) | set(c.match)
+    return sorted(r for r in roots if r), wts
 
 
 # ---------------------------------------------------------------- signals
@@ -320,10 +299,36 @@ def project_name(cwd, folder):
     return folder
 
 
-def scan_transcripts(c, files, pool, stats):
+def first_cwd(path):
+    """The cwd of the first line that has one (a session belongs to the folder it started in)."""
+    try:
+        with open(path, "rb") as f:
+            for n, line in enumerate(f):
+                if n >= CWD_SCAN_LINES:
+                    break
+                m = CWD_RE.search(line)
+                if m:
+                    try:
+                        v = json.loads(m.group(1).decode("utf-8", errors="replace"))
+                    except ValueError:
+                        continue
+                    if isinstance(v, str) and v.strip():
+                        return v
+    except OSError:
+        pass
+    return None
+
+
+def scan_transcripts(c, files, pool, stats, roots):
     for pdir in c.projects:
         for path in sorted(glob.glob(os.path.join(pdir, "*", "*.jsonl"))):
-            ent = files.setdefault(os.path.abspath(path), {"offset": 0})
+            key = os.path.abspath(path)
+            ent = files.get(key)
+            cwd = (ent or {}).get("cwd") or first_cwd(path)
+            if not D.cwd_match(cwd, roots):
+                continue  # another project's session: never read, never kept
+            ent = files.setdefault(key, {"offset": 0})
+            ent["cwd"] = cwd
             off = ent.get("offset", 0)
             try:
                 size = os.path.getsize(path)
@@ -407,8 +412,10 @@ def scan_transcripts(c, files, pool, stats):
 
 
 def scan_notes(c, memory, pool, stats):
+    """Feedback and user notes from this project's auto-memory folder only."""
     for pdir in c.projects:
-        for path in sorted(glob.glob(os.path.join(pdir, "*", "memory", "*.md"))):
+        mdir = D.memory_dir(SimpleNamespace(projects=pdir, root=c.root))
+        for path in sorted(glob.glob(os.path.join(mdir, "*.md"))):
             if os.path.basename(path).lower() == "memory.md":
                 continue
             try:
@@ -463,126 +470,37 @@ def ordered(items):
     out.sort(key=lambda x: PRIORITY[x[1]["kind"]])  # stable: newest first inside a kind group
     return out
 
+# ---------------------------------------------------------------- registers
 
-# ---------------------------------------------------------------- profile
-
-def area_meta(area):
-    for slug, title, purpose in AREAS:
-        if slug == area:
-            return title, purpose
-    return area.replace("-", " ").capitalize(), "Learned preferences: %s." % area.replace("-", " ")
-
-
-def area_order(areas):
-    known = [a for a, _, _ in AREAS if a in areas]
-    return known + sorted(a for a in areas if a not in known)
+def reg_rules(c):
+    """[(area, ID, rule text)] of the project's registers, in file order."""
+    out = []
+    for key, text in D.register_rules(c.root):
+        area, rid = key.split(":", 1)
+        out.append((area, rid, text))
+    return out
 
 
-def load_profile(c):
-    prof = {}
-    for p in glob.glob(os.path.join(c.taste, "*.md")):
-        with open(p, encoding="utf-8", errors="replace") as f:
-            prof[os.path.splitext(os.path.basename(p))[0]] = f.read().splitlines()
-    return prof
+def print_bytes(rules):
+    """Approximate size of the session-start print: a header line per area and
+    " ID rule" per row, in bytes (scripts/session-context.sh is the reader)."""
+    areas, total = [], 0
+    for area, rid, text in rules:
+        if area not in areas:
+            areas.append(area)
+            total += len(("[session-context] Preferences (%s):\n" % area).encode("utf-8"))
+        total += len((" %s %s" % (rid, text)).encode("utf-8"))
+    return total
 
 
-def items(lines):
-    return [line for line in lines if line.startswith("- ")]
+def snapshot(c):
+    r = reg_rules(c)
+    return {"lines": len(r), "bytes": print_bytes(r), "areas": len({a for a, _, _ in r})}
 
 
-def profile_ids(prof):
-    ids = []
-    for area, lines in prof.items():
-        for i, line in enumerate(lines):
-            m = ID_LINE.match(line)
-            if m:
-                ids.append((m.group(1), area, i))
-    return ids
-
-
-def profile_bytes(prof):
-    return sum(len(("\n".join(lines) + "\n").encode("utf-8")) for lines in prof.values())
-
-
-def next_id(prof, ledger):
-    top = max([int(t[1:]) for t, _, _ in profile_ids(prof)] or [0])
-    return max(ledger.get("next_id", 1), top + 1)
-
-
-def cap_problems(prof):
-    probs = []
-    for area in area_order(prof):
-        for i, line in enumerate(prof[area], 1):
-            if line.startswith("- "):
-                m = ID_LINE.match(line)
-                text = m.group(2) if m else line[2:]
-                if len(text) > LINE_MAX:
-                    probs.append("taste: %s.md:%d: line is %d characters (max %d characters)"
-                                 % (area, i, len(text), LINE_MAX))
-    total = profile_bytes(prof)
-    if total > PROFILE_MAX:
-        probs.append("taste: the profile is %d bytes (max %d); merge or remove lines" % (total, PROFILE_MAX))
-    return probs
-
-
-def import_block(prof):
-    return BEGIN + "\n" + "".join("@taste/%s.md\n" % a for a in area_order(prof)) + END + "\n"
-
-
-def codex_block(prof):
-    body = "\n\n".join("\n".join(prof[a]).rstrip("\n") for a in area_order(prof))
-    return BEGIN + "\n# Personal taste profile\n\n" + (body + "\n" if body else "") + END + "\n"
-
-
-def with_block(path, block):
-    """The file's text with the managed block replaced or appended, and its old text (None if absent)."""
-    try:
-        with open(path, encoding="utf-8", newline="") as f:
-            old = f.read()
-    except FileNotFoundError:
-        return block, None
-    b, e = old.count(BEGIN_KEY), old.count(END)
-    if b == 0 and e == 0:
-        if not old:
-            return block, old
-        return old + ("" if old.endswith("\n") else "\n") + "\n" + block, old
-    if b != 1 or e != 1 or old.index(END) < old.index(BEGIN_KEY):
-        die("taste: %s has a broken taste block (%d begin, %d end markers); fix it by hand" % (path, b, e))
-    i = old.index(BEGIN_KEY)
-    j = old.index(END, i) + len(END)
-    if old.startswith("\r\n", j):
-        j += 2
-    elif old.startswith("\n", j):
-        j += 1
-    return old[:i] + block + old[j:], old
-
-
-def write_text(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(text)
-    os.replace(tmp, path)
-
-
-def sync_blocks(c, prof):
-    changed = []
-    for path, block in ((c.claude_md, import_block(prof)), (c.codex_md, codex_block(prof))):
-        new, old = with_block(path, block)
-        if new != old:
-            write_text(path, new)
-            changed.append(path)
-    return changed
-
-
-def write_profile(c, before, after):
-    for area in set(before) | set(after):
-        path = os.path.join(c.taste, area + ".md")
-        if area not in after:
-            if os.path.exists(path):
-                os.remove(path)
-        elif after[area] != before.get(area):
-            write_text(path, "\n".join(after[area]) + "\n")
+def id_number(rid):
+    _, n = P._id_parts(rid)
+    return n or 0
 
 
 # ---------------------------------------------------------------- impact and outcome
@@ -601,36 +519,32 @@ def kind_counts(entries):
     return out
 
 
-def snapshot(prof):
-    return {"lines": sum(len(items(v)) for v in prof.values()), "bytes": profile_bytes(prof),
-            "areas": len(prof)}
-
-
-def impact_lines(state, ledger, prof, new):
+def impact_lines(c, state, ledger, new):
     """What changed since the last pass, from data already kept; candidates only, the agent judges."""
     out = ["", "## Impact since the last pass"]
     hist = ledger["history"][state.get("history_seen", 0):]
     out.append("profile changes: " + ("; ".join(change_text(h) for h in hist) if hist
                                       else "none since the last pass"))
-    ids = {t for t, _, _ in profile_ids(prof)}
+    rules = reg_rules(c)
+    keys = {"%s:%s" % (a, i) for a, i, _ in rules}
     again = {}
     for sid, tids in ledger["used"].items():
         e, base = state["pool"].get(sid), ledger["seen"].get(sid)
         if e and base is not None and e["n"] > base:
             for t in tids:
-                if t in ids:
+                if t in keys:
                     again.setdefault(t, []).append("%s +%d" % (sid, e["n"] - base))
     for t in sorted(again):
         out.append("%s seen again since applied: %s" % (t, ", ".join(again[t])))
-    for t, area, i in sorted(profile_ids(prof)):
-        w = D.words(ID_LINE.match(prof[area][i]).group(2))
+    for area, rid, text in sorted(rules):
+        w = D.words(text)
         hits = []
         for sid, e in new:
             common = w & D.words(e["text"])
             if len(common) >= 2:
                 hits.append("%s (%s)" % (sid, " ".join(sorted(common))))
         if hits:
-            out.append("%s shares words with %s" % (t, ", ".join(hits[:3])))
+            out.append("%s:%s shares words with %s" % (area, rid, ", ".join(hits[:3])))
     out.append("trend, fresh signals by kind per pass:")
     for p in state.get("passes", [])[-10:]:
         out.append("  %s: %s" % (p["date"][:10], D.fmt_counts(p["counts"], KIND_ORDER)))
@@ -644,8 +558,8 @@ def outcome_text(c, report, ledger, before):
     applied = sorted(int(k.rsplit("#", 1)[1]) for k in ledger["applied"] if k.rsplit("#", 1)[0] == rid)
     declined = sorted(n for n in props if n not in applied)
     hist = [h for h in ledger["history"] if h.get("report") == rid]
-    files = sorted({os.path.join(c.taste, h["area"] + ".md") for h in hist})
-    after = snapshot(load_profile(c))
+    files = sorted({"docs/preferences/%s.md" % h["area"] for h in hist})
+    after = snapshot(c)
     before = before or {}
     return "\n".join([
         "", "## Outcome %s" % c.now.strftime("%Y-%m-%d"),
@@ -653,8 +567,8 @@ def outcome_text(c, report, ledger, before):
         "Declined: %s" % (", ".join(map(str, declined)) or "none"),
         "Changes: %s" % ("; ".join(change_text(h) for h in hist) or "none"),
         "Files: %s" % (", ".join(files) or "none"),
-        "Profile: %s -> %d lines, %s -> %d of %d bytes, %s -> %d areas"
-        % (before.get("lines", "?"), after["lines"], before.get("bytes", "?"), after["bytes"], PROFILE_MAX,
+        "Profile: %s -> %d rules, %s -> %d of %d bytes, %s -> %d areas"
+        % (before.get("lines", "?"), after["lines"], before.get("bytes", "?"), after["bytes"], PRINT_CAP,
            before.get("areas", "?"), after["areas"]),
         ""])
 
@@ -666,8 +580,10 @@ def cmd_digest(c, a):
         die("taste: --max-bytes must be at least %d (got %d)" % (D.MIN_BYTES, a.max_bytes))
     state = load_state(c)
     ledger = load_ledger(c)
+    roots, wts = scope_roots(c, state)
+    state["known_roots"] = sorted(set(state["known_roots"]) | set(wts))
     stats = {"read": 0, "lines": 0, "bad": 0, "hits": 0, "notes": 0}
-    scan_transcripts(c, state["files"], state["pool"], stats)
+    scan_transcripts(c, state["files"], state["pool"], stats, roots)
     scan_notes(c, state["memory"], state["pool"], stats)
     pool, used = state["pool"], set(ledger["used"])
     cand = [(sid, e) for sid, e in pool.items() if sid not in used]
@@ -705,18 +621,19 @@ def cmd_digest(c, a):
         e["shown"] = e.get("shown", 0) + 1
         e["n_shown"] = e["n"]
 
-    prof = load_profile(c)
+    snap = snapshot(c)
     shown = kept_new + kept_old
     lines = [
         "# Taste digest",
-        "generated: %s  sources: %s" % (D.iso(c.now), "; ".join(c.projects)),
+        "generated: %s  project: %s  sources: %s" % (D.iso(c.now), c.main, "; ".join(c.projects)),
         "since: %s" % (state["last_pass"] or "the first taste pass"),
         "transcripts: %d with signals of %d read; new lines read: %d; malformed: %d; notes read: %d"
         % (stats["hits"], stats["read"], stats["lines"], stats["bad"], stats["notes"]),
         "signals: %d fresh and %d earlier shown of %d unused in the pool; %d dropped by the %d byte cap"
         % (len(kept_new), len(kept_old), len(cand), dropped, a.max_bytes),
-        "profile: %d of %d bytes; next id T%03d" % (profile_bytes(prof), PROFILE_MAX, next_id(prof, ledger)),
-    ] + impact_lines(state, ledger, prof, new) + [
+        "profile: %d of %d bytes in the session-start print; %d rules in %d areas"
+        % (snap["bytes"], PRINT_CAP, snap["lines"], snap["areas"]),
+    ] + impact_lines(c, state, ledger, new) + [
         "",
         "## Fresh signals",
         KINDS,
@@ -729,14 +646,13 @@ def cmd_digest(c, a):
         f.write("\n".join(lines) + "\n")
     state["history_seen"] = len(ledger["history"])
     state["this_pass"] = {"date": D.iso(c.now), "counts": kind_counts(new)}
-    state["snapshot"] = snapshot(prof)
+    state["snapshot"] = snap
     D.write_json(nxt, state)
     report = os.path.join(c.state_dir, "reports", "%s-report.md" % c.now.strftime("%Y-%m-%d"))
-    print("taste: digest %s: %d signals (%d fresh, %d earlier) from %d sessions in %d projects; "
+    print("taste: digest %s: %d signals (%d fresh, %d earlier) from %d sessions; "
           "%d bytes; %d new lines read; %d dropped by the cap"
           % (dpath, len(shown), len(kept_new), len(kept_old),
              len({s for _, e in shown for s in e["sessions"]}),
-             len({p for _, e in shown for p in e["projects"]}),
              os.path.getsize(dpath), stats["lines"], dropped))
     print("taste: save the agent's report as %s" % report)
     return 0
@@ -789,17 +705,7 @@ def parse_report(path):
             continue
         m = ITEM.match(line)
         if m:
-            head = m.group(2)
-            cur = {"head": head, "evidence": []}
-            ma, mr, mx = ADD.match(head), REVISE.match(head), REMOVE.match(head)
-            if ma:
-                cur.update(op="add", area=ma.group(1), text=ma.group(2).strip())
-            elif mr:
-                cur.update(op="revise", id=mr.group(1), area=mr.group(2), text=mr.group(3).strip())
-            elif mx:
-                cur.update(op="remove", id=mx.group(1))
-            else:
-                cur["op"] = None
+            cur = {"head": m.group(2), "evidence": []}
             num = int(m.group(1))
             if num in props:
                 die("taste: %s numbers proposal %d twice; fix the report before applying" % (path, num))
@@ -808,6 +714,20 @@ def parse_report(path):
             ev = re.match(r"\s+Evidence:\s*(.*)$", line)
             if ev:
                 cur["evidence"] += SIG_ID.findall(ev.group(1))
+            elif line.strip() and not re.match(r"\s+Why:", line):
+                # A wrapped proposal line continues the head; Why lines are commentary.
+                cur["head"] += " " + line.strip()
+    for cur in props.values():
+        head = cur["head"]
+        ma, mr, mx = ADD.match(head), REVISE.match(head), REMOVE.match(head)
+        if ma:
+            cur.update(op="add", area=ma.group(1), text=ma.group(2).strip())
+        elif mr:
+            cur.update(op="revise", area=mr.group(1), id=mr.group(2), text=mr.group(3).strip())
+        elif mx:
+            cur.update(op="remove", area=mx.group(1), id=mx.group(2))
+        else:
+            cur["op"] = None
     return props
 
 
@@ -830,16 +750,65 @@ def evidence_problem(num, p, pool):
     return None
 
 
+def owner_words(e):
+    """The owner's own part of a P or O signal; an O signal also quotes the question."""
+    t = e["text"]
+    for marker in ("-> own words: ", "-> note: "):
+        if marker in t:
+            t = t.split(marker, 1)[1]
+            break
+    return " ".join(t.replace('"', "'").split())
+
+
+def source_for(p, pool, now):
+    """(date, owner words or None, source text) for the signals a proposal cites."""
+    es = [pool[i] for i in p["evidence"]]
+    explicit = [e for e in es if e["kind"] in EXPLICIT]
+    if explicit:
+        e = explicit[0]
+        date = (e.get("last") or "")[:10] or now.strftime("%Y-%m-%d")
+        words = owner_words(e)
+        return date, words, '%s: "%s"' % (date, words)
+    real = [e for e in es if e["kind"] != "F"]
+    date = max([(e.get("last") or "")[:10] for e in real] or [""]) or now.strftime("%Y-%m-%d")
+    sessions = sorted({s for e in real for s in e["sessions"]})
+    inferred = "inferred from sessions %s" % ", ".join(sessions)
+    return date, inferred, "%s: %s" % (date, inferred)
+
+
+def snapshot_files(c, areas):
+    """Bytes (or None when absent) of each register file an apply may touch."""
+    out = {}
+    for area in areas:
+        path = os.path.join(c.root, "docs", "preferences", area + ".md")
+        try:
+            with open(path, "rb") as f:
+                out[path] = f.read()
+        except FileNotFoundError:
+            out[path] = None
+    return out
+
+
+def restore_files(saved):
+    for path, data in saved.items():
+        if data is None:
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            with open(path, "wb") as f:
+                f.write(data)
+
+
 def cmd_apply(c, a):
-    guard_git(c)
+    if not os.path.exists(os.path.join(c.root, ".start-done")):
+        print("taste: template mode (no .start-done): register rows are written only in a started "
+              "project; nothing written", file=sys.stderr)
+        return 1
     ledger = load_ledger(c)
     pool = pending_or_state(c)["pool"]
     props = parse_report(a.report)
     rid = os.path.basename(a.report)
-    before = load_profile(c)
-    prof = {k: list(v) for k, v in before.items()}
-    nid = next_id(prof, ledger)
-    problems, notes, uses, done_keys, hist = [], [], {}, [], []
+    problems, todo = [], []
     for i, num in enumerate(a.numbers):
         if num in a.numbers[:i]:
             problems.append("taste: proposal %d is approved twice" % num)
@@ -850,125 +819,113 @@ def cmd_apply(c, a):
             problems.append("taste: the report has no proposal %d" % num)
             continue
         if key in ledger["applied"]:
-            notes.append("taste: proposal %d of %s already applied" % (num, rid))
+            print("taste: proposal %d of %s already applied" % (num, rid))
             continue
         if not p["op"]:
             problems.append("taste: proposal %d is malformed: %s (expected 'add <area>: <line>', "
-                            "'revise Tnnn <area>: <line>' or 'remove Tnnn: <reason>')" % (num, p["head"]))
+                            "'revise <area> <ID>: <line>' or 'remove <area> <ID>: <reason>')" % (num, p["head"]))
             continue
         why = evidence_problem(num, p, pool)
         if why:
             problems.append(why)
             continue
-        where = {t: (ar, i) for t, ar, i in profile_ids(prof)}
-        if p["op"] in ("revise", "remove") and p["id"] not in where:
-            problems.append("taste: proposal %d: %s is not in the profile" % (num, p["id"]))
+        if p["op"] != "remove" and len(p["text"]) > LINE_MAX:
+            problems.append("taste: proposal %d: the rule is %d characters (max %d characters)"
+                            % (num, len(p["text"]), LINE_MAX))
             continue
-        if p["op"] == "revise" and where[p["id"]][0] == p["area"]:
-            ar, i = where[p["id"]]
-            prof[ar][i] = "- [%s] %s" % (p["id"], p["text"])
-            notes.append("taste: %s revised in %s" % (p["id"], ar))
-            hist.append({"report": rid, "num": num, "op": "revise", "id": p["id"], "area": ar})
-            for sid in p["evidence"]:
-                uses.setdefault(sid, set()).add(p["id"])
-            done_keys.append(key)
-            continue
-        if p["op"] in ("revise", "remove"):
-            ar, i = where[p["id"]]
-            del prof[ar][i]
-            if not items(prof[ar]):
-                del prof[ar]
-        if p["op"] == "remove":
-            notes.append("taste: %s removed" % p["id"])
-            hist.append({"report": rid, "num": num, "op": "remove", "id": p["id"], "area": ar})
-        else:
-            tid = p["id"] if p["op"] == "revise" else "T%03d" % nid
-            if p["op"] == "add":
-                nid += 1
-            if p["area"] not in prof:
-                title, purpose = area_meta(p["area"])
-                prof[p["area"]] = ["# " + title, purpose, ""]
-            prof[p["area"]].append("- [%s] %s" % (tid, p["text"]))
-            notes.append("taste: %s %s in %s" % (tid, "added" if p["op"] == "add" else "revised", p["area"]))
-            hist.append({"report": rid, "num": num, "op": p["op"], "id": tid, "area": p["area"]})
-            for sid in p["evidence"]:
-                uses.setdefault(sid, set()).add(tid)
-        done_keys.append(key)
-    problems += cap_problems(prof) if done_keys else []
+        todo.append((num, key, p))
     if problems:
         for m in problems:
             print(m, file=sys.stderr)
         print("taste: nothing written", file=sys.stderr)
         return 1
+
+    saved = snapshot_files(c, {p["area"] for _, _, p in todo})
+    notes, uses, done_keys, hist = [], {}, [], []
+    high = dict(ledger["high"])
+    try:
+        for num, key, p in todo:
+            area = p["area"]
+            warns = []
+            if p["op"] == "add":
+                date, _, source = source_for(p, pool, c.now)
+                res = P.write_rows(c.root, area, [{"rule": p["text"], "source": source, "check": "Review"}],
+                                   [], [], high.get(area, 0), warn=warns.append)
+                if res["added"]:
+                    tid = res["added"][0]
+                    high[area] = max(high.get(area, 0), id_number(tid))
+                    notes.append("taste: %s added in %s" % (tid, area))
+                    hist.append({"report": rid, "num": num, "op": "add", "id": tid, "area": area})
+                    use = "%s:%s" % (area, tid)
+                else:
+                    use = res["skipped"][0]["existing"]
+                    notes.append("taste: proposal %d is already a rule (%s); no row added" % (num, use))
+            elif p["op"] == "revise":
+                date, words, _ = source_for(p, pool, c.now)
+                P.write_rows(c.root, area, [], [{"id": p["id"], "rule": p["text"], "words": words, "date": date}],
+                             [], high.get(area, 0), warn=warns.append)
+                tid = p["id"]
+                notes.append("taste: %s revised in %s" % (tid, area))
+                hist.append({"report": rid, "num": num, "op": "revise", "id": tid, "area": area})
+                use = "%s:%s" % (area, tid)
+            else:
+                P.write_rows(c.root, area, [], [], [{"id": p["id"]}], high.get(area, 0), warn=warns.append)
+                notes.append("taste: %s removed from %s" % (p["id"], area))
+                hist.append({"report": rid, "num": num, "op": "remove", "id": p["id"], "area": area})
+                use = None
+            notes += ["taste: warning: " + w for w in warns]
+            if use:
+                for sid in p["evidence"]:
+                    uses.setdefault(sid, set()).add(use)
+            done_keys.append(key)
+    except P.PrefError as e:
+        restore_files(saved)
+        print("taste: %s" % e, file=sys.stderr)
+        print("taste: nothing written", file=sys.stderr)
+        return 1
     if done_keys:
-        write_profile(c, before, prof)
         for sid, tids in uses.items():
             ledger["used"][sid] = sorted(set(ledger["used"].get(sid, [])) | tids)
-        ledger["next_id"] = nid
+            ledger["seen"][sid] = pool[sid]["n"]
+        ledger["high"] = high
         ledger["applied"] += done_keys
         ledger["history"] += [dict(h, date=D.iso(c.now)) for h in hist]
-        for sid in uses:
-            ledger["seen"][sid] = pool[sid]["n"]
         D.write_json(c.sp("ledger.json"), ledger)
-        sync_blocks(c, prof)
     for m in notes:
         print(m)
-    print("taste: profile %d of %d bytes in %d areas; imports in %s; Codex copy in %s"
-          % (profile_bytes(prof), PROFILE_MAX, len(prof), c.claude_md, c.codex_md))
-    return 0
-
-
-def cmd_sync(c, a):
-    guard_git(c)
-    prof = load_profile(c)
-    probs = cap_problems(prof)
-    if probs:
-        for m in probs:
-            print(m, file=sys.stderr)
-        return 1
-    changed = sync_blocks(c, prof)
-    print("taste: synced %d areas (%s)" % (len(prof), ", ".join(changed) if changed else "already current"))
+    snap = snapshot(c)
+    print("taste: %d rules in %d areas; %d of %d bytes in the session-start print"
+          % (snap["lines"], snap["areas"], snap["bytes"], PRINT_CAP))
     return 0
 
 
 def cmd_check(c, a):
-    problems = []
     load_state(c)
-    load_ledger(c)
-    if inside_git(c.taste):
-        problems.append("taste: %s is inside a git work tree; the profile must stay outside every repository"
-                        % c.taste)
-    prof = load_profile(c)
-    problems += cap_problems(prof)
-    seen = {}
-    for t, area, i in profile_ids(prof):
-        if t in seen:
-            problems.append("taste: %s appears twice (%s.md and %s.md)" % (t, seen[t], area))
-        seen[t] = area
-    for path, block in ((c.claude_md, import_block(prof)), (c.codex_md, codex_block(prof))):
-        try:
-            with open(path, encoding="utf-8", newline="") as f:
-                current = f.read()
-        except FileNotFoundError:
-            current = ""
-        if not prof and BEGIN_KEY not in current:
-            continue  # no profile yet and no block: nothing to keep current
-        if block not in current:
-            problems.append("taste: %s: the taste block is out of date; run scripts/dream.sh taste sync" % path)
+    ledger = load_ledger(c)
+    problems = []
+    for area, n in ledger["high"].items():
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            problems.append("taste: ledger.json: the highest number for %s is not a whole number" % area)
     if problems:
         for m in problems:
             print(m)
         return 1
-    n = sum(len(items(v)) for v in prof.values())
-    print("taste: OK (%d lines in %d areas, %d of %d bytes)" % (n, len(prof), profile_bytes(prof), PROFILE_MAX))
+    rc = P.main(["--root", c.root])
+    if rc:
+        return rc
+    snap = snapshot(c)
+    print("taste: OK (%d rules in %d areas, %d of %d bytes in the session-start print)"
+          % (snap["lines"], snap["areas"], snap["bytes"], PRINT_CAP))
     return 0
 
 
 def main():
     ap = argparse.ArgumentParser(prog="dream.sh taste", description=__doc__.split("\n")[0])
+    ap.add_argument("--root", help="the project (default: the repository this script is in)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("digest")
     d.add_argument("--projects-dir", action="append", default=[])
+    d.add_argument("--match", action="append", default=[], help="count sessions started under this path")
     d.add_argument("--max-bytes", type=int, default=40000)
     d.add_argument("--min-signals", type=int, default=5)
     d.add_argument("--min-days", type=int, default=7)
@@ -979,11 +936,10 @@ def main():
     p.add_argument("--report", required=True)
     p.add_argument("numbers", nargs="+", type=int)
     sub.add_parser("check")
-    sub.add_parser("sync")
     a = ap.parse_args()
     c = Ctx(a)
     sys.exit({"digest": cmd_digest, "done": cmd_done, "apply": cmd_apply,
-              "check": cmd_check, "sync": cmd_sync}[a.cmd](c, a))
+              "check": cmd_check}[a.cmd](c, a))
 
 
 if __name__ == "__main__":

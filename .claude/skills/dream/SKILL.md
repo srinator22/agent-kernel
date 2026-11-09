@@ -4,5 +4,6 @@ description: Work is done and a dream is due - consolidate this repository's mem
 ---
 
 Follow docs/procedures/dream.md exactly; with the argument taste, run only
-its Taste pass. The dream only proposes; nothing in memory or the taste
-profile changes until the human approves numbered items.
+its Taste pass, which learns this project's taste from its own sessions
+into docs/preferences/. The dream only proposes; nothing in memory or the
+preference registers changes until the human approves numbered items.
