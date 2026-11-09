@@ -108,6 +108,12 @@ push_filters() {
     {
       ind = indent(line); body = substr(line, ind + 1)
       if (ind == 0) {
+        # YAML allows the list of events at the same column as "on:" itself:
+        # "on:" then "- push". Treat it as the list-form entries below.
+        if (inon && body ~ /^- /) {
+          if (unq(substr(body, 3)) == "push") pushseen = 1
+          listform = 1; next
+        }
         inon = 0
         if (body ~ /^["\047]?on["\047]?:/) {
           found = 1; v = body; sub(/^[^:]*:[ \t]*/, "", v)

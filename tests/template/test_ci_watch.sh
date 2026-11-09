@@ -238,4 +238,21 @@ run ./scripts/ci-watch.sh --timeout 0
 assert_rc "with no workflow files there is no confident derivation, so no checks is a timeout" 3
 assert_not_contains "nothing-to-watch is not claimed without a derivation" "nothing to watch"
 
+# ---- an on: list that starts at column 0 (YAML allows "on:" then "- push") ----
+t_cleanup
+make_fixture
+git checkout -q -b work
+cp_script ci-watch.sh
+put $W/col0.yml "on:" "- push" "- pull_request" "jobs: {}"
+put $W/col0pr.yml "on:" "- pull_request" "jobs: {}"
+put $W/col0q.yml "on:" "- 'push'  # quoted, commented" "jobs: {}"
+git add -A && git commit -q -m root
+put src/a.c "int a;"
+git add -A && git commit -q -m src
+run ./scripts/ci-watch.sh --plan
+assert_contains "a column-0 on: list with push is expected" " $W/col0.yml"
+assert_contains "a quoted column-0 push is expected" " $W/col0q.yml"
+assert_contains "a column-0 on: list without push is skipped" "$W/col0pr.yml not expected: no push trigger"
+assert_not_contains "a column-0 push list is not read as no push trigger" "$W/col0.yml not expected"
+
 t_finish

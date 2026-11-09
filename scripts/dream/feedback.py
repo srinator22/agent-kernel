@@ -141,9 +141,11 @@ def task_title(root):
 
 
 def branch_of(root):
+    # 1 s: the hook has a 5 s budget and a slow git must not push it past, which
+    # would drop the line; "-" is the logged answer for a branch not known in time.
     try:
         r = subprocess.run(["git", "-C", root, "symbolic-ref", "--short", "HEAD"],
-                           capture_output=True, text=True, timeout=3)
+                           capture_output=True, text=True, timeout=1)
     except (OSError, subprocess.SubprocessError):
         return "-"
     return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "-"

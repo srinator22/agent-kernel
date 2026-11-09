@@ -136,9 +136,8 @@ one that proved unhelpful is archived with its reason.
 | engineering-reviewer | agent (read-only, inherit tier) | Fresh-context adversarial review of engineering claims: units, sources, evidence levels, recomputed numbers, registered assumptions, limitations; PASS or FAIL verdict | a hardware R&D journal project |
 | researcher | agent (standard tier) | Cited research on one bounded question; every fact has a URL, date and evidence level; writes only a dated report under `docs/research/` | a hardware R&D journal project |
 | writer | agent (standard tier) | Turns recorded engineering work into drafts under `articles/`; never fabricates; proposes style preferences for human approval | a hardware R&D journal project |
-| light-worker | agent (cheap tier) | One small, reversible, fully specified edit covered by existing checks; never commits; stops on any judgment call | a CAD add-in project |
+| light-worker | agent (cheap tier) | One small, reversible, fully specified edit covered by existing checks; never commits (its hook runs `scripts/worker-git-guard.sh` on Bash and PowerShell); stops on any judgment call | a CAD add-in project |
 | explorer | agent (Codex only) | Read-only exploration for Codex; the Claude counterpart is the core `explore` agent | a CAD add-in project |
-| adr | skill | Graduated to core on 2026-10-23 (lesson L010): `docs/procedures/adr.md`, the core `adr` skill and `scripts/adr.sh`. Do not adopt this copy; it is archived at the next maintenance pass (BACKLOG) | two prior projects (a software and data project, a personal project), merged |
 | article | skill | Drives the editorial pipeline from idea to approved; publishing needs explicit human permission | a hardware R&D journal project |
 | component | skill | Tracks a candidate part through candidate, selected, purchased, received, measured, tested with datasheet and evidence levels | a hardware R&D journal project |
 | decision | skill | Logs an engineering design decision before implementation with evidence chain, dependents and revalidation marks | a hardware R&D journal project |

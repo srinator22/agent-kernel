@@ -11,7 +11,7 @@ winpath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 
 setup() {
   make_fixture
-  cp_script feedback-log.sh dream/dream.py dream/feedback.py
+  cp_script feedback-log.sh find-python.sh dream/dream.py dream/feedback.py
   mkdir -p src
   git add scripts && git commit -q -m "chore: scripts"
   git checkout -q -b task/demo
@@ -222,5 +222,30 @@ check_kind approval "approved"
 check_kind message "run the tests again"
 check_kind message "what exactly does this do"
 check_kind message "please add a readme"
+
+check_kind correction "never do that, it is wrong"
+check_kind preference "always make sure it looks great"
+check_kind preference "i want it perfect"
+check_kind deferral "that is wrong, do it later"
+check_kind deferral "always do that later"
+
+# --- A6: the hook's own git call stays far inside the 5 s hook budget ---
+. "$T_ROOT/scripts/find-python.sh"; PYX="$PY"
+tmo="$("$PYX" -I - "$FIXW/scripts/dream" "$FIXW" <<'PYEOF' 2>&1
+import subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import feedback
+seen = []
+class R:
+    returncode, stdout = 0, "main"
+def fake(cmd, **kw):
+    seen.append(kw.get("timeout"))
+    return R()
+subprocess.run = fake
+feedback.branch_of(sys.argv[2])
+print(seen[0] if seen else "none")
+PYEOF
+)"
+if [[ "$tmo" =~ ^[0-9.]+$ ]] && awk -v t="$tmo" 'BEGIN{exit !(t<=1)}'; then t_ok "branch lookup git timeout is 1 s or less ($tmo)"; else t_bad "branch lookup git timeout is 1 s or less (got: $tmo)"; fi
 
 t_finish
