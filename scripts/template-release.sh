@@ -127,7 +127,9 @@ $synced_shas
 commit_kind() {
   local full
   full="$(git rev-parse "$1")"
-  printf '%s' "$synced_shas" | sed -n "s/^$full //p" | head -n 1
+  # The reader takes the first match but reads to the end: a reader that quits
+  # early can end the writer with SIGPIPE, which pipefail turns into a failure.
+  printf '%s' "$synced_shas" | awk -v s="$full" '$1 == s && !d { print $2; d = 1 }'
 }
 
 synced=""; library=""; other=""
