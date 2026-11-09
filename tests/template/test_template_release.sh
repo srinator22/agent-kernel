@@ -111,7 +111,7 @@ assert_contains "agents kernel block synced" "chore: agents kernel block"
 assert_not_contains "index below line 12 not in synced" "chore: index below header"
 assert_not_contains "agents decisions only not in synced" "chore: agents decisions only"
 
-# ---- --synced-commits prints "<sha> <kind>"; kind is the first of core, header, agents, catalog ----
+# ---- --synced-commits prints "<sha> <kind>"; kind is the first of agents, core, header, catalog ----
 fresh_repo
 put_full_agents "k" "r" "d"
 mkdir -p docs/lessons

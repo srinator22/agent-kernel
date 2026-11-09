@@ -20,7 +20,7 @@
 # the Template line is exactly "- Template: <url> <ref>" naming the last
 # recorded sync; exit 0 in template mode); --synced-commits <range> (the
 # commits of a range in this template repository that change the synced set,
-# as "<sha> <kind>" with kind core, header, agents or catalog, for fleet.sh
+# as "<sha> <kind>" with kind agents, core, header or catalog, for fleet.sh
 # and template-release.sh); --list-set (the synced set as
 # "<group> <path>" lines for other scripts).
 #
@@ -130,7 +130,7 @@ usage_text() {
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
-  echo "  --synced-commits <range>: '<sha> <kind>' per commit of a git range here that changes what projects receive; kind is core, header, agents or catalog (offline)"
+  echo "  --synced-commits <range>: '<sha> <kind>' per commit of a git range here that changes what projects receive; kind is agents, core, header or catalog (offline)"
   echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage or guard failure"
 }
 usage() { usage_text >&2; exit 2; }
@@ -346,14 +346,16 @@ suggest_baseline() {
 # --synced-commits <range>: the commits of a git range in this repository (the
 # template) that change what projects receive, one "<full sha> <kind>" line
 # each, in git log order. One definition for fleet.sh (counts every line) and
-# template-release.sh (core, header and agents are "synced"; catalog is the
+# template-release.sh (agents, core and header are "synced"; catalog is the
 # library section). A commit counts when it touches a core or catalog path; or
 # a header file whose first HEADER_LINES lines differ from its parent (a file
 # absent on one side differs); or AGENTS.md with a different KERNEL block or
 # "## Rules index" section (CR stripped). The kind is the first that applies in
-# the order core, header, agents, catalog, so a commit touching core and catalog
-# is core. Edits below a lessons header and AGENTS.md Project decisions are
-# project data and do not count.
+# the order agents, core, header, catalog, so a commit touching core and catalog
+# is core, and one that also changes the AGENTS.md kernel or rules index is
+# agents (agents first because session-context.sh prints its kernel sentence
+# only for that kind). Edits below a lessons header and AGENTS.md Project
+# decisions are project data and do not count.
 agents_synced_view() { # git object -> kernel block then rules index
   git -C "$ROOT" show "$1" 2>/dev/null | tr -d '\r' | awk '
     /<!-- KERNEL:BEGIN -->/ {k=1}
@@ -413,32 +415,34 @@ commit_kind() {
       esac
     done
   done
-  if [[ $core -eq 1 ]]; then KIND=core
+  if [[ $agents -eq 1 ]]; then KIND=agents
+  elif [[ $core -eq 1 ]]; then KIND=core
   elif [[ $header -eq 1 ]]; then KIND=header
-  elif [[ $agents -eq 1 ]]; then KIND=agents
   elif [[ $catalog -eq 1 ]]; then KIND=catalog
   fi
 }
 
-# One git log reads the whole range (marker line "@@@<sha>", then that commit's
-# files); only commits that touch a header file or AGENTS.md pay for the
-# git show comparisons inside commit_kind. --no-renames keeps one path per
-# change, as diff-tree -r reported it.
+# One git log reads the whole range (marker line "SOH then the sha", then that
+# commit's files; SOH is a control character git always quotes in a path, so no
+# path line can look like a marker); only commits that touch a header file or
+# AGENTS.md pay for the git show comparisons inside commit_kind. --no-renames
+# keeps one path per change, as diff-tree -r reported it.
 synced_commits() {
-  local range="$1" line sha="" out
+  local range="$1" line sha="" out mark
+  mark="$(printf '\001')"
   local files=()
-  if ! out="$(git -C "$ROOT" log --no-merges --no-renames --format=@@@%H --name-only "$range" 2>/dev/null)"; then
+  if ! out="$(git -C "$ROOT" -c core.quotePath=false -c log.showRoot=true log --no-merges --no-renames --format=%x01%H --name-only "$range" 2>/dev/null)"; then
     echo "template-sync: --synced-commits: cannot read the git range '$range' in $ROOT" >&2
     return 1
   fi
   load_set
   while IFS= read -r line; do
-    if [[ "$line" == @@@* ]]; then
+    if [[ "$line" == "$mark"* ]]; then
       if [[ -n "$sha" ]]; then
         commit_kind "$sha" ${files[@]+"${files[@]}"}
         if [[ -n "$KIND" ]]; then echo "$sha $KIND"; fi
       fi
-      sha="${line#@@@}"; files=()
+      sha="${line#"$mark"}"; files=()
     elif [[ -n "$line" ]]; then
       files+=("$line")
     fi

@@ -70,8 +70,9 @@ last), so check.sh itself stays the template's and syncs cleanly.
    the first 12 lines of a lessons file, or changes the AGENTS.md kernel block
    or rules index. The sync script's --synced-commits option prints one
    "<sha> <kind>" line per such commit, kind being the first that applies of
-   core, header, agents, catalog. fleet.sh counts every line; the release
-   notes list core, header and agents under synced and catalog under library.
+   agents, core, header, catalog (a commit that also changes the kernel or rules
+   index is agents). fleet.sh counts every line; the release
+   notes list agents, core and header under synced and catalog under library.
 
 ## Template sync (down)
 

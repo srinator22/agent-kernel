@@ -142,15 +142,18 @@ template_update_block() {
     # (core, catalog, lessons header and AGENTS.md kernel or rules index). The
     # count and the kernel sentence come from its lines; a failure prints
     # nothing because session start must never fail.
-    local lines
-    lines="$(bash scripts/template-sync.sh --synced-commits "$newest..HEAD" 2>/dev/null || true)"
+    local lines NL
+    NL="
+"
+    if lines="$(bash scripts/template-sync.sh --synced-commits "$newest..HEAD" 2>/dev/null)"; then :; else lines=""; fi
     n=0
     if [[ -n "$lines" ]]; then
       n="$(printf '%s\n' "$lines" | grep -c . || true)"
       [[ "$n" =~ ^[0-9]+$ ]] || n=0
     fi
     local differs=0
-    if printf '%s\n' "$lines" | grep -q ' agents$'; then differs=1; fi
+    # A bash match, not a pipe into grep -q: an early-exit reader under pipefail.
+    case "$NL$lines$NL" in *" agents$NL"*) differs=1 ;; esac
     if (( n > 0 )); then
       rest="[session-context] Template release pending: $n synced-set commits since $newest. Cut one with scripts/template-release.sh."
       if (( differs == 1 )); then rest="$rest The kernel or rules index changed."; fi

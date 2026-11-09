@@ -16,8 +16,8 @@
 # given, a KERNEL CHANGED line suggests --major.
 # Notes: each commit appears once. The classification is the kind that
 # "scripts/template-sync.sh --synced-commits <range>" prints per commit (the
-# first that applies in the order core, header, agents, catalog):
-#   1. core, header or agents -> "Synced to projects": it touches a core path;
+# first that applies in the order agents, core, header, catalog):
+#   1. agents, core or header -> "Synced to projects": it touches a core path;
 #      or a header path (lessons files, of which only the first HEADER_LINES
 #      lines sync) and those lines differ between <sha>^ and <sha> (a file
 #      absent on one side differs; a root commit compares against empty); or
@@ -115,8 +115,8 @@ if [ -z "$commits" ]; then
 fi
 
 # The commits that change what projects receive come from the sync script, the
-# one definition fleet.sh also uses: "<full sha> <kind>" lines, kind core,
-# header, agents or catalog. Core, header and agents are "Synced to projects";
+# one definition fleet.sh also uses: "<full sha> <kind>" lines, kind agents,
+# core, header or catalog. Agents, core and header are "Synced to projects";
 # catalog is "Library and roster". Newline-framed for the lookup below.
 synced_shas="$(bash scripts/template-sync.sh --synced-commits "$range")"
 synced_shas="

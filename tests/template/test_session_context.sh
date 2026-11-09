@@ -280,4 +280,14 @@ run bash scripts/session-context.sh
 assert_contains "a lessons header edit prints the line at count 1" "Template release pending: 1 synced-set commits since template-v0.3.0. Cut one with scripts/template-release.sh."
 assert_not_contains "a header-only change has no kernel sentence" "The kernel or rules index changed."
 
+# One commit that adds a core-path file AND edits the rules index must still
+# print the kernel sentence: the kind order puts agents first, so the core path
+# does not hide the AGENTS.md change.
+git tag template-v0.4.0
+echo "# x" > scripts/extra_core.sh
+sed -i 's/^- index two/- index three/' AGENTS.md
+git add -A; git commit -q -m "feat: core file and rules index together"
+run bash scripts/session-context.sh
+assert_contains "a core file plus rules index edit prints the kernel sentence at count 1" "Template release pending: 1 synced-set commits since template-v0.4.0. Cut one with scripts/template-release.sh. The kernel or rules index changed."
+
 t_finish
