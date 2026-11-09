@@ -101,7 +101,8 @@ exit 4
 TB
 export SELFTEST_DIR="$FIX/sync" SELFTEST_LOG="$FIX/sync/log"
 mkdir -p "$SELFTEST_DIR"
-run ./scripts/selftest.sh
+# Two jobs pinned: with SELFTEST_JOBS=1 or one core, a would never see b run.
+run env SELFTEST_JOBS=2 ./scripts/selftest.sh
 assert_rc "two files that need each other pass together, the failing one fails the run" 1
 assert_contains "a saw b running, so they ran at the same time" "PASS  tests/template/test_a.sh"
 assert_contains "the failing file is named with its status" "FAIL  tests/template/test_b.sh (exit 4)"
@@ -113,27 +114,36 @@ assert_contains "a failing file's output follows its FAIL line unbroken" "FAIL  
         ok   b line 1
         ok   b line 2"
 
-# --serial and SELFTEST_JOBS=1 run one file at a time: b's whole run precedes
-# a's, so a (which needs b) is the one that must find b already started.
-rm -f "$SELFTEST_DIR"/*.started "$SELFTEST_LOG"
+# --serial and SELFTEST_JOBS=1 run one file at a time. test_a waits a bounded
+# time for b's start marker and logs "a saw b" when b ran meanwhile or "a alone"
+# when it did not, so the same two files tell a serial run (a finishes before b
+# starts) from a parallel one. The wait ends on the marker, not on a fixed delay.
+rm -f "$SELFTEST_DIR/a.started" "$SELFTEST_DIR/b.started" "$SELFTEST_LOG"
 cat > tests/template/test_a.sh <<'TA'
 #!/usr/bin/env bash
 echo "start a" >> "$SELFTEST_LOG"
+touch "$SELFTEST_DIR/a.started"
+for _ in $(seq 1 40); do [[ -e "$SELFTEST_DIR/b.started" ]] && break; sleep 0.1; done
+if [[ -e "$SELFTEST_DIR/b.started" ]]; then echo "a saw b" >> "$SELFTEST_LOG"; else echo "a alone" >> "$SELFTEST_LOG"; fi
 echo "end a" >> "$SELFTEST_LOG"
 TA
 cat > tests/template/test_b.sh <<'TB'
 #!/usr/bin/env bash
 echo "start b" >> "$SELFTEST_LOG"
-sleep 1
+touch "$SELFTEST_DIR/b.started"
 echo "end b" >> "$SELFTEST_LOG"
 TB
 run ./scripts/selftest.sh --serial
 assert_rc "--serial runs and passes" 0
-assert_eq "--serial runs one file at a time" "start a,end a,start b,end b" "$(paste -sd, "$SELFTEST_LOG")"
-rm -f "$SELFTEST_LOG"
+assert_eq "--serial runs one file at a time" "start a,a alone,end a,start b,end b" "$(paste -sd, "$SELFTEST_LOG")"
+rm -f "$SELFTEST_DIR/a.started" "$SELFTEST_DIR/b.started" "$SELFTEST_LOG"
 run env SELFTEST_JOBS=1 ./scripts/selftest.sh
 assert_rc "SELFTEST_JOBS=1 runs and passes" 0
-assert_eq "SELFTEST_JOBS=1 runs one file at a time" "start a,end a,start b,end b" "$(paste -sd, "$SELFTEST_LOG")"
+assert_eq "SELFTEST_JOBS=1 runs one file at a time" "start a,a alone,end a,start b,end b" "$(paste -sd, "$SELFTEST_LOG")"
+rm -f "$SELFTEST_DIR/a.started" "$SELFTEST_DIR/b.started" "$SELFTEST_LOG"
+run env SELFTEST_JOBS=2 ./scripts/selftest.sh
+assert_rc "SELFTEST_JOBS=2 runs and passes" 0
+assert_eq "SELFTEST_JOBS=2 runs the same files at once" "a saw b" "$(grep '^a ' "$SELFTEST_LOG")"
 run env SELFTEST_JOBS=0 ./scripts/selftest.sh
 assert_rc "SELFTEST_JOBS=0 is refused" 2
 assert_contains "the bad job count is named" "SELFTEST_JOBS must be a positive integer"
