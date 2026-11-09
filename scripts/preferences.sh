@@ -44,9 +44,7 @@ if (( registers == 0 )); then
 fi
 
 PY=""
-if command -v python3 >/dev/null 2>&1; then PY=python3
-elif command -v python >/dev/null 2>&1; then PY=python
-fi
+. "$ROOT/scripts/find-python.sh" 2>/dev/null || PY=""
 if [[ -z "$PY" ]]; then
   echo "preferences: python not found; $registers register file(s) cannot be checked" >&2
   exit 1

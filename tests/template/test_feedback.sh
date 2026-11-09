@@ -11,7 +11,7 @@ winpath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 
 setup() {
   make_fixture
-  cp_script feedback-log.sh dream/dream.py dream/feedback.py
+  cp_script feedback-log.sh find-python.sh dream/dream.py dream/feedback.py
   mkdir -p src
   git add scripts && git commit -q -m "chore: scripts"
   git checkout -q -b task/demo

@@ -147,6 +147,7 @@ scripts/
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
   feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
+  find-python.sh              # sourced helper: PY is the first of python3, python that runs as Python 3
   preferences.sh              # check: the preference registers in docs/preferences/ are well formed
   dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
@@ -190,6 +191,8 @@ tests/
     test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
     test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
     test_preferences.sh       # register cells, baselines, template-mode guard, unwired-hook warning
+    test_find_python.sh       # stub python3 skipped by running it, no variable left, scripts that source the helper
+    test_taste_project.sh     # taste profile project tests
     test_test_files.sh        # guarded lib.sh load in every test, exec bits
     fixtures/
       check.sh                # pristine template check.sh the tests run against

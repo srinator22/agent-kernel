@@ -17,9 +17,7 @@ case "$SELF" in */*) DIR="${SELF%/*}" ;; *) DIR="." ;; esac
 ROOT="$(cd "$DIR/.." && pwd)"
 
 PY=""
-if command -v python3 >/dev/null 2>&1; then PY=python3
-elif command -v python >/dev/null 2>&1; then PY=python
-fi
+. "$ROOT/scripts/find-python.sh" 2>/dev/null || PY=""
 
 if [[ -z "$PY" ]]; then
   if [[ "${1:-}" == "due" ]]; then

@@ -11,9 +11,7 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
-PY=""
-command -v python3 >/dev/null 2>&1 && PY=python3
-[[ -n "$PY" ]] || { command -v python >/dev/null 2>&1 && PY=python; } || true
+. "$T_ROOT/scripts/find-python.sh"
 if [[ -z "$PY" ]]; then
   t_ok "python not found; preferences tests skipped (CI runs them)"
   t_finish
@@ -26,7 +24,7 @@ HDR_R='| ID | Rule | Source | Check | Repeats |
 
 fresh() { # a started fixture with the register tooling and two tracked targets
   make_fixture
-  cp_script preferences.sh dream/preferences.py dream/dream.py
+  cp_script preferences.sh find-python.sh dream/preferences.py dream/dream.py
   mkdir -p docs/preferences tests tools
   printf 'def test_alpha():\n    pass\n' > tests/test_alpha.py
   printf '#!/bin/sh\n' > tools/gate.sh

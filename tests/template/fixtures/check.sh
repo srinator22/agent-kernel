@@ -270,10 +270,11 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_destructive_guard.sh tests/template/test_stop_gate.sh
     tests/template/test_tasklint.sh tests/template/test_doc_eval.sh
     tests/template/test_session_context.sh tests/template/test_test_files.sh
-    scripts/feedback-log.sh scripts/preferences.sh
+    scripts/feedback-log.sh scripts/preferences.sh scripts/find-python.sh
     scripts/dream/feedback.py scripts/dream/preferences.py
     docs/preferences/README.md docs/procedures/preferences.md
     tests/template/test_feedback.sh tests/template/test_preferences.sh
+    tests/template/test_find_python.sh tests/template/test_taste_project.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -308,10 +309,9 @@ if [[ ! -f .start-done ]]; then
     grep -q '^developer_instructions = ' "$f" || terr "missing developer_instructions field: $f"
   done
 
-  # 5f. settings.json parses as JSON (python3 exists in CI; degrades locally).
-  PY=""
-  command -v python3 >/dev/null 2>&1 && PY=python3
-  [[ -n "$PY" ]] || { command -v python >/dev/null 2>&1 && PY=python; } || true
+  # 5f. settings.json parses as JSON (Python exists in CI; degrades locally).
+  # A subshell, so a missing or odd helper cannot end this script under set -e.
+  PY="$(bash -c '. scripts/find-python.sh 2>/dev/null; printf %s "${PY:-}"')"
   if [[ -n "$PY" ]]; then
     "$PY" -c 'import json; json.load(open(".claude/settings.json"))' \
       || terr ".claude/settings.json is not valid JSON"
