@@ -26,12 +26,19 @@ In Claude Code, `scripts/destructive-guard.sh` (PreToolUse) refuses, before
 they run: removal of filesystem roots, the home directory, the workspace
 and their ancestors (by any spelling of the path), bare globs, a glob under
 an unresolved variable, a variable path when recursive, a recursive removal
-of a `.git` directory, and the git forms of kernel rule 6. It reads inside
+of a `.git` directory, the git forms of kernel rule 6 (including `-c
+core.hooksPath=`), and process kills by image name (`taskkill /IM`,
+`Stop-Process -Name`, `pkill`, `killall`; kill the PID you started instead).
+A command over about 4 KB only warns on stderr. It reads inside
 `bash -c`, PowerShell `-Command`, `cmd /c` (encoded PowerShell is refused),
 `$(...)`, backticks, subshells, braces and `if`/`for`/`while` bodies, and
 follows `cd`/`pushd`/`Set-Location` (a cd it cannot resolve refuses a
 recursive relative removal). Its split is quote-unaware, so separators and
-brackets inside quoted strings over-block. The seven steps still apply to
+brackets inside quoted strings over-block, and a protected path that itself
+holds one (a workspace under `C:/x/R&D/proj`) is cut in two and not
+recognised. Not read: backtick or PowerShell-expression targets, `~+`,
+partial globs such as `New*`, `-Path:<value>`, shortened git long options,
+and a kill fed through a pipe. The seven steps still apply to
 what it cannot parse: script files, `eval`, aliases, functions, pipes.
 
 Examples of refused targets: `rm -rf /`, `rm -rf ~`, `rm -rf .` at the

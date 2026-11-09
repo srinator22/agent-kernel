@@ -532,6 +532,62 @@ assert_contains "the block names the kernel rules and the doc" "(kernel rules 6 
 assert_contains "the block quotes the matched segment" "Matched: rm -rf /."
 assert_contains "the block tells the agent to hand off to the human" "ask them to run it themselves"
 
+# Backslash-escaped inner quotes in a commit message are one quoted word.
+for shell in Bash PowerShell; do
+  allowed "$shell" "git commit -m with backslash-escaped inner quotes is allowed" 'git commit -m \"fix \\\"x\\\" thing\"'
+  allowed "$shell" "git commit -m with escaped inner quotes then a flag is allowed" 'git commit -m \"note \\\"x\\\" done\" --amend'
+done
+
+# Process kills by image name hit every process of that name, not only the
+# ones this session started.
+for shell in Bash PowerShell; do
+  blocked "$shell" "taskkill /IM is blocked" 'taskkill /IM node.exe'
+  blocked "$shell" "taskkill /F /IM is blocked" 'taskkill /F /IM node.exe'
+  blocked "$shell" "taskkill /im (any case) is blocked" 'taskkill /f /im Node.exe'
+  blocked "$shell" "taskkill //IM (Git Bash spelling) is blocked" 'taskkill //F //IM node.exe'
+  blocked "$shell" "taskkill -im is blocked" 'taskkill -f -im node.exe'
+  blocked "$shell" "taskkill /FI imagename filter is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+  blocked "$shell" "taskkill.exe /IM is blocked" 'taskkill.exe /IM node.exe'
+  blocked "$shell" "cmd /c taskkill /IM is blocked" 'cmd /c taskkill /IM node.exe'
+  blocked "$shell" "Stop-Process -Name is blocked" 'Stop-Process -Name node'
+  blocked "$shell" "Stop-Process -Name -Force is blocked" 'Stop-Process -Name node -Force'
+  blocked "$shell" "Stop-Process -ProcessName is blocked" 'Stop-Process -ProcessName node'
+  blocked "$shell" "Stop-Process -Na (abbreviation) is blocked" 'Stop-Process -Na node'
+  blocked "$shell" "spps -Name is blocked" 'spps -Name node'
+  blocked "$shell" "pwsh -Command Stop-Process -Name is blocked" 'pwsh -Command \"Stop-Process -Name node\"'
+  blocked "$shell" "pkill is blocked" 'pkill node'
+  blocked "$shell" "pkill -f is blocked" 'pkill -f server.js'
+  blocked "$shell" "killall is blocked" 'killall node'
+  blocked "$shell" "sudo killall is blocked" 'sudo killall -9 node'
+  allowed "$shell" "taskkill /PID is allowed" 'taskkill /PID 1234 /F'
+  allowed "$shell" "Stop-Process -Id is allowed" 'Stop-Process -Id 1234'
+  allowed "$shell" "kill by pid is allowed" 'kill 1234'
+  allowed "$shell" "kill -9 by pid is allowed" 'kill -9 1234'
+  allowed "$shell" "a commit message that names pkill is allowed" 'git commit -m \"docs: ban pkill and taskkill /IM\"'
+done
+
+# git -c core.hooksPath= swaps the hooks away, the same as --no-verify.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git -c core.hooksPath=/dev/null commit is blocked" 'git -c core.hooksPath=/dev/null commit -m x'
+  blocked "$shell" "git -c core.hookspath= (any case) is blocked" 'git -c core.hookspath= push'
+  allowed "$shell" "git -c user.name=x commit is allowed" 'git -c user.name=x commit -m y'
+done
+
+# A shell command over about 4 KB warns on stderr and still runs the checks.
+long_arg="$(printf 'a%.0s' $(seq 1 4200))"
+guard Bash "echo $long_arg"
+assert_rc "a command over 4 KB that is harmless is allowed" 0
+assert_contains "a command over 4 KB warns" "WARNING"
+guard Bash "echo $long_arg && rm -rf /"
+assert_rc "a command over 4 KB is still checked" 2
+guard Bash 'echo short'
+assert_not_contains "a short command does not warn" "WARNING"
+
+# Documented under-block: the segment split is quote-unaware, so a protected
+# path holding a separator is cut in two and neither half names it.
+guard_ctx Bash 'rm -rf \"C:\\x\\R&D\\proj\"' "" "$G_HOME" "$G_UP" 'C:\x\R&D\proj'
+assert_rc "KNOWN LIMIT: a workspace whose path holds & is not recognised when quoted" 0
+
 # Wiring: the settings hook covers both shells and runs this script.
 assert_file "the guard script exists" "$GUARD"
 assert_file_has "settings.json declares a PreToolUse hook" "$SETTINGS" '"PreToolUse"'

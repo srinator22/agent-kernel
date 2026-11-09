@@ -47,12 +47,25 @@
 #     --mirror/--prune/-f/-d or a +ref or :ref refspec; reset --hard;
 #     clean -f (unless a dry run); branch -D or -d with -f; checkout -f or a
 #     whole-tree target; restore of the whole tree (unless --staged only);
-#     stash drop and stash clear.
+#     stash drop and stash clear; -c core.hooksPath= (or --config-env of it).
+#   taskkill /IM (or a /FI imagename filter), Stop-Process/spps/kill -Name or
+#     -ProcessName, pkill, killall: a kill by image name can end processes this
+#     session did not start; kill by PID. Any command over about 4 KB only
+#     warns on stderr (exit stays 0), because long literal commands can fail
+#     with a quote error before any hook runs.
 # Escaped spaces (bash \ and PowerShell ` before a space) stay inside the word,
 # and wrapper arguments are re-quoted when the inner command is rebuilt.
 # Limits: the segment split is quote-unaware, so a separator or bracket
 # (; & | ( ) { } backtick) inside a quoted string splits it too and a commit
 # message containing "; git push --force" is refused (accepted over-blocking).
+# The same split under-blocks: a protected path that holds one of those
+# characters (a workspace under C:/x/R&D/proj) is cut in two even when quoted,
+# and neither half names the workspace, so a quoted removal of it is allowed.
+# Rare forms are also not read: a backtick substitution or PowerShell
+# expression as a target, ~+ and ~- as a path, a partial glob such as New*, a
+# PowerShell -Path:<value>, shortened git long options (--forc), and a kill
+# fed through a pipe (Get-Process -Name x | Stop-Process). ADR 0006 records
+# these as limits, not defects.
 # Not parsed: eval, scripts run from files, aliases or functions defined
 # earlier in the shell, and targets fed through a pipe such as
 # Get-ChildItem ~ | Remove-Item -Recurse. A cd in a subshell or wrapper is
@@ -63,20 +76,33 @@
 # command, a false allow can destroy work that git cannot recover. There is no
 # bypass flag or environment variable.
 # Exit: 0 allow; 2 block, with the reason on stderr for the agent to read.
-# Needs bash 4.4 or newer (Git for Windows ships 5); older bash fails closed.
+# Needs bash 3.2 or newer (macOS /bin/bash works; Git for Windows ships 5):
+# no ${x,,}, no associative arrays, no mapfile, no $'..' inside "${..}", and
+# every array expansion is guarded for an empty array under set -u.
 set -uo pipefail
 
-if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
-  # macOS ships bash 3.2 as /bin/bash; a Homebrew bash is the usual fix, so
-  # use it when the hook's PATH found the old one. The payload is still on stdin.
-  for nb in /opt/homebrew/bin/bash /usr/local/bin/bash; do
-    if [[ -z "${DESTRUCTIVE_GUARD_REEXEC:-}" && -x "$nb" ]]; then
-      DESTRUCTIVE_GUARD_REEXEC=1 exec "$nb" "$0" "$@"
-    fi
-  done
-  echo "BLOCKED by scripts/destructive-guard.sh: needs bash 4.4 or newer (found ${BASH_VERSION}); install a newer bash or ask the human to run the command themselves." >&2
+if (( BASH_VERSINFO[0] < 3 || (BASH_VERSINFO[0] == 3 && BASH_VERSINFO[1] < 2) )); then
+  echo "BLOCKED by scripts/destructive-guard.sh: needs bash 3.2 or newer (found ${BASH_VERSION}); install a newer bash or ask the human to run the command themselves." >&2
   exit 2
 fi
+
+NL=$'\n'
+
+# lc STRING -> LC. Lowercase with builtins only: ${x,,} needs bash 4, and a
+# fork per call is too slow for a hook that runs on every command.
+lc() {
+  LC="$1"
+  case "$LC" in
+    *[A-Z]*)
+      LC=${LC//A/a}; LC=${LC//B/b}; LC=${LC//C/c}; LC=${LC//D/d}; LC=${LC//E/e}
+      LC=${LC//F/f}; LC=${LC//G/g}; LC=${LC//H/h}; LC=${LC//I/i}; LC=${LC//J/j}
+      LC=${LC//K/k}; LC=${LC//L/l}; LC=${LC//M/m}; LC=${LC//N/n}; LC=${LC//O/o}
+      LC=${LC//P/p}; LC=${LC//Q/q}; LC=${LC//R/r}; LC=${LC//S/s}; LC=${LC//T/t}
+      LC=${LC//U/u}; LC=${LC//V/v}; LC=${LC//W/w}; LC=${LC//X/x}; LC=${LC//Y/y}
+      LC=${LC//Z/z}
+      ;;
+  esac
+}
 
 block() { # reason segment
   echo "BLOCKED by scripts/destructive-guard.sh (kernel rules 6 and 11, docs/rules/destructive-actions.md): $1. Matched: $2. If the human explicitly asked for this with a verified target, ask them to run it themselves." >&2
@@ -84,17 +110,18 @@ block() { # reason segment
 }
 
 # json_unescape STRING -> UNESC. Backslash pairs go first (to a placeholder) so
-# that C:\\new is a path and not a newline; the placeholder becomes one
-# backslash last.
+# that C:\new is a path and not a newline; the placeholder becomes one
+# backslash last. Patterns are built from variables, not quoted literals,
+# because bash 3.2 and 4+ differ on quotes inside ${..//..}.
 json_unescape() {
-  local s="$1" ph=$'\x01'
-  s="${s//'\\'/$ph}"
-  s="${s//'\n'/$'\n'}"
-  s="${s//'\r'/$'\n'}"
-  s="${s//'\t'/ }"
-  s="${s//'\"'/\"}"
-  s="${s//'\/'//}"
-  UNESC="${s//$ph/'\'}"
+  local s="$1" ph=$'\x01' bs='\' dq='"' sl='/'
+  s=${s//"$bs$bs"/$ph}
+  s=${s//"${bs}n"/$NL}
+  s=${s//"${bs}r"/$NL}
+  s=${s//"${bs}t"/ }
+  s=${s//"$bs$dq"/$dq}
+  s=${s//"$bs$sl"/$sl}
+  UNESC=${s//$ph/$bs}
 }
 
 payload="$(cat)"
@@ -114,6 +141,11 @@ if [[ "$payload" =~ $re_cwd ]]; then
 fi
 json_unescape "$text"
 text="$UNESC"
+# A very long literal command can fail in the harness with a quote error before
+# any hook sees it. Warn only; the checks below still run.
+if (( ${#text} > 4096 )); then
+  echo "WARNING from scripts/destructive-guard.sh: the command is ${#text} characters (over about 4 KB); long literal commands can fail with a quote error. Write it to a script file and run that instead." >&2
+fi
 
 re_assign='^[A-Za-z_][A-Za-z0-9_]*='
 re_pct='%[^%[:space:]]+%'
@@ -121,6 +153,7 @@ re_top_posix='^/[^/]+/?$'
 re_top_gitbash='^/[a-zA-Z]/[^/]+/?$'
 re_top_win='^[A-Za-z]:[\\/][^\\/]+[\\/]?$'
 re_drive='^([a-z]):(/.*)?$'
+re_flagcluster='^-[a-z]{1,4}$'
 
 # norm_path PATH -> NP. One spelling for every path: forward slashes, no
 # repeated or trailing slash, lowercase, drive x:/rest as /x/rest, ~ expanded
@@ -135,7 +168,7 @@ norm_path() {
   local p="${1//\\//}" seg IFS=/
   local -a parts=() out=()
   while [[ "$p" == *//* ]]; do p="${p//\/\///}"; done
-  p="${p,,}"
+  lc "$p"; p="$LC"
   if [[ "$p" =~ $re_drive ]]; then
     p="/${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
   elif [[ "$p" == '~' || "$p" == '~/'* ]]; then
@@ -148,14 +181,14 @@ norm_path() {
   set -f
   parts=($p)
   set +f
-  for seg in "${parts[@]}"; do
+  for seg in ${parts[@]+"${parts[@]}"}; do
     case "$seg" in
       '' | .) ;;
-      ..) (( ${#out[@]} )) && out=("${out[@]:0:${#out[@]}-1}") ;;
+      ..) (( ${#out[@]} )) && unset "out[${#out[@]}-1]" ;;
       *) out+=("$seg") ;;
     esac
   done
-  NP="/${out[*]}"
+  NP="/${out[*]+"${out[*]}"}"
   return 0
 }
 
@@ -194,7 +227,7 @@ check_protected() {
     tgt="${tgt%/*}"
     [[ -n "$tgt" ]] || tgt="/"
   fi
-  for pp in "${PROT[@]}"; do
+  for pp in ${PROT[@]+"${PROT[@]}"}; do
     if [[ "$tgt" == "$pp" ]]; then
       if (( $2 )); then
         block "recursive removal of the home directory, the workspace, or a folder containing one" "$SEG"
@@ -221,7 +254,7 @@ git_dir_form() { # PATH (slashes forward, lowercase) -> 0 when it names .git
 # via a trailing /* or /.*), by its spelling or, when it resolves, by its path.
 is_git_dir() {
   local g="${1//\\//}"
-  g="${g,,}"
+  lc "$g"; g="$LC"
   git_dir_form "$g" && return 0
   if norm_path "$1"; then git_dir_form "$NP" && return 0; fi
   return 1
@@ -231,15 +264,15 @@ check_removal() { # name; arguments in ARGS
   local name="$1" win=0 rec=0 a la lf t lt
   local -a targets=()
   case "$name" in rd | rmdir | del | erase) win=1 ;; esac
-  for a in "${ARGS[@]}"; do
-    la="${a,,}"
+  for a in ${ARGS[@]+"${ARGS[@]}"}; do
+    lc "$a"; la="$LC"
     if [[ "$a" == -* ]]; then
       lf="${la%%:*}"
       if [[ "$lf" == --recursive ]]; then
         rec=1
       elif [[ "$lf" != --* && ${#lf} -ge 2 && "-recurse" == "$lf"* ]]; then
         rec=1
-      elif [[ "$lf" =~ ^-[a-z]{1,4}$ && "$lf" == *r* ]]; then
+      elif [[ "$lf" =~ $re_flagcluster && "$lf" == *r* ]]; then
         rec=1
       fi
     elif (( win )) && [[ "$la" =~ ^/[sqf]$ ]]; then
@@ -248,8 +281,8 @@ check_removal() { # name; arguments in ARGS
       targets+=("$a")
     fi
   done
-  for t in "${targets[@]}"; do
-    lt="${t,,}"
+  for t in ${targets[@]+"${targets[@]}"}; do
+    lc "$t"; lt="$LC"
     if forbidden_target "$lt"; then
       block "refused removal target (root, home, workspace root or broad glob; pass a literal narrow absolute path)" "$SEG"
     fi
@@ -286,9 +319,9 @@ check_removal() { # name; arguments in ARGS
 }
 
 # Helpers over GARGS (git arguments after the subcommand).
-g_exact() { local x a; for x in "$@"; do for a in "${GARGS[@]}"; do [[ "$a" == "$x" ]] && return 0; done; done; return 1; }
-g_prefix() { local x a; for x in "$@"; do for a in "${GARGS[@]}"; do [[ "$a" == "$x"* ]] && return 0; done; done; return 1; }
-g_cluster() { local a; for a in "${GARGS[@]}"; do [[ "$a" =~ ^-[a-zA-Z]+$ && "$a" == *"$1"* ]] && return 0; done; return 1; }
+g_exact() { local x a; for x in "$@"; do for a in ${GARGS[@]+"${GARGS[@]}"}; do [[ "$a" == "$x" ]] && return 0; done; done; return 1; }
+g_prefix() { local x a; for x in "$@"; do for a in ${GARGS[@]+"${GARGS[@]}"}; do [[ "$a" == "$x"* ]] && return 0; done; done; return 1; }
+g_cluster() { local a; for a in ${GARGS[@]+"${GARGS[@]}"}; do [[ "$a" =~ ^-[a-zA-Z]+$ && "$a" == *"$1"* ]] && return 0; done; return 1; }
 g_first() { [[ "${#GARGS[@]}" -gt 0 && "${GARGS[0]}" == "$1" ]]; }
 g_whole_tree() { g_exact . ./ '*' :/; }
 
@@ -297,9 +330,21 @@ check_git() { # arguments in ARGS
   while (( i < n )); do
     a="${ARGS[i]}"
     if [[ "$a" == -* ]]; then
+      # git -c core.hooksPath=... points the hooks elsewhere: --no-verify by
+      # another route (kernel rule 6).
+      lc "$a"
+      if [[ "$LC" == --config-env=core.hookspath* ]]; then
+        block "git --config-env core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
+      fi
+      if [[ "$a" == -c ]] && (( i + 1 < n )); then
+        lc "${ARGS[i+1]}"
+        if [[ "$LC" == core.hookspath* ]]; then
+          block "git -c core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
+        fi
+      fi
       if [[ "$a" == -C || "$a" == -c ]]; then i=$((i + 2)); else i=$((i + 1)); fi
     else
-      sub="${a,,}"
+      lc "$a"; sub="$LC"
       i=$((i + 1))
       break
     fi
@@ -430,7 +475,7 @@ check_powershell() { # powershell/pwsh: tokens after -Command (any prefix >= -c)
   while (( j < m )); do
     a="${ARGS[j]}"
     if [[ "$a" == -* ]]; then
-      a="${a,,}"
+      lc "$a"; a="$LC"
       lf="${a%%:*}"
       if [[ "$lf" == -ec ]] || { (( ${#lf} >= 2 )) && [[ "-encodedcommand" == "$lf"* ]]; }; then
         block "encoded PowerShell command cannot be checked" "$SEG"
@@ -450,7 +495,7 @@ check_cmd() { # cmd: tokens after /c or /k
   local j=0 m=${#ARGS[@]} a IFS=' '
   while (( j < m )); do
     a="${ARGS[j]}"
-    a="${a,,}"
+    lc "$a"; a="$LC"
     if [[ "$a" == /c || "$a" == /k || "$a" == //c || "$a" == //k ]]; then
       join_args $((j + 1))
       check_text "$JOINED" $(($1 + 1))
@@ -459,6 +504,38 @@ check_cmd() { # cmd: tokens after /c or /k
     j=$((j + 1))
   done
   return 0
+}
+
+# check_kill NAME: a process kill by image name hits every process of that
+# name, including ones this session did not start. Kill by PID instead.
+check_kill() {
+  local name="$1" a lf min=2
+  case "$name" in
+    pkill | killall) block "process kill by name ($name) can end unrelated processes (kill the PID you started)" "$SEG" ;;
+  esac
+  # PowerShell's kill alias takes -Name too; bash kill has -n SIGNUM, so a
+  # bare -n there is not a name.
+  [[ "$name" == kill ]] && min=3
+  for a in ${ARGS[@]+"${ARGS[@]}"}; do
+    lc "$a"
+    case "$name" in
+      taskkill)
+        case "$LC" in
+          /im | -im | //im | /im:* | -im:*) block "taskkill by image name can end unrelated processes (use /PID of a process you started)" "$SEG" ;;
+          *imagename*) block "taskkill filtered by image name can end unrelated processes (use /PID of a process you started)" "$SEG" ;;
+        esac
+        ;;
+      *)
+        if [[ "$LC" == -* ]]; then
+          lf="${LC%%:*}"
+          if { (( ${#lf} >= min )) && [[ "-name" == "$lf"* ]]; } \
+            || { (( ${#lf} >= 3 )) && [[ "-processname" == "$lf"* ]]; }; then
+            block "Stop-Process by name can end unrelated processes (use -Id of a process you started)" "$SEG"
+          fi
+        fi
+        ;;
+    esac
+  done
 }
 
 cd_unknown() { NBASE=""; CURUNK=1; }
@@ -473,7 +550,7 @@ change_dir() {
     a="${ARGS[j]}"
     if [[ "$a" == - ]]; then
       t="-"; found=1; break
-    elif [[ "${a,,}" == /d ]] && (( j + 1 < n )); then
+    elif lc "$a"; [[ "$LC" == /d ]] && (( j + 1 < n )); then
       j=$((j + 1))
     elif [[ "$a" == -* ]]; then
       j=$((j + 1))
@@ -513,7 +590,7 @@ check_text() {
   while [[ "$in" =~ $re_brace ]]; do
     m="${BASH_REMATCH[0]}"
     r='$'"${BASH_REMATCH[1]}"
-    in="${in/"$m"/$r}"
+    in=${in/"$m"/$r}
   done
   # An escaped space (bash New\ Project, PowerShell New` Project) is part of
   # the word in the second reading (ESC_READ=1): mark it before the backtick
@@ -524,19 +601,19 @@ check_text() {
   fi
   # Segment split, quote-unaware on purpose. && and || fall out of the
   # single-character replacements.
-  in="${in//&/$'\n'}"
-  in="${in//|/$'\n'}"
-  in="${in//;/$'\n'}"
-  in="${in//\(/$'\n'}"
-  in="${in//\)/$'\n'}"
-  in="${in//\{/$'\n'}"
-  in="${in//\}/$'\n'}"
-  in="${in//\`/$'\n'}"
+  in=${in//&/$NL}
+  in=${in//|/$NL}
+  in=${in//;/$NL}
+  in=${in//\(/$NL}
+  in=${in//\)/$NL}
+  in=${in//\{/$NL}
+  in=${in//\}/$NL}
+  in=${in//\`/$NL}
   if (( fallback && depth == 0 )); then
     # No command field to extract: also cut at JSON punctuation so a command
     # buried in the payload still starts its own segment.
-    in="${in//\"/$'\n'}"
-    in="${in//,/$'\n'}"
+    in=${in//\"/$NL}
+    in=${in//,/$NL}
   fi
   while IFS= read -r SEG; do
     SEG="${SEG#"${SEG%%[![:space:]]*}"}"
@@ -546,7 +623,7 @@ check_text() {
     i=0
     while (( i < n )); do
       w="${toks[i]##*[/\\]}"
-      w="${w,,}"
+      lc "$w"; w="$LC"
       case "$w" in
         sudo | command | nohup | time | exec | xargs)
           i=$((i + 1))
@@ -566,7 +643,7 @@ check_text() {
     done
     (( i < n )) || continue
     name="${toks[i]##*[/\\]}"
-    name="${name,,}"
+    lc "$name"; name="$LC"
     name="${name%.exe}"
     ARGS=()
     (( i + 1 < n )) && ARGS=("${toks[@]:i+1}")
@@ -577,6 +654,7 @@ check_text() {
       bash | sh | zsh | dash | ksh) check_posix_shell "$depth" ;;
       powershell | pwsh) check_powershell "$depth" ;;
       cmd) check_cmd "$depth" ;;
+      taskkill | stop-process | spps | kill | pkill | killall) check_kill "$name" ;;
     esac
   done <<< "$in"
 }
