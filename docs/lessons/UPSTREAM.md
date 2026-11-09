@@ -96,3 +96,16 @@ Entry format (all five fields required):
 - retire-when: scripts/selftest.sh runs its test files in parallel and a
   local full gate takes under 10 minutes.
 - applies to: core
+
+### Parallel speed has a ceiling
+
+- what happened: asked for maximum parallel speed, one session reached 71
+  running background tasks on one Windows computer; test runs starved each
+  other for hours and the owner had to stop everything and restart the
+  work one piece at a time (2026-11-09).
+- what check should have caught it: a count of running background tasks
+  before each wave against a cap (BACKLOG row for a session-start warning).
+- what was added: docs/rules/orchestration.md caps background tasks at 8;
+  "as parallel as possible" means waves of the cap.
+- retire-when: the harness enforces a concurrency limit itself.
+- applies to: core
