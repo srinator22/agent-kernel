@@ -230,7 +230,7 @@ check_kind deferral "that is wrong, do it later"
 check_kind deferral "always do that later"
 
 # --- A6: the hook's own git call stays far inside the 5 s hook budget ---
-PYX=python3; command -v python3 >/dev/null 2>&1 || PYX=python
+. "$T_ROOT/scripts/find-python.sh"; PYX="$PY"
 tmo="$("$PYX" -I - "$FIXW/scripts/dream" "$FIXW" <<'PYEOF' 2>&1
 import subprocess, sys
 sys.path.insert(0, sys.argv[1])

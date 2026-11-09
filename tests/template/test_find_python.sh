@@ -55,7 +55,10 @@ for d in "${dirs[@]}"; do
   if [[ -x "$d/python" || -x "$d/python3" || -x "$d/python.exe" || -x "$d/python3.exe" ]]; then continue; fi
   NOPY="$NOPY:$d"
 done
-OUT="$(PATH="$BIN/stubonly$NOPY" bash -c '. "$1" && printf %s "[$PY]"' _ "$HELPER" 2>&1)"
+# bash by absolute path: on Linux /usr/bin holds both bash and python3, so the
+# PATH above has no bash in it.
+BASHX="$(command -v bash)"
+OUT="$(PATH="$BIN/stubonly$NOPY" "$BASHX" -c '. "$1" && printf %s "[$PY]"' _ "$HELPER" 2>&1)"
 assert_eq "only the stub reachable: PY is empty" "[]" "$OUT"
 OUT="$(PATH="$BIN/both:$PATH" bash -c 'compgen -v | sort >"$2/before"; . "$1"; compgen -v | sort >"$2/after"; diff "$2/before" "$2/after"' _ "$HELPER" "$BIN" 2>&1)"
 assert_eq "the helper leaves only PY set" "> PY" "$(printf '%s\n' "$OUT" | grep '^[<>]' | grep -v PIPESTATUS | tr '\n' ' ' | sed 's/ $//')"
