@@ -42,9 +42,11 @@ jobs:
   # it has its own timeout and a failure shows as a red job without blocking
   # the Linux gate (docs/rules/ci-baseline.md). It runs on main and by hand
   # only: a Windows run takes tens of minutes, and on every pull request it
-  # would hold up ci-watch.sh, which waits on every job.
+  # would hold up ci-watch.sh, which waits on every job. It skips private
+  # repositories: there Windows minutes are billed against the owner's quota,
+  # and a cost needs the owner's approval (kernel rule 15).
   selftest-windows:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.event.repository.private == false && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: windows-2025
     timeout-minutes: 45
     defaults:
