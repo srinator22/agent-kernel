@@ -18,10 +18,12 @@ extract_kernel() {
 compute_hash() {
   local block
   block="$(extract_kernel)"
-  if ! printf '%s\n' "$block" | grep -q 'KERNEL:END'; then
-    echo "ERROR: kernel markers not found in AGENTS.md" >&2
-    exit 1
-  fi
+  # A string match, not printf | grep -q: an early-exit reader can end the
+  # writer with SIGPIPE under pipefail.
+  case "$block" in
+    *KERNEL:END*) ;;
+    *) echo "ERROR: kernel markers not found in AGENTS.md" >&2; exit 1 ;;
+  esac
   printf '%s\n' "$block" | sha256sum | awk '{print $1}'
 }
 
