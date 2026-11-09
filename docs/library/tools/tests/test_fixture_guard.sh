@@ -67,6 +67,9 @@ expect 2 "unknown commit" -- bash "$GUARD" "${ARGS[@]}" deadbeefdeadbeef
 expect 2 "unknown option" -- bash "$GUARD" "${ARGS[@]}" --nope
 mkdir "$notrepo"
 expect 2 "not a repository" -- bash "$GUARD" "${ARGS[@]}" --root "$notrepo"
+# Exit 2 alone also comes from "HEAD is not a commit" when $notrepo sits inside
+# a repository, so the message pins the branch that was meant.
+grep -q "is not a git repository" "$work/out.txt" || fail "not a repository: output does not say it is not a git repository"
 expect 0 "help" -- bash "$GUARD" --help
 
 echo "fixture-guard-test: OK"
