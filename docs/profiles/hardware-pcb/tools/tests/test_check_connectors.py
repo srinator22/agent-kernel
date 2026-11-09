@@ -201,6 +201,27 @@ class HazardTableTests(unittest.TestCase):
         retired = port("P9", "usb", {1: "12V", 2: "5V"}, retired="history")
         self.assertEqual(of_level(run(retired, base=undeclared), "FAIL"), [])
 
+    def test_misspelt_port_pin_class_next_to_a_listed_spelling_fails(self):
+        # "24v" on a port pin is itself a known class, so the unknown-class check passes it; only the
+        # near-duplicate of the listed "24V" shows the typo, and the 24V-to-signal pairing must not read benign.
+        typo = port("P3", "round4", {1: "24v", 2: "GND"}, contact_rating_a=5.0)
+        findings = run(typo)
+        fail = joined(of_level(findings, "FAIL"))
+        self.assertIn("'24v'", fail)
+        self.assertIn("'24V'", fail)
+        self.assertIn("differ only in case", fail)
+        self.assertNotIn("benign", joined(findings))
+
+    def test_signed_and_differential_classes_are_not_near_duplicates(self):
+        signed = port("P4", "usb", {1: "+12V", 2: "-12V", 3: "D+", 4: "D-"}, contact_rating_a=5.0)
+        findings = run(signed)
+        self.assertNotIn("differ only", joined(of_level(findings, "FAIL")))
+
+    def test_spacing_and_case_variants_of_a_class_fail(self):
+        for variant in ("24 V", "24v", "24_V"):
+            typo = port("P3", "round4", {1: variant, 2: "GND"}, contact_rating_a=5.0)
+            self.assertIn("differ only", joined(of_level(run(typo), "FAIL")), variant)
+
     def test_malformed_declared_classes_makes_pairings_unknown(self):
         bad = BASE.replace('declared_classes = ["12V", "5V"]', 'declared_classes = "12V"')
         fail = joined(of_level(run(SIGNAL_PLUG, base=bad), "FAIL"))

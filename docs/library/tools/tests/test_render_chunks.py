@@ -305,6 +305,28 @@ class RenderChunksTests(unittest.TestCase):
         self.assertEqual(self.call_lines(), [["1", "4", "0"]])
         self.assertNotIn("failed_rc", self.load()["chunks"][0])
 
+    def test_partly_deleted_suspect_frames_stay_failed_until_all_are_gone(self):
+        # A failed run's frames are suspect as a set: deleting only some must not clear failed_rc and
+        # accept the kept ones.
+        self.plan(first=1, last=4, chunk=4)
+        self.set_mode("fail_after_all")
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 1, out)
+        os.remove(self.calls)
+        self.set_mode("ok")
+        for n in (1, 2):
+            os.remove(os.path.join(self.out, "frame_%04d.png" % n))
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.call_lines(), [])
+        self.assertIn("2 of 4 frame(s) from the failed run remain", out)
+        self.assertEqual(self.load()["chunks"][0]["failed_rc"], 1)
+        for n in (3, 4):
+            os.remove(os.path.join(self.out, "frame_%04d.png" % n))
+        code, out, _ = run_main(["run", "--state", self.state])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.call_lines(), [["1", "4", "0"]])
+
     def test_zero_size_frame_written_by_command_is_a_failure(self):
         self.plan(first=1, last=3, chunk=3)
         self.set_mode("zero 2")

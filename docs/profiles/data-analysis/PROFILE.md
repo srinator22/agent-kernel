@@ -60,9 +60,9 @@ with `scientific` when a claim is quantitative.
 
 ## Tools
 
-- Import tool (copy, verify hash, write session README row, several files per
-  call): `exists in a prior embedded controller firmware project, port on
-  adoption`.
+- Import tool (copy with exclusive create, verify hash, write session README
+  row, several files per call): `exists` as `tools/import_raw.py`, a generic
+  skeleton; add the project's naming and per-format metadata on adoption.
 - Per-format analysers with per-run, per-cycle, whole-run and cross-run output,
   JSON export, recomputed pass/fail labels: `exists in a prior embedded
   controller firmware project, port on adoption`; `build` for a new log schema.
