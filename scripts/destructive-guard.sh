@@ -50,9 +50,7 @@
 #     stash drop and stash clear; -c core.hooksPath= (or --config-env of it).
 #   taskkill /IM (or a /FI imagename filter), Stop-Process/spps/kill -Name or
 #     -ProcessName, pkill, killall: a kill by image name can end processes this
-#     session did not start; kill by PID. Any command over about 4 KB only
-#     warns on stderr (exit stays 0), because long literal commands can fail
-#     with a quote error before any hook runs.
+#     session did not start; kill by PID.
 # Escaped spaces (bash \ and PowerShell ` before a space) stay inside the word,
 # and wrapper arguments are re-quoted when the inner command is rebuilt.
 # Limits: the segment split is quote-unaware, so a separator or bracket
@@ -76,10 +74,18 @@
 # command, a false allow can destroy work that git cannot recover. There is no
 # bypass flag or environment variable.
 # Exit: 0 allow; 2 block, with the reason on stderr for the agent to read.
-# Needs bash 3.2 or newer (macOS /bin/bash works; Git for Windows ships 5):
-# no ${x,,}, no associative arrays, no mapfile, no $'..' inside "${..}", and
-# every array expansion is guarded for an empty array under set -u.
+# Written for bash 3.2 (CI runs bash 5); any unexpected error blocks. Bash 3.2
+# folds ASCII letters only (bash 4+ folds every letter the locale knows). Code
+# that must parse on 3.2 uses no ${x,,} outside eval, no associative arrays, no
+# mapfile, no $'..' inside "${..}", and guards every array expansion for an
+# empty array under set -u.
 set -uo pipefail
+
+# A bash error inside the guard (unbound variable, bad substitution) exits 1,
+# which the harness treats as a non-blocking error and runs the command. Turn
+# every status other than 0 (allow) and 2 (block) into a block. block() exits 2
+# and the allow path exits 0, so this prints nothing on a judged command.
+trap '_rc=$?; if (( _rc != 0 && _rc != 2 )); then echo "BLOCKED by scripts/destructive-guard.sh: the guard failed (status $_rc) and cannot judge this command; ask the human to run it themselves or to fix the guard." >&2; exit 2; fi' EXIT
 
 if (( BASH_VERSINFO[0] < 3 || (BASH_VERSINFO[0] == 3 && BASH_VERSINFO[1] < 2) )); then
   echo "BLOCKED by scripts/destructive-guard.sh: needs bash 3.2 or newer (found ${BASH_VERSION}); install a newer bash or ask the human to run the command themselves." >&2
@@ -88,8 +94,14 @@ fi
 
 NL=$'\n'
 
-# lc STRING -> LC. Lowercase with builtins only: ${x,,} needs bash 4, and a
-# fork per call is too slow for a hook that runs on every command.
+# lc STRING -> LC. Lowercase with builtins only: a fork per call is too slow
+# for a hook that runs on every command. Bash 4+ folds every letter the locale
+# knows (a home folder with an accented letter must still match another case);
+# the ${1,,} sits in eval so bash 3.2 never parses it. Bash 3.2 gets the A-Z
+# table, so it folds ASCII letters only.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  eval 'lc() { LC="${1,,}"; }'
+else
 lc() {
   LC="$1"
   case "$LC" in
@@ -103,6 +115,7 @@ lc() {
       ;;
   esac
 }
+fi
 
 block() { # reason segment
   echo "BLOCKED by scripts/destructive-guard.sh (kernel rules 6 and 11, docs/rules/destructive-actions.md): $1. Matched: $2. If the human explicitly asked for this with a verified target, ask them to run it themselves." >&2
@@ -141,11 +154,6 @@ if [[ "$payload" =~ $re_cwd ]]; then
 fi
 json_unescape "$text"
 text="$UNESC"
-# A very long literal command can fail in the harness with a quote error before
-# any hook sees it. Warn only; the checks below still run.
-if (( ${#text} > 4096 )); then
-  echo "WARNING from scripts/destructive-guard.sh: the command is ${#text} characters (over about 4 KB); long literal commands can fail with a quote error. Write it to a script file and run that instead." >&2
-fi
 
 re_assign='^[A-Za-z_][A-Za-z0-9_]*='
 re_pct='%[^%[:space:]]+%'
@@ -336,13 +344,25 @@ check_git() { # arguments in ARGS
       if [[ "$LC" == --config-env=core.hookspath* ]]; then
         block "git --config-env core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
       fi
-      if [[ "$a" == -c ]] && (( i + 1 < n )); then
-        lc "${ARGS[i+1]}"
-        if [[ "$LC" == core.hookspath* ]]; then
-          block "git -c core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
-        fi
-      fi
-      if [[ "$a" == -C || "$a" == -c ]]; then i=$((i + 2)); else i=$((i + 1)); fi
+      # These options take their value as the next word; reading that word as
+      # the subcommand would hide the real one (git --git-dir .git push -f).
+      case "$a" in
+        -c | --config-env)
+          if (( i + 1 < n )); then
+            lc "${ARGS[i+1]}"
+            if [[ "$LC" == core.hookspath* ]]; then
+              block "git $a core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
+            fi
+          fi
+          i=$((i + 2))
+          ;;
+        -C | --git-dir | --work-tree | --namespace | --attr-source | --super-prefix)
+          i=$((i + 2))
+          ;;
+        *)
+          i=$((i + 1))
+          ;;
+      esac
     else
       lc "$a"; sub="$LC"
       i=$((i + 1))

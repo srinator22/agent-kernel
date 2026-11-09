@@ -573,15 +573,50 @@ for shell in Bash PowerShell; do
   allowed "$shell" "git -c user.name=x commit is allowed" 'git -c user.name=x commit -m y'
 done
 
-# A shell command over about 4 KB warns on stderr and still runs the checks.
+# A shell command over about 4 KB is checked and prints nothing: a stderr
+# warning on an allowed command is shown only in the user's verbose view.
 long_arg="$(printf 'a%.0s' $(seq 1 4200))"
 guard Bash "echo $long_arg"
 assert_rc "a command over 4 KB that is harmless is allowed" 0
-assert_contains "a command over 4 KB warns" "WARNING"
+assert_eq "a command over 4 KB that is harmless prints nothing" "" "$OUT"
 guard Bash "echo $long_arg && rm -rf /"
 assert_rc "a command over 4 KB is still checked" 2
-guard Bash 'echo short'
-assert_not_contains "a short command does not warn" "WARNING"
+
+# git global options that take their value as the next word must not hide the
+# subcommand (or the hooksPath setting) behind that value.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git --config-env core.hooksPath=HP (two words) is blocked" 'git --config-env core.hooksPath=HP commit -m x'
+  blocked "$shell" "git --config-env=core.hooksPath=HP is blocked" 'git --config-env=core.hooksPath=HP commit -m x'
+  blocked "$shell" "git --git-dir .git push --force is blocked" 'git --git-dir .git push --force origin main'
+  blocked "$shell" "git --work-tree . reset --hard is blocked" 'git --work-tree . reset --hard'
+  blocked "$shell" "git --namespace x push --force is blocked" 'git --namespace x push --force origin main'
+  allowed "$shell" "git --config-env=user.name=NAME commit is allowed" 'git --config-env=user.name=NAME commit -m x'
+  allowed "$shell" "git --git-dir .git status is allowed" 'git --git-dir .git status'
+done
+
+# Case folding covers every letter the locale knows on bash 4+: an accented
+# home folder spelled in another case is still the home folder.
+U_UP="$(printf '\303\211')"
+U_LO="$(printf '\303\251')"
+payload="$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf c:/users/%smile"}}' "$U_LO")"
+OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" bash "$GUARD" 2>&1)"; RC=$?
+assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
+assert_contains "the non-ASCII home block names the guard" "$PREFIX"
+
+# An unexpected bash error inside the guard must block, not exit 1 (which the
+# harness treats as a non-blocking error and runs the command).
+GFIX="$(mktemp -d)"
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak '/^trap /a\
+: "${GUARD_TEST_UNSET_VARIABLE}"' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | env -u GUARD_TEST_UNSET_VARIABLE bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "an unexpected error inside the guard blocks" 2
+assert_contains "the unexpected-error block says the guard failed" "guard failed"
+assert_contains "the unexpected-error block names the guard" "$PREFIX"
+cp "$GUARD" "$GFIX/guard.sh"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "the unmodified guard allows the same harmless command" 0
+rm -rf "$GFIX"
 
 # Documented under-block: the segment split is quote-unaware, so a protected
 # path holding a separator is cut in two and neither half names it.

@@ -30,7 +30,7 @@ kernel rule 6 (including `-c core.hooksPath=`), and process kills by image
 name (kill the PID you started instead). It reads inside `bash -c`,
 PowerShell `-Command`, `cmd /c`, `$(...)`, backticks, subshells and loop
 bodies, and follows `cd`. Its limits (a quote-unaware split, forms it does
-not read) are listed in its header and ADR 0006. The seven steps still
+not read) are listed in its header. The seven steps still
 apply to what it cannot parse: script files, `eval`, aliases, functions,
 pipes.
 
