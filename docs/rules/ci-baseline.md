@@ -6,6 +6,11 @@
   baseline; write scopes granted per job only where needed.
 - Third-party actions are pinned - a major version tag at minimum, a
   commit SHA where the action is not from a trusted publisher.
+- Runner images are pinned to an explicit label (for example
+  `ubuntu-24.04`), not `-latest`, so an image migration is a reviewed
+  change. Only the job branch protection requires gates a merge; a
+  secondary-platform job (such as the Windows self-tests) is not required,
+  and carries its own `timeout-minutes`.
 - Cache keys include the lockfile hash and the toolchain version so a
   stale cache cannot mask breakage.
 - On failure, upload diagnostic artifacts (logs, reports) with no secrets
