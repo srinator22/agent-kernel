@@ -9,7 +9,8 @@ reports memory-file hygiene. A model reads only the resulting digest.
 Inputs: JSONL transcripts at <projects>/<dir>/<session>.jsonl (top level only;
 subagent transcripts are not read). A line belongs to this repository when its
 cwd equals a root or sits under it; roots are the repository, its git
-worktrees, roots remembered in state, and --match paths. Environment overrides:
+worktrees, roots remembered in state, and --match paths; on Windows each root
+also matches its 8.3 spellings (short_spellings). Environment overrides:
 DREAM_PROJECTS_DIR (projects folder), DREAM_NOW (ISO time used as "now").
 Outputs: <state-dir>/digest.md, <state-dir>/state.next.json (proposed offsets).
 No tracked file is ever edited. The default state folder is the main

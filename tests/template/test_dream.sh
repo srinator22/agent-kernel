@@ -1059,7 +1059,7 @@ if [[ -n "$SHORT" ]]; then
   assert_rc "short path: digest exits 0" 0
   assert_file_has "short path: a cwd in short form is read" "$ST15/digest.md" "a session recorded from the short path"
 else
-  t_ok "short path: n/a without cygpath and 8.3 names"
+  t_na "short path: needs cygpath and 8.3 names (the Windows CI job runs it)"
 fi
 
 # The Windows runner's TEMP is C:\Users\RUNNER~1\AppData\...: a short ancestor and a long rest.
@@ -1118,7 +1118,7 @@ if [[ -n "$MIXED" ]]; then
   assert_file_has "mixed path: a removed worktree in that spelling is read" "$ST18/digest.md" "a mixed removed worktree line"
   assert_file_has "mixed path: a --match path that never existed matches that spelling" "$ST18/digest.md" "a mixed missing match line"
 else
-  t_ok "mixed path: n/a without cygpath and 8.3 names"
+  t_na "mixed path: needs cygpath and 8.3 names (the Windows CI job runs it)"
 fi
 
 t_finish
