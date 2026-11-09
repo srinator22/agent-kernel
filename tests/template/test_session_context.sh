@@ -54,7 +54,7 @@ t_cleanup
 # Preference registers: one summary line, a warning while the feedback hook is
 # unwired, and exit 0 whatever the registers hold or whether Python exists.
 make_fixture
-cp_script session-context.sh
+cp_script session-context.sh doctor.sh find-python.sh
 git add scripts && git commit -q -m "chore: scripts"
 run bash scripts/session-context.sh
 assert_rc "no registers: exits 0" 0
@@ -120,6 +120,8 @@ fi
 run env PATH="$NOPY_PATH" "$BASH" scripts/session-context.sh
 assert_rc "registers with no python on PATH: exits 0" 0
 assert_contains "no python: the summary still prints" "[session-context] Preferences: film, ui (4 rules, 3 Review)"
+assert_contains "no python: the Setup line names python and doctor" "[session-context] Setup: python (required): not found; run bash scripts/doctor.sh"
+assert_eq "no python: exactly one Setup line" "1" "$(printf '%s\n' "$OUT" | grep -c '^\[session-context\] Setup:')"
 case "$NOPY_ROOT" in */template-selftest.nopy.*) rm -rf "$NOPY_ROOT" ;; esac
 # The unwired hook warning.
 echo '#!/usr/bin/env bash' > scripts/feedback-log.sh
@@ -138,6 +140,62 @@ assert_contains "a missing settings.json counts as unwired" "is not wired in .cl
 rm -rf docs/preferences
 run bash scripts/session-context.sh
 assert_not_contains "no registers: the summary disappears again" "Preferences:"
+t_cleanup
+
+# Preference rules at session start: ID and Rule per area, read by awk.
+make_fixture
+cp_script session-context.sh
+git add scripts && git commit -q -m "chore: scripts"
+mkdir -p docs/preferences
+echo "# Preference registers" > docs/preferences/README.md
+run bash scripts/session-context.sh
+assert_not_contains "no registers: no rule lines" "Preferences ("
+cat > docs/preferences/film.md <<'REG'
+# Film
+
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| FILM-001 | Titles stay on screen two seconds. | 2026-11-08: "hold titles longer" | Review |
+| FILM-002 | Use a\|b alike. | 2026-11: "pipes" | Review |
+
+```
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| FENCED-001 | Fenced example row. | 2026-01 | Review |
+```
+
+## Baselines
+
+| Kind | Reference | Owns | Check |
+|---|---|---|---|
+| BASEKIND | `scripts/session-context.sh` 2026-11-08 | BASEOWNS | Review |
+REG
+printf '# UI\r\n\r\n| ID | Rule | Source | Check | Repeats |\r\n|---|---|---|---|---|\r\n| UI-001 | Labels stay short. | 2026-11-08: "short" | Review | 2 |\r\n| UI-002 | Buttons use the brand colour. | 2026-11 | Review | |\r\n' > docs/preferences/ui.md
+run bash scripts/session-context.sh
+assert_rc "rules: exits 0" 0
+assert_contains "rules: the summary line stays" "[session-context] Preferences: film, ui (4 rules, 4 Review)"
+assert_contains "rules: grouped by area with ID and Rule" "[session-context] Preferences (film): FILM-001 Titles stay on screen two seconds. FILM-002 Use a|b alike."
+assert_contains "rules: a CRLF register is read without CR" "[session-context] Preferences (ui): UI-001 Labels stay short. UI-002 Buttons use the brand colour."
+assert_eq "rules: no carriage return reaches the output" "0" "$(printf '%s' "$OUT" | tr -cd '\r' | wc -c | tr -d ' ')"
+assert_not_contains "rules: a fenced example row is not printed" "FENCED-001"
+assert_not_contains "rules: baselines rows are not printed" "BASEKIND"
+assert_not_contains "rules: a baselines Owns cell is not printed" "BASEOWNS"
+assert_not_contains "rules: Source text is not printed" "hold titles longer"
+# Over the cap: one line names the files that hold the rest.
+{
+  printf '# Big\n\n| ID | Rule | Source | Check |\n|---|---|---|---|\n'
+  for i in $(seq 1 120); do printf '| BIG-%03d | Rule number %03d keeps its words short and plain. | 2026-11-08: "x" | Review |\n' "$i" "$i"; done
+} > docs/preferences/big.md
+printf '# Zed\n\n| ID | Rule | Source | Check |\n|---|---|---|---|\n| ZED-001 | Last one. | 2026-11 | Review |\n' > docs/preferences/zed.md
+run bash scripts/session-context.sh
+assert_rc "cap: exits 0" 0
+assert_contains "cap: the first rules still print" "BIG-001 Rule number 001 keeps its words short and plain."
+assert_contains "cap: the overflow line names the file that was cut" "docs/preferences/big.md"
+assert_contains "cap: the overflow line names the later file" "docs/preferences/zed.md"
+assert_not_contains "cap: a rule past the cap is not printed" "BIG-120"
+assert_not_contains "cap: a later file's rule is not printed" "ZED-001"
+printed="$(printf '%s\n' "$OUT" | grep '^\[session-context\] Preferences (' | LC_ALL=C wc -c | tr -d ' ')"
+if (( printed <= 4000 && printed > 3000 )); then t_ok "cap: the printed rule lines stay within 4000 bytes ($printed)"; else t_bad "cap: the printed rule lines stay within 4000 bytes ($printed)"; fi
 t_cleanup
 
 # Template update awareness. The template URL is a local repo so no network
@@ -289,5 +347,26 @@ sed -i 's/^- index two/- index three/' AGENTS.md
 git add -A; git commit -q -m "feat: core file and rules index together"
 run bash scripts/session-context.sh
 assert_contains "a core file plus rules index edit prints the kernel sentence at count 1" "Template release pending: 1 synced-set commits since template-v0.4.0. Cut one with scripts/template-release.sh. The kernel or rules index changed."
+
+t_cleanup
+
+# Setup line (doctor's required checks only): PATH shims in front of the real
+# PATH. No gh, winget, brew or curl call may happen at session start.
+make_fixture
+cp_script session-context.sh doctor.sh find-python.sh
+git add scripts && git commit -q -m "chore: scripts"
+SHIMS="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.shim.XXXXXX")"
+for t in gh winget brew curl; do
+  printf '#!%s\nprintf "%%s\\n" "%s $*" >> "%s/log"\nexit 1\n' "$BASH" "$t" "$SHIMS" > "$SHIMS/$t"
+  chmod +x "$SHIMS/$t"
+done
+printf '#!%s\nexit 0\n' "$BASH" > "$SHIMS/python3"; chmod +x "$SHIMS/python3"
+: > "$SHIMS/log"
+run env PATH="$SHIMS:$PATH" bash scripts/session-context.sh
+assert_rc "all required tools work: exits 0" 0
+assert_not_contains "all required tools work: no Setup line" "Setup:"
+assert_eq "session start calls no gh, winget, brew or curl" "" "$(cat "$SHIMS/log")"
+case "$SHIMS" in */template-selftest.shim.*) rm -rf "$SHIMS" ;; esac
+t_cleanup
 
 t_finish

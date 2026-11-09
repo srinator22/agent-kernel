@@ -1,7 +1,7 @@
 # 0011 - Personal taste profile
 
 Date: 2026-11-08
-Status: accepted
+Status: superseded by 0013 (2026-11-09)
 
 ## Context
 

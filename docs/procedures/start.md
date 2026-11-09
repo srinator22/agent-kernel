@@ -4,6 +4,13 @@ If `.start-done` exists, STOP: this procedure already ran and must not run
 again. Never touch the kernel block in AGENTS.md or `.kernel.hash` at any
 point in this procedure.
 
+Before step 0, run `bash scripts/doctor.sh`. A required failure (git, bash
+3.2+, Python 3, and in template mode ruff 0.16.10, uvx or pipx) stops start:
+show the owner doctor's install lines, ask them to install the tools and run
+start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
+`git grep -P`) does not stop start: record it under "missing" or "degraded" in
+`START_REPORT.md`, the way a missing gitleaks is recorded, and go on.
+
 0. If `docs/CAPABILITY_MAP.md` is absent, run `docs/procedures/discover.md`
    first and come back; start reads the capability map for the profiles,
    the tools to build (they become the first BACKLOG items) and the risk
