@@ -6,13 +6,14 @@
 # Inputs:  the list file (default fleet.local.list at the repo root): one absolute
 #          project path per line; blank lines and lines starting with # are ignored;
 #          a trailing CR is stripped. Template tags and history come from this repo
-#          (no network); synced paths from scripts/template-sync.sh --list-set.
+#          (no network); synced commits from scripts/template-sync.sh --synced-commits.
 # Output:  a header row, one row per project (project, template, synced, behind,
 #          dirty, branch, upstream, status), then a summary line and the newest
 #          template tag. Status, first match wins: MISSING, BAD-LINE, NO-BASE,
-#          BEHIND, OK. behind counts commits touching the core and catalog
-#          paths between the project's last synced ref and the newest
-#          template-v* tag.
+#          BEHIND, OK. behind counts the template commits between the project's
+#          last synced ref and the newest template-v* tag that change what
+#          projects receive (scripts/template-sync.sh --synced-commits: core and
+#          catalog paths, a lessons header, the AGENTS.md kernel or rules index).
 # Depends: bash, git, sort -V. Strictly read-only: never writes in a project, never
 #          clones or fetches.
 # Exit:    0 whenever the list file exists (statuses are information), 2 on usage
@@ -53,16 +54,6 @@ fi
 
 NEWEST="$(git -C "$ROOT" tag -l 'template-v*' | sort -V | tail -n 1)"
 
-# Only the core and catalog groups count: the lessons files sync their header
-# only and AGENTS.md is never applied, so edits there are not "behind".
-SPECS=()
-while IFS= read -r line; do
-  line="${line%$'\r'}"
-  case "$line" in
-    core\ *|catalog\ *) SPECS+=("${line#* }") ;;
-  esac
-done < <("$ROOT/scripts/template-sync.sh" --list-set)
-
 FMT='%-28s %-16s %-26s %-7s %-6s %-14s %-8s %s\n'
 printf "$FMT" project template synced behind dirty branch upstream status
 
@@ -98,7 +89,10 @@ while IFS= read -r path || [[ -n "$path" ]]; do
       resolves=1
     fi
     if [[ $resolves -eq 1 && -n "$NEWEST" ]]; then
-      behind="$(git -C "$ROOT" rev-list --count "${synced}..${NEWEST}" -- "${SPECS[@]}" 2>/dev/null || echo '?')"
+      # One definition of "a commit that changes what projects receive": the sync script.
+      if shas="$("$ROOT/scripts/template-sync.sh" --synced-commits "${synced}..${NEWEST}" 2>/dev/null)"; then
+        behind="$(printf '%s\n' "$shas" | grep -c . || true)"
+      fi
     fi
     if git -C "$path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       # --no-optional-locks: a status must not refresh the project's index.

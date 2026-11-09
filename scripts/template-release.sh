@@ -9,20 +9,21 @@
 #
 # Inputs: git tags template-v* (newest by version order, not date), the commits
 # since that tag, AGENTS.md at the tag and at HEAD (the KERNEL block), and the
-# synced set from "scripts/template-sync.sh --list-set" (lines "<group> <path>",
-# a trailing "/" marks a directory prefix).
+# commit kinds from "scripts/template-sync.sh --synced-commits".
 # Version bump: --minor (default), --major, --patch. No previous tag: proposes
 # template-v0.1.0 and the notes cover all commits.
 # Kernel: when the KERNEL block differs from the last tag and --major was not
 # given, a KERNEL CHANGED line suggests --major.
-# Notes: each commit appears once, first match wins:
-#   1. "Synced to projects": it touches a core path; or a header path (lessons
-#      files, of which only the first HEADER_LINES lines sync) and those lines
-#      differ between <sha>^ and <sha> (a file absent on one side differs; a
-#      root commit compares against empty); or AGENTS.md and the KERNEL block
-#      or the rules index (from "## Rules index" up to the next "## " line)
-#      differs between <sha>^ and <sha>, CR stripped.
-#   2. else it touches a catalog path -> "Library and roster".
+# Notes: each commit appears once. The classification is the kind that
+# "scripts/template-sync.sh --synced-commits <range>" prints per commit (the
+# first that applies in the order agents, core, header, catalog):
+#   1. agents, core or header -> "Synced to projects": it touches a core path;
+#      or a header path (lessons files, of which only the first HEADER_LINES
+#      lines sync) and those lines differ between <sha>^ and <sha> (a file
+#      absent on one side differs; a root commit compares against empty); or
+#      AGENTS.md and the KERNEL block or the rules index (from "## Rules index"
+#      up to the next "## " line) differs between <sha>^ and <sha>, CR stripped.
+#   2. else catalog (it touches a catalog path) -> "Library and roster".
 #   3. else "Not synced".
 # Output: the notes on stdout. Without --tag it is a dry run; it warns when
 # .work/TASK.md at HEAD is a live task.
@@ -113,89 +114,37 @@ if [ -z "$commits" ]; then
   exit 0
 fi
 
-set_lines="$(bash scripts/template-sync.sh --list-set)"
+# The commits that change what projects receive come from the sync script, the
+# one definition fleet.sh also uses: "<full sha> <kind>" lines, kind agents,
+# core, header or catalog. Agents, core and header are "Synced to projects";
+# catalog is "Library and roster". Newline-framed for the lookup below.
+synced_shas="$(bash scripts/template-sync.sh --synced-commits "$range")"
+synced_shas="
+$synced_shas
+"
 
-# touches GROUPS FILES: true when any file matches a set path of the given groups
-touches() {
-  local groups="$1" files="$2" g p f
-  while read -r g p; do
-    [ -n "$g" ] || continue
-    case " $groups " in *" $g "*) ;; *) continue ;; esac
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      case "$p" in
-        */) case "$f" in "$p"*) return 0 ;; esac ;;
-        *) [ "$f" = "$p" ] && return 0 ;;
-      esac
-    done <<FILES
-$files
-FILES
-  done <<SET
-$set_lines
-SET
-  return 1
-}
-
-# Mirrors HEADER_LINES in scripts/template-sync.sh: only this many leading
-# lines of a header file sync to projects.
-HEADER_LINES=12
-
-# header_differs SHA PATH: true when the first HEADER_LINES lines of PATH differ
-# between SHA^ and SHA; a file absent on one side counts as differing.
-header_differs() {
-  local sha="$1" path="$2" a b
-  if git cat-file -e "$sha^:$path" 2>/dev/null; then
-    a="P$(git show "$sha^:$path" | sed -n "1,${HEADER_LINES}p")"
-  else a="absent"; fi
-  if git cat-file -e "$sha:$path" 2>/dev/null; then
-    b="P$(git show "$sha:$path" | sed -n "1,${HEADER_LINES}p")"
-  else b="absent"; fi
-  [ "$a" != "$b" ]
-}
-
-rules_index() { # git object -> the Rules index section, CR stripped
-  git show "$1" 2>/dev/null | tr -d '\r' | awk '/^## Rules index/{p=1; print; next} /^## /{p=0} p'
-}
-
-# is_synced SHA FILES: rule 1 of the notes classification.
-is_synced() {
-  local sha="$1" files="$2" g p
-  if touches "core" "$files"; then return 0; fi
-  while read -r g p; do
-    [ "$g" = header ] || continue
-    case "
-$files
-" in *"
-$p
-"*) if header_differs "$sha" "$p"; then return 0; fi ;; esac
-  done <<SET
-$set_lines
-SET
-  case "
-$files
-" in *"
-AGENTS.md
-"*)
-    if [ "$(kernel_block "$sha^:AGENTS.md")" != "$(kernel_block "$sha:AGENTS.md")" ] \
-      || [ "$(rules_index "$sha^:AGENTS.md")" != "$(rules_index "$sha:AGENTS.md")" ]; then
-      return 0
-    fi ;;
-  esac
-  return 1
+# commit_kind SHA: the kind the sync script gave the commit, or empty.
+commit_kind() {
+  local full
+  full="$(git rev-parse "$1")"
+  # The reader takes the first match but reads to the end: a reader that quits
+  # early can end the writer with SIGPIPE, which pipefail turns into a failure.
+  printf '%s' "$synced_shas" | awk -v s="$full" '$1 == s && !d { print $2; d = 1 }'
 }
 
 synced=""; library=""; other=""
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   sha="${line%% *}"
-  files="$(git diff-tree --no-commit-id --name-only -r --root "$sha")"
-  if is_synced "$sha" "$files"; then synced="$synced- $line
-"
-  elif touches "catalog" "$files"; then library="$library- $line
-"
-  else other="$other- $line
-"
-  fi
+  kind="$(commit_kind "$sha")"
+  case "$kind" in
+    core|header|agents) synced="$synced- $line
+" ;;
+    catalog) library="$library- $line
+" ;;
+    *) other="$other- $line
+" ;;
+  esac
 done <<COMMITS
 $commits
 COMMITS
