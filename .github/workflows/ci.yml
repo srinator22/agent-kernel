@@ -15,15 +15,19 @@ on:
     branches: ["**"]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # The required gate (branch protection names "check"). The runner image is
+  # pinned: ubuntu-latest is moving to Ubuntu 26.04 and a silent image change
+  # must not decide whether the gate passes.
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history: the changelog freshness step regenerates
           # CHANGELOG.md from the whole git log once start wires it.
@@ -33,6 +37,24 @@ jobs:
       - name: Run the gauntlet
         run: ./scripts/check.sh
 
+  # The self-tests are plain bash and Windows is a supported platform
+  # (scripts/check.cmd), so they also run on Windows. Not a required check:
+  # it has its own timeout and a failure shows as a red job without blocking
+  # the Linux gate (docs/rules/ci-baseline.md). It runs on main and by hand
+  # only: a Windows run takes tens of minutes, and on every pull request it
+  # would hold up ci-watch.sh, which waits on every job.
+  selftest-windows:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the template self-tests
+        run: ./scripts/selftest.sh
+
   # {{delete if no deploy target}}
   # Deployment depends on validation of the exact same SHA
   # (docs/rules/ci-baseline.md): deploy needs check, runs only on version
@@ -40,12 +62,12 @@ jobs:
   deploy:
     needs: check
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # {{DEPLOY_STEPS_FILLED_BY_START}}
       - name: Record deployment in the run summary
         if: always()
