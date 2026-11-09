@@ -55,6 +55,8 @@ allowed_in() {
 for shell in Bash PowerShell; do
   # Removal family: always-forbidden targets, any flags.
   blocked "$shell" "rm -rf / is blocked" 'rm -rf /'
+  # A trap that fired on the block path would add the failure notice here.
+  assert_not_contains "$shell: a judged block does not say the guard failed" "the guard failed"
   blocked "$shell" "rm -rf /* is blocked" 'rm -rf /*'
   blocked "$shell" "rm -rf ~ is blocked" 'rm -rf ~'
   blocked "$shell" "rm -fr ~ is blocked" 'rm -fr ~'
@@ -531,6 +533,159 @@ guard Bash 'cd x && rm -rf /'
 assert_contains "the block names the kernel rules and the doc" "(kernel rules 6 and 11, docs/rules/destructive-actions.md)"
 assert_contains "the block quotes the matched segment" "Matched: rm -rf /."
 assert_contains "the block tells the agent to hand off to the human" "ask them to run it themselves"
+
+# Backslash-escaped inner quotes in a commit message are one quoted word.
+for shell in Bash PowerShell; do
+  allowed "$shell" "git commit -m with backslash-escaped inner quotes is allowed" 'git commit -m \"fix \\\"x\\\" thing\"'
+  allowed "$shell" "git commit -m with escaped inner quotes then a flag is allowed" 'git commit -m \"note \\\"x\\\" done\" --amend'
+done
+
+# Process kills by image name hit every process of that name, not only the
+# ones this session started.
+for shell in Bash PowerShell; do
+  blocked "$shell" "taskkill /IM is blocked" 'taskkill /IM node.exe'
+  blocked "$shell" "taskkill /F /IM is blocked" 'taskkill /F /IM node.exe'
+  blocked "$shell" "taskkill /im (any case) is blocked" 'taskkill /f /im Node.exe'
+  blocked "$shell" "taskkill //IM (Git Bash spelling) is blocked" 'taskkill //F //IM node.exe'
+  blocked "$shell" "taskkill -im is blocked" 'taskkill -f -im node.exe'
+  blocked "$shell" "taskkill /FI imagename filter is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+  blocked "$shell" "taskkill.exe /IM is blocked" 'taskkill.exe /IM node.exe'
+  blocked "$shell" "cmd /c taskkill /IM is blocked" 'cmd /c taskkill /IM node.exe'
+  blocked "$shell" "Stop-Process -Name is blocked" 'Stop-Process -Name node'
+  blocked "$shell" "Stop-Process -Name -Force is blocked" 'Stop-Process -Name node -Force'
+  blocked "$shell" "Stop-Process -ProcessName is blocked" 'Stop-Process -ProcessName node'
+  blocked "$shell" "Stop-Process -Na (abbreviation) is blocked" 'Stop-Process -Na node'
+  blocked "$shell" "spps -Name is blocked" 'spps -Name node'
+  blocked "$shell" "pwsh -Command Stop-Process -Name is blocked" 'pwsh -Command \"Stop-Process -Name node\"'
+  blocked "$shell" "pkill is blocked" 'pkill node'
+  blocked "$shell" "pkill -f is blocked" 'pkill -f server.js'
+  blocked "$shell" "killall is blocked" 'killall node'
+  blocked "$shell" "sudo killall is blocked" 'sudo killall -9 node'
+  allowed "$shell" "taskkill /PID is allowed" 'taskkill /PID 1234 /F'
+  allowed "$shell" "Stop-Process -Id is allowed" 'Stop-Process -Id 1234'
+  allowed "$shell" "kill by pid is allowed" 'kill 1234'
+  allowed "$shell" "kill -9 by pid is allowed" 'kill -9 1234'
+  allowed "$shell" "a commit message that names pkill is allowed" 'git commit -m \"docs: ban pkill and taskkill /IM\"'
+done
+
+# git -c core.hooksPath= swaps the hooks away, the same as --no-verify.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git -c core.hooksPath=/dev/null commit is blocked" 'git -c core.hooksPath=/dev/null commit -m x'
+  blocked "$shell" "git -c core.hookspath= (any case) is blocked" 'git -c core.hookspath= push'
+  allowed "$shell" "git -c user.name=x commit is allowed" 'git -c user.name=x commit -m y'
+done
+
+# A shell command over about 4 KB is checked and prints nothing: a stderr
+# warning on an allowed command is shown only in the user's verbose view.
+long_arg="$(printf 'a%.0s' $(seq 1 4200))"
+guard Bash "echo $long_arg"
+assert_rc "a command over 4 KB that is harmless is allowed" 0
+assert_eq "a command over 4 KB that is harmless prints nothing" "" "$OUT"
+guard Bash "echo $long_arg && rm -rf /"
+assert_rc "a command over 4 KB is still checked" 2
+
+# git global options that take their value as the next word must not hide the
+# subcommand (or the hooksPath setting) behind that value.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git --config-env core.hooksPath=HP (two words) is blocked" 'git --config-env core.hooksPath=HP commit -m x'
+  blocked "$shell" "git --config-env=core.hooksPath=HP is blocked" 'git --config-env=core.hooksPath=HP commit -m x'
+  blocked "$shell" "git --git-dir .git push --force is blocked" 'git --git-dir .git push --force origin main'
+  blocked "$shell" "git --work-tree . reset --hard is blocked" 'git --work-tree . reset --hard'
+  blocked "$shell" "git --namespace x push --force is blocked" 'git --namespace x push --force origin main'
+  blocked "$shell" "git --shallow-file x push --force is blocked" 'git --shallow-file x push --force origin main'
+  allowed "$shell" "git --config-env=user.name=NAME commit is allowed" 'git --config-env=user.name=NAME commit -m x'
+  allowed "$shell" "git --git-dir .git status is allowed" 'git --git-dir .git status'
+done
+
+# Case folding covers every letter the locale knows on bash 4+: an accented
+# home folder spelled in another case is still the home folder.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  U_UP="$(printf '\303\211')"
+  U_LO="$(printf '\303\251')"
+  payload="$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf c:/users/%smile"}}' "$U_LO")"
+  OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" bash "$GUARD" 2>&1)"; RC=$?
+  assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
+  assert_contains "the non-ASCII home block names the guard" "$PREFIX"
+else
+  t_na "a non-ASCII home spelled in another case: bash 3.2 folds ASCII only by design"
+fi
+
+# Under a Turkic locale bash 4+ ${x,,} turns ASCII I into dotless U+0131, so
+# Remove-Item, RMDIR and IMAGENAME would not match their lowercase names.
+TR_LOC="$(locale -a 2>/dev/null | grep -i -m1 -E '^tr_TR\.utf-?8$')"
+if [[ -n "$TR_LOC" ]]; then
+  for shell in Bash PowerShell; do
+    LC_ALL="$TR_LOC" blocked "$shell" "Remove-Item under a Turkic locale is blocked" 'pwsh -Command \"Remove-Item -Recurse -Force ~\"'
+    LC_ALL="$TR_LOC" blocked "$shell" "taskkill /IM under a Turkic locale is blocked" 'taskkill /IM node.exe /F'
+    LC_ALL="$TR_LOC" blocked "$shell" "RMDIR /S /Q of home under a Turkic locale is blocked" 'RMDIR /S /Q C:\\Users\\tester'
+    LC_ALL="$TR_LOC" blocked "$shell" "taskkill /FI IMAGENAME under a Turkic locale is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+  done
+else
+  t_na "Turkic locale case folding: no tr_TR UTF-8 locale installed; the simulated Turkic fold below covers it"
+fi
+
+# The same without the locale, so it runs on every bash 4+ (CI included): a copy
+# of the guard whose fold turns any ASCII I it still receives into another
+# character, as towlower does under tr_TR. The A-Z table runs before the fold,
+# so no uppercase I reaches it and these still block; with the fold alone
+# (${1,,} first) "Remove-Item" would become "remove-#tem" and pass.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  TRFIX="$(mktemp -d)"
+  tr_src="$(cat "$GUARD")"
+  tr_old='eval '\''lc_fold() { LC="${LC,,}"; }'\'''
+  tr_new='eval '\''lc_fold() { LC="${LC//I/#}"; LC="${LC,,}"; }'\'''
+  if [[ "$tr_src" == *"$tr_old"* ]]; then
+    printf '%s\n' "${tr_src/"$tr_old"/"$tr_new"}" > "$TRFIX/guard.sh"
+    GUARD_REAL="$GUARD"; GUARD="$TRFIX/guard.sh"
+    for shell in Bash PowerShell; do
+      blocked "$shell" "Remove-Item under a simulated Turkic fold is blocked" 'pwsh -Command \"Remove-Item -Recurse -Force ~\"'
+      blocked "$shell" "taskkill /IM under a simulated Turkic fold is blocked" 'taskkill /IM node.exe /F'
+      blocked "$shell" "RMDIR /S /Q of home under a simulated Turkic fold is blocked" 'RMDIR /S /Q C:\\Users\\tester'
+      blocked "$shell" "taskkill /FI IMAGENAME under a simulated Turkic fold is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+    done
+    GUARD="$GUARD_REAL"
+  else
+    t_bad "the simulated Turkic fold could not find lc_fold in the guard to replace"
+  fi
+  rm -rf "$TRFIX"
+else
+  t_na "simulated Turkic fold: bash 3.2 has no locale fold"
+fi
+
+# An unexpected bash error inside the guard must block, not exit 1 (which the
+# harness treats as a non-blocking error and runs the command).
+GFIX="$(mktemp -d)"
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak '/^trap /a\
+: "${GUARD_TEST_UNSET_VARIABLE}"' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | env -u GUARD_TEST_UNSET_VARIABLE bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "an unexpected error inside the guard blocks" 2
+assert_contains "the unexpected-error block says the guard failed" "guard failed"
+assert_contains "the unexpected-error block names the guard" "$PREFIX"
+cp "$GUARD" "$GFIX/guard.sh"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "the unmodified guard allows the same harmless command" 0
+assert_eq "the unmodified guard prints nothing for a harmless command" "" "$OUT"
+
+# An error bash recovers from does not end the shell, so the EXIT trap alone
+# would let it fall through to an allow. Leaving main without an explicit exit,
+# or reading no segment at all, must also block.
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak '/^main() {$/a\
+return 0' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "main returning without an explicit exit blocks" 2
+assert_contains "main returning without an exit says the guard failed" "the guard failed"
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak 's|^  done <<< "\$in"$|  done < /nonexistent/guard-test-input|' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>/dev/null)"; RC=$?
+assert_rc "a check_text loop that never ran blocks" 2
+rm -rf "$GFIX"
+
+# Documented under-block: the segment split is quote-unaware, so a protected
+# path holding a separator is cut in two and neither half names it.
+guard_ctx Bash 'rm -rf \"C:\\x\\R&D\\proj\"' "" "$G_HOME" "$G_UP" 'C:\x\R&D\proj'
+assert_rc "KNOWN LIMIT: a workspace whose path holds & is not recognised when quoted" 0
 
 # Wiring: the settings hook covers both shells and runs this script.
 assert_file "the guard script exists" "$GUARD"
