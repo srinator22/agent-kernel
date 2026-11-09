@@ -530,6 +530,7 @@ def read_report(path):
     except (OSError, UnicodeDecodeError) as e:
         raise ReportError("cannot read it: %s" % e, "dream: cannot read the report %s: %s" % (path, e))
     props, outcomes, cur, section = {}, [], None, None
+    wrapping = False
     for row in rows:
         if row.startswith("## "):
             head = row.strip()
@@ -553,6 +554,15 @@ def read_report(path):
             props[cur] = (kind_name(tag.group(1) if tag else ""), [])
         elif cur is not None and row.strip().startswith("Change:"):
             props[cur][1].append(row.strip()[7:].strip())
+            wrapping = True
+            continue
+        elif (wrapping and cur is not None and row[:1].isspace() and row.strip()
+              and not re.match(r"\s*(Why|Evidence):", row)):
+            # Change is the last field of a proposal, so an indented line after it
+            # continues it; the format forbids wrapping but a model does it anyway.
+            props[cur][1][-1] += " " + row.strip()
+            continue
+        wrapping = False
     return props, outcomes
 
 
@@ -1195,6 +1205,31 @@ def cmd_done(c, a):
     return 0
 
 
+def record_dates(root, rel):
+    """{path relative to root: time of its last commit} for the tracked, unmodified
+    files under rel; {} outside git. A checkout stamps every file with the time it
+    was written, so only the commit date says when a record was made. A file with
+    uncommitted changes or no commit is left out: its modification time decides."""
+    out = {}
+    try:
+        r = subprocess.run(["git", "-C", root, "-c", "core.quotepath=off", "log", "--relative",
+                            "--format=@%ct", "--name-only", "--", rel],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if r.returncode != 0:
+        return {}
+    cur = None
+    for row in r.stdout.splitlines():
+        if re.fullmatch(r"@[0-9]+", row):
+            cur = dt.datetime.fromtimestamp(int(row[1:]), dt.timezone.utc)
+        elif row and cur is not None:
+            out.setdefault(row, cur)
+    for path in git_z(root, "-c", "core.quotepath=off", "ls-files", "-m", "-z", "--", rel) or []:
+        out.pop(path, None)
+    return out
+
+
 def due_numbers(c):
     last = c.last()
     roots = {norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"])
@@ -1227,11 +1262,14 @@ def due_numbers(c):
                 if os.path.abspath(p) not in seen:
                     sessions += 1
     retros = 0
+    dates = record_dates(c.root, ".work/done")
     for p in glob.glob(os.path.join(c.root, ".work", "done", "*.md")):
-        try:
-            m = dt.datetime.fromtimestamp(os.path.getmtime(p), dt.timezone.utc)
-        except OSError:
-            continue
+        m = dates.get(".work/done/" + os.path.basename(p))
+        if m is None:
+            try:
+                m = dt.datetime.fromtimestamp(os.path.getmtime(p), dt.timezone.utc)
+            except OSError:
+                continue
         if m > last:
             retros += 1
     elapsed = (c.now - last) >= dt.timedelta(days=3)
