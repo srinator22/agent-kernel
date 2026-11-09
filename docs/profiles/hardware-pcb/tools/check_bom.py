@@ -49,8 +49,8 @@ Rules
     - Datasheet: an active part (prefix U, Q), connector (J, P) with a real
       part number and no stored datasheet FAILs; other prefixes WARN. A
       datasheet counts as stored when the part's own `datasheet` column or
-      the matching [[parts]] row names a file listed in the manifest (a
-      directory row covers everything below it). Test points, mounting holes,
+      the matching [[parts]] row names a file that has its own manifest
+      row (a directory row covers nothing below it). Test points, mounting holes,
       net ties and fiducials are exempt. Plain passives with generic values
       are summarised, not required to have a part number.
     - Grade: matching parts below the minimum FAIL unless the [[parts]] row
@@ -311,9 +311,11 @@ def manifest_keys(manifest_text: str, folder: str) -> set[str]:
 
 def datasheet_is_stored(path: str, keys: set[str], folder: str) -> bool:
     key = datasheet_key(path, folder)
-    if key is None:
+    if key is None or key.endswith("/"):
         return False
-    return key in keys or any(k.endswith("/") and key.startswith(k) for k in keys)
+    # A directory row covers nothing below it: check_manifest requires a per-file row, so the two tools agree.
+    # A bare name row (no slash) names the one file of that name below the folder, as in check_manifest.
+    return key in keys or key.rsplit("/", 1)[-1] in {k for k in keys if "/" not in k}
 
 
 def _parts_index(params: dict) -> list[dict]:
