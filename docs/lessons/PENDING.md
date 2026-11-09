@@ -12,20 +12,6 @@ Entry format (all four fields required):
 - what was added:
 - retire-when:
 
-### The live destructive guard reads the whole command line
-
-- what happened: with scripts/destructive-guard.sh active as a PreToolUse
-  hook, shell commands that only carried test strings or a commit body
-  naming a refused form (rm -rf of the workspace, git push --force) were
-  refused, including text inside heredocs and inline scripts. Four
-  commands were refused and redone during the task that built the guard.
-- what check should have caught it: none, this note is the guard; the
-  over-block is the documented design (ADR 0006).
-- what was added: test inputs written to a file with the file tool and
-  run by path; commit bodies passed with git commit -F.
-- retire-when: the harness passes hook payloads that separate data from
-  the command, or the guard parses heredoc bodies as data.
-
 ### A Windows-green gate can hide a Linux exec-bit failure
 
 - what happened: the kb-adaptations change merged straight to main on the
@@ -55,16 +41,18 @@ Entry format (all four fields required):
 - retire-when: scene_lint or the stage record stores and compares the
   scene and preset hashes.
 
-### Stop processes by PID, never by image name
+### Stop processes by PID, and confirm the tree is gone
 
-- what happened: a worker stopped its own hung test with
-  `taskkill /F /IM python.exe` and killed three python processes on the
-  machine, which may have belonged to other sessions.
-- what check should have caught it: the destructive-command guard refuses
-  `taskkill /IM`, `Stop-Process -Name` and `pkill`/`killall` by name.
-- what was added: worker briefs now say "stop only by PID or task id";
-  scripts/destructive-guard.sh does not cover process kills yet.
-- retire-when: the guard refuses kill-by-name with a test.
+- what happened: a worker killed three unrelated python processes with
+  `taskkill /F /IM python.exe`; separately, a task stop left a test's child
+  processes writing to the same log (2026-11-08, fleet-sync-fixes).
+- what check should have caught it: the destructive guard refusing
+  kill-by-name (BACKLOG P2); for the log, none, this note is the guard.
+- what was added: briefs say stop only by PID or task id; fail-first runs
+  use a frozen copy with its own log, and after a stop confirm no child is
+  still running.
+- retire-when: the guard refuses kill-by-name with a test and a harness
+  stop ends the whole process tree.
 
 ### ADR numbers collide across parallel branches
 
@@ -93,35 +81,6 @@ Entry format (all four fields required):
 - what was added: the sample's RECORD.md holds the numbers.
 - retire-when: a second project confirms or corrects them, and the
   lookdev-artist or cinematographer agent carries the confirmed defaults.
-
-### The auto-mode check blocks a merge the owner has not asked for in words
-
-- what happened: after green CI and a PASS review, gh pr merge was refused
-  as "merge without review" although the owner had said "do it"; it went
-  through once the owner wrote "merge into main" (2026-11-07,
-  template-updates). Seen again on 2026-11-07 (merge refused three times,
-  a tag refused as a public surface) and passed after the owner wrote merge
-  and release.
-- what check should have caught it: none, this note is the guard: ask the
-  owner for the merge explicitly when the PR is ready, and offer the merge
-  action.
-- what was added: none.
-- retire-when: Project decisions records a standing override for merging
-  green, reviewed PRs.
-
-### A stopped background command can keep writing
-
-- what happened: a fail-first run of test_check_always.sh in the live tree
-  was stopped with the harness's task stop, but its child processes kept
-  running and appended to the same log, so the log mixed two runs (2026-11-08,
-  fleet-sync-fixes). Three processes were killed by PID and the run was
-  repeated on a frozen copy of the pre-fix scripts with a separate log.
-- what check should have caught it: none, this note is the guard: run
-  fail-first evidence on a frozen copy with its own log, and after a stop,
-  check that no child process is still running before reusing a log.
-- what was added: none.
-- retire-when: stopping a background task in the harness ends its whole
-  process tree.
 
 ### tasklint reads only the first line of a criterion
 
