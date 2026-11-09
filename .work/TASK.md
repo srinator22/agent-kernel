@@ -119,6 +119,21 @@ Round 2 (reviewer, 2026-11-09): FAIL. Apply path sound. B1 sync pushed duplicate
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
+Verdict: PASS (N4 round 2, reviewer, 2026-11-10, PR 8 head 2c8583e)
+
+Round 1 blockers: B1 fixed (mode 100755 for scripts/doctor.sh, tests/template/test_doctor.sh, tests/template/test_taste_project.sh; CI "PASS tests/template/test_test_files.sh"). B2 fixed (test_feedback.sh sources scripts/find-python.sh; no other name-based pick outside the two allowed places). B3 fixed (test_find_python.sh runs bash by absolute path; Linux CI PASS). B4 fixed (taste.py remove branch raises high[area]; test_taste_project.sh removes VOICE-007 and adds in one apply, expects VOICE-008). B5 fixed (parse_report tracks head, Evidence or Why; wrapped Why and Evidence tails tested; fail-first 66 passed, 6 failed is consistent). B6 fixed (main's paragraph restored; PR 6's merge brings the commit-date wording with record_dates).
+
+The 2c8583e change: scope_roots passes its roots through D.with_short_names, the function cmd_digest and due_numbers use; notes come from D.memory_dir, which PR 6 extended; known_roots stores only worktrees; no effect on Linux; on Windows test_taste.sh and test_taste_project.sh pass in run 42630751070.
+
+Acceptance criteria: A1 to A13 and A15 to A19 met (A11, A12, A13, A19 by judgment); A17 met as written, its timing predates e16a981; A14 met (pull_request check on the merge of 2c8583e into origin/main, every stage OK; dispatch run check and selftest-windows green, "selftest: 28 passed, 0 failed").
+
+Blockers: none.
+
+Notes: N1 the A17 timing predates e16a981 (doctor --required --quiet no longer starts cd/pwd, uname or --version); remeasure idle and also time feedback-log.sh against its 5 s hook timeout. N2 the `bash doctor.sh` from inside scripts/ fix has no test. N3 the fail-first evidence for 2c8583e is the earlier failing Windows run. N4 docs/BLUEPRINT.md adds a data-analysis/tools/ line that no commit body mentions. N5 (for PR 6) BLUEPRINT still describes dream.py as "due by file stats".
+
+Before merge: record this block; remeasure session start and the feedback hook idle and record both; the retro and reset commit is a new head whose check must reach success on that exact SHA (a retro commit touching anything outside .work/ and docs/lessons/PENDING.md needs review); merge PR 6 first, then let PR 8's check re-run green against the new main.
+
+Round 1 (N4, reviewer, 2026-11-09, head 9b26527): FAIL. B1 exec bits; B2 test_feedback.sh name-based Python pick; B3 bash not found on Linux in the stub-only case; B4 a taste remove did not raise the ID floor; B5 wrapped Why and Evidence tails joined the rule; B6 dream.md described commit-date dating that only PR 6 implements.
 
 ## Retro
 <!-- filled by docs/procedures/retro.md -->
