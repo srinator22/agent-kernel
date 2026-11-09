@@ -188,7 +188,9 @@ def scope_roots(c, state):
     """This project's roots: the checkout, its worktrees, remembered roots, --match."""
     wts = D.Ctx.worktrees(SimpleNamespace(root=c.root))
     roots = {D.norm(c.root)} | set(wts) | set(state["known_roots"]) | set(c.dream_roots()) | set(c.match)
-    return sorted(r for r in roots if r), wts
+    # The same spellings the project dream accepts (a short ancestor such as
+    # C:/Users/RUNNER~1 with a long rest), so both passes read the same sessions.
+    return sorted(r for r in D.with_short_names(roots) if r), wts
 
 
 # ---------------------------------------------------------------- signals
