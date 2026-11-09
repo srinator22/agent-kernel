@@ -17,12 +17,17 @@
 #                "judgment: <reason>" or names at least one path that exists
 #                (a token is path-like when it has "/" or ends in a known file
 #                extension, is not a URL, and may carry a ::test_name or :line
-#                suffix; a token with "*" must match something). Unticked lines
-#                are never checked.
+#                suffix; a token with "*" must match something; a bare file name
+#                that is not at the repo root counts when exactly one tracked file
+#                has that name). Unticked lines
+#                are never checked. Evidence must sit on the criterion's first
+#                line; an indented continuation line is never read, and a failing
+#                criterion names it.
 #   Assumptions  optional "## Assumptions"; each "- " line starts with
 #                [confirmed], [verified] or [open]. [verified] needs "-> evidence".
 #   Plan verdict "## Plan verdict" whose first non-blank line starts with PASS
-#                (also "**PASS**" or "Verdict: PASS"). Autopilot only: check
+#                (also "**PASS**" or "Verdict: PASS"); with several review rounds
+#                listed, the current verdict goes first. Autopilot only: check
 #                requires it once a Plan node is doing or done; ship always.
 # ship also fails every [open] assumption unless the mode is quick.
 # A pristine template (it still holds "{{title}}") has nothing to lint and passes.
@@ -121,24 +126,39 @@ function verdict(l) {
   if (l ~ /(^|[^A-Za-z])FAIL([^A-Za-z]|$)/) return "fail"
   return "none"
 }
+# A criterion's problem is held until its continuation lines are known, so the
+# message can name an indented line that carries what belongs on the first line.
+function stage(kind, a, b) { pend = 1; pk = kind; pa = a; pb = b; contline = 0 }
+function flush() {
+  if (!pend) return
+  if (contline) pa = pa "; line " contline " is an indented continuation, and evidence must sit on the criterion's first line"
+  emit(pk, pa, pb)
+  pend = 0
+}
 BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
 /^## / {
+  flush()
   sec = tolower(trim(substr($0, 4)))
   if (sec == "assumptions") hasassume = 1
   next
 }
 !hasmode && /^Mode:/ { hasmode = 1; modeval = trim(substr($0, 6)) }
+sec == "acceptance criteria" && pend && /^[ \t]+[^ \t]/ && !/^[ \t]*-([ \t]|$)/ {
+  if (!contline) contline = NR
+  next
+}
+pend { flush() }
 sec == "acceptance criteria" && /^[ \t]*- \[[xX]\]/ {
   ticked++
   ln = trim($0)
   ev = lastarrow(ln)
-  if (!ARROW) { emit("PROB", "ticked criterion has no evidence (-> path or judgment: reason): " substr(ln, 1, 60)); next }
+  if (!ARROW) { stage("PROB", "ticked criterion has no evidence (-> path or judgment: reason): " substr(ln, 1, 60)); next }
   ev = trim(ev); gsub(/`/, "", ev); ev = trim(ev)
   if (tolower(ev) ~ /^judgment:/) {
-    if (trim(substr(ev, 10)) == "") emit("PROB", "ticked criterion has `judgment:` with no reason: " substr(ln, 1, 60))
+    if (trim(substr(ev, 10)) == "") stage("PROB", "ticked criterion has `judgment:` with no reason: " substr(ln, 1, 60))
     next
   }
-  emit("EV", substr(ln, 1, 60), pathtokens(ev))
+  stage("EV", substr(ln, 1, 60), pathtokens(ev))
   next
 }
 sec == "assumptions" && /^[ \t]*-([ \t]|$)/ {
@@ -173,6 +193,7 @@ sec == "plan" && /^[ \t]*\|/ {
 }
 sec == "plan verdict" && !vseen && /[^ \t]/ { vseen = 1; vline = $0 }
 END {
+  flush()
   taskmode = "standard"
   if (hasmode && modeval !~ /\|/) {
     m = tolower(modeval)
@@ -187,10 +208,11 @@ END {
     v = vseen ? verdict(vline) : "none"
     if (v != "pass") {
       pre = (v == "fail") ? "plan verdict is FAIL; " : ""
+      post = vseen ? " (the first line must be the current verdict)" : ""
       if (startedid != "")
-        emit("PROB", pre "autopilot task has started (node " startedid " is " startedst ") without a PASS plan verdict; get the reviewer's plan review first")
+        emit("PROB", pre "autopilot task has started (node " startedid " is " startedst ") without a PASS plan verdict; get the reviewer's plan review first" post)
       else if (lintmode == "ship")
-        emit("PROB", pre "autopilot task has no PASS plan verdict; add a \"## Plan verdict\" section whose first line starts with PASS (the reviewer's plan review)")
+        emit("PROB", pre "autopilot task has no PASS plan verdict; add a \"## Plan verdict\" section whose first line starts with PASS (the reviewer's plan review)" post)
     }
   }
   printf "INFO%s%s%s%d%s%d\n", SEP, taskmode, SEP, ticked, SEP, nas
@@ -227,9 +249,26 @@ while IFS= read -r rec; do
         problem "evidence names no existing path; write the file or test, or \`judgment: <reason>\`: $a"
       else
         read -r -a toks <<< "$b"
+        before=$probs
         for tok in "${toks[@]}"; do
-          path_exists "$tok" || problem "evidence path does not exist: $tok"
+          path_exists "$tok" && continue
+          # A bare file name resolves like scripts/dream/preferences.py: exactly
+          # one tracked file with that name; several are ambiguous.
+          case "$tok" in
+            */*|*\**|*\?*) problem "evidence path does not exist: $tok" ;;
+            *)
+              hits="$({ git ls-files 2>/dev/null || true; } | awk -v n="$tok" '{ f = $0; sub(/^.*\//, "", f); if (f == n) c++ } END { print c + 0 }')"
+              if (( hits == 1 )); then :
+              elif (( hits > 1 )); then problem "file name $tok is ambiguous ($hits tracked files); use a path"
+              else problem "evidence path does not exist: $tok"
+              fi
+              ;;
+          esac
         done
+        # The continuation note rides in $a; show it beside the path problems too.
+        if (( probs > before )) && [[ "$a" == *"is an indented continuation"* ]]; then
+          problem "line ${a##*; line }"
+        fi
       fi
       ;;
     INFO) taskmode="$a"; ticked="$b"; assumed="$c" ;;

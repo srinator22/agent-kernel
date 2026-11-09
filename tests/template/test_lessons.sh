@@ -214,6 +214,23 @@ drop_skill s2 s3 s4 s5 s6
 run ./scripts/lessons.sh check
 assert_rc "7 core and 1 project skill pass" 0
 
+# Template mode (AGENTS.md has no usable Profiles line): only the software
+# profile counts, not every profile the template ships.
+mkdir -p docs/profiles/software docs/profiles/p6
+printf 'Profile software\nSkills: none\n' > docs/profiles/software/PROFILE.md
+printf 'Profile p6\nSkills: t1, t2, t3\n' > docs/profiles/p6/PROFILE.md
+ship_skill p6 t1 t2 t3
+printf -- '- Profiles: {{FILLED_BY_START}}\n' > AGENTS.md
+run ./scripts/lessons.sh skills
+assert_contains "a placeholder Profiles line counts only the software profile" "skills: 8 (cap 9 = 7 core + 2 project + 0 skills listed by the adopted profiles)"
+printf 'Purpose only, no Profiles line\n' > AGENTS.md
+run ./scripts/lessons.sh skills
+assert_contains "no Profiles line counts only the software profile" "7 core + 2 project + 0 skills listed by the adopted profiles"
+printf -- '- Profiles: software, p6\n' > AGENTS.md
+run ./scripts/lessons.sh skills
+assert_contains "a named profile still counts its skills" "7 core + 2 project + 3 skills listed by the adopted profiles"
+rm -rf docs/profiles AGENTS.md
+
 # The template core set itself is capped at 8.
 cp scripts/lessons.sh "$FIX/lessons.keep"
 sed -i.bak 's/^CORE_SKILLS=(\(.*\))$/CORE_SKILLS=(\1 c8 c9)/' scripts/lessons.sh && rm -f scripts/lessons.sh.bak
@@ -221,6 +238,22 @@ run ./scripts/lessons.sh check
 assert_rc "a core set of 9 fails" 1
 assert_contains "the core cap is named" "the template core set lists 9 skills; the cap is 8"
 cp "$FIX/lessons.keep" scripts/lessons.sh && rm -f "$FIX/lessons.keep"
+
+# The shipped-set early-stop marker: a check that returns before it prints the
+# completion marker must be reported, not read as "no problems".
+mkdir -p docs/profiles/p5/agents
+printf 'Profile p5\nSkills: none\n' > docs/profiles/p5/PROFILE.md
+printf -- '---\nname: h5\ndescription: x\nmodel: inherit\n---\n' > docs/profiles/p5/agents/h5.md
+printf 'name = "h5"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/profiles/p5/agents/h5.toml
+run ./scripts/lessons.sh check
+assert_rc "a complete shipped-set check passes" 0
+cp scripts/lessons.sh "$FIX/lessons.keep"
+sed -i.bak 's/^  echo "\$SHIPPED_DONE"$/  return 0/' scripts/lessons.sh && rm -f scripts/lessons.sh.bak
+run ./scripts/lessons.sh check
+assert_rc "a shipped-set check that stops early fails" 1
+assert_contains "the early stop is named" "shipped-set check of docs/profiles/p5 stopped before completing"
+cp "$FIX/lessons.keep" scripts/lessons.sh && rm -f "$FIX/lessons.keep"
+rm -rf docs/profiles
 
 # Agent mirror: every .claude agent has a Codex twin or a named exception.
 mkdir -p .claude/agents .codex/agents
