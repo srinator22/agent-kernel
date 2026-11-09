@@ -33,7 +33,9 @@ parameters.toml tables read
       declared_classes. Any other class (a misspelling such as "24v" for
       "24V") is a FAIL naming the class and the closest known classes,
       wherever it appears, because it would match no pin and so read as no
-      hazard.
+      hazard. Two known classes that differ only in case, spaces or
+      underscores ("24V" and "24v" on a port pin) are a FAIL too; signs
+      such as "+12V" and "-12V" stay distinct.
     [[ports]]
       id = "P1"                         required, unique label
       name = "Main input"
@@ -65,8 +67,8 @@ Rules
     - Hazard table: a pairing is called benign only when [connector_hazard]
       is present, both class lists are non-empty lists of class names,
       damaging_pairs (if given) is a list of two-class pairs, declared_classes
-      (if given) is a list of class names, no key is unknown and no class is
-      unknown. When any pairing mates and the table is missing (including a
+      (if given) is a list of class names, no key is unknown, no class is
+      unknown and no two classes differ only in case, spaces or underscores. When any pairing mates and the table is missing (including a
       misspelt table name), empty or malformed, one connectors.hazard FAIL
       names the problem and each pairing with no damaging pin is a
       cross_plug FAIL reading UNKNOWN; an unknown key or an unknown class
@@ -106,6 +108,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import re
 import sys
 import tomllib
 from dataclasses import asdict, dataclass
@@ -212,6 +215,19 @@ def _unknown_classes(usable: dict, known: set[str]) -> list[str]:
     return messages
 
 
+def _near_duplicates(known: set[str]) -> list[str]:
+    """One message per group of known classes that differ only in case, spaces or underscores.
+
+    Signs and other symbols stay significant ("+12V" and "-12V", "D+" and "D-" are different classes).
+    A misspelt port pin class ("24v" for "24V") is itself a known class, so the unknown-class check cannot
+    see it; the listed spelling next to it is the evidence."""
+    groups: dict[str, list[str]] = {}
+    for name in sorted(known):
+        groups.setdefault(re.sub(r"[\s_]+", "", name.lower()), []).append(name)
+    return [f"pin classes {', '.join(repr(n) for n in names)} differ only in case, spaces or underscores; "
+            "one is a misspelling and is read as no hazard" for names in groups.values() if len(names) > 1]
+
+
 def hazard_table(params: dict) -> tuple[dict, list[str], list[str], list[str]]:
     """(the usable hazard lists, unknown keys, problems that leave a pairing unjudgeable, unknown classes).
 
@@ -240,7 +256,10 @@ def hazard_table(params: dict) -> tuple[dict, list[str], list[str], list[str]]:
     if not (isinstance(declared, list) and all(isinstance(item, str) and item for item in declared)):
         problems.append(f"[connector_hazard] {DECLARED_CLASSES} must be a list of pin classes, found {declared!r}")
         declared = []
-    return usable, unknown, problems, _unknown_classes(usable, _port_classes(params) | set(declared))
+    known = _port_classes(params) | set(declared)
+    named = {n for key in HAZARD_CLASS_LISTS for n in usable.get(key, [])}
+    named |= {n for pair in usable.get("damaging_pairs", []) for n in pair}
+    return usable, unknown, problems, _unknown_classes(usable, known) + _near_duplicates(known | named)
 
 
 def _is_damaging(socket_class: str, plug_class: str, hazard: dict) -> bool:

@@ -42,20 +42,20 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
 
 ## Gates
 
+`scripts/check.sh` already runs the kernel hash, the AGENTS.md line budget
+(at most 180), the no-dash scan (SW-3) and the untracked-files report, so
+stack-check.sh does not repeat them. The clean-clone build (SW-14) runs in the
+release path; inside stack-check.sh it would call check.sh again and recurse.
+
 | Gate | Command (wire in stack-check.sh and CI) | Pass | Rule |
 |---|---|---|---|
-| Kernel hash | `./scripts/kernel-hash.sh --verify` | exit 0 | kernel |
-| Line budget | `wc -l < AGENTS.md` at most 180 | exit 0 | kernel 10 |
 | Format | stack formatter in check mode | exit 0 | SW-2 |
 | Lint and boundaries | stack linter plus import rules | exit 0 | SW-2 |
 | Typecheck | strict typecheck | exit 0 | SW-2 |
 | Tests | stack test runner, deterministic seed | exit 0 | SW-4 |
 | Mutation | stack mutation tool on changed modules | score at least the recorded floor | SW-2 |
 | Secrets | pinned gitleaks CLI, checksum verified | no findings | SW-11 |
-| No-dash | `grep -rnP "[\x{2013}\x{2014}]"` over tracked text minus the exempt list | no match | SW-3 |
 | Changelog freshness | regenerate with git-cliff, diff | no diff | SW-9 |
-| Untracked report | `git status --porcelain` | listed, reviewed | kernel 6 |
-| Clean clone | fresh clone, run check.sh | exit 0 | SW-14 |
 
 ## Tools
 
