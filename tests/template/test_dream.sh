@@ -577,7 +577,10 @@ SC="$OUT"
 assert_eq "scorecard: the command changes no file in the state folder" "$SNAP_BEFORE" "$(snap)"
 assert_contains "scorecard: heading" "## Scorecard"
 assert_contains "scorecard: says what it counts" "the owner's recorded decisions on past dream proposals, counted by script"
-assert_contains "scorecard: names the checkout and branch read" "now values read from $NATIVE (branch "
+# The checkout is printed resolved (dream.py uses realpath), which on a runner whose TEMP is a
+# short name differs from the cygpath spelling of the fixture.
+REALFIX="$("$PY" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$NATIVE")"
+assert_contains "scorecard: names the checkout and branch read" "now values read from $REALFIX (branch "
 assert_contains "scorecard: a report with an Outcome" "  2026-10-01: proposals 3, approved 2, declined 1"
 assert_contains "scorecard: a report without an Outcome" "  2026-10-02: proposals 2, no Outcome recorded"
 assert_contains "scorecard: the last Outcome counts" "  2026-10-03: proposals 1, approved 0, declined 1"
@@ -1091,6 +1094,29 @@ if [[ -n "$MIXED" ]]; then
   assert_file_has "mixed path: a cwd in that spelling is read" "$ST16/digest.md" "a session recorded from a mixed path"
   run bash "$CL/scripts/dream.sh" hygiene --projects-dir "$PROJMX"
   assert_contains "mixed path: the memory folder named by that spelling is read" "auto-memory: 1 files"
+  # An app worktree folder takes its name from that spelling too.
+  PROJMX2="$PB/projmx2"
+  mkdir -p "$PROJMX2/${MSLUG}--claude-worktrees-foo"
+  mk "$PROJMX2/${MSLUG}--claude-worktrees-foo/nnnnnnn1.jsonl" user 2026-11-14T08:00:00.000Z "a mixed app worktree line" "$MIXED\\.claude\\worktrees\\foo"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" due --projects-dir "$PROJMX2" --state-dir "$FIX/state17"
+  assert_contains "mixed path: an app worktree folder named from that spelling counts" "dream: due (1 sessions"
+  # A removed worktree and a --match path that never existed have no short name of their own;
+  # their cwd is recorded with the short ancestors of the folder above them.
+  PROJMX3="$PB/projmx3"
+  ST18="$FIX/state18"
+  mkdir -p "$PROJMX3/any"
+  git -C "$CL" worktree add -q --detach "$CL-wt" >/dev/null 2>&1
+  mk "$PROJMX3/any/ooooooo1.jsonl" user 2026-11-14T08:00:00.000Z "a mixed first pass" "$MIXED"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX3" --state-dir "$ST18"
+  assert_rc "mixed path: a first digest that records the worktree exits 0" 0
+  run bash "$CL/scripts/dream.sh" done --state-dir "$ST18"
+  git -C "$CL" worktree remove --force "$CL-wt" >/dev/null 2>&1
+  mk "$PROJMX3/any/ooooooo2.jsonl" user 2026-11-14T09:00:00.000Z "a mixed removed worktree line" "${MIXED}-wt"
+  mk "$PROJMX3/any/ooooooo3.jsonl" user 2026-11-14T09:01:00.000Z "a mixed missing match line" "${MIXED}-m9"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX3" --state-dir "$ST18" --match "$CL-m9"
+  assert_rc "mixed path: digest after the worktree is removed exits 0" 0
+  assert_file_has "mixed path: a removed worktree in that spelling is read" "$ST18/digest.md" "a mixed removed worktree line"
+  assert_file_has "mixed path: a --match path that never existed matches that spelling" "$ST18/digest.md" "a mixed missing match line"
 else
   t_ok "mixed path: n/a without cygpath and 8.3 names"
 fi

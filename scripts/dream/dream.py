@@ -333,25 +333,33 @@ def short_spellings(path):
     parts in 8.3 form and the rest long, for each k. A short ancestor inherited from
     TEMP or USERPROFILE (the CI runner's C:/Users/RUNNER~1) leaves the rest of the
     cwd long, so a transcript's cwd and folder name can match neither the long form
-    nor the all-short form. Empty off Windows, for a missing path, or when no part
-    has a short name."""
+    nor the all-short form. A path that no longer or never existed (a removed
+    worktree, a --match path) takes the spellings of its nearest existing folder,
+    with the missing tail kept long, as a cwd under it was recorded. Empty off
+    Windows or when no part has a short name."""
     if os.name != "nt" or not path:
         return []
+    base, tail = path.replace("\\", "/").rstrip("/"), []
+    while not os.path.exists(base):
+        if "/" not in base:
+            return []
+        base, part = base.rsplit("/", 1)
+        tail.insert(0, part)
     try:
         import ctypes
         buf = ctypes.create_unicode_buffer(32768)
-        n = ctypes.windll.kernel32.GetShortPathNameW(path.replace("/", "\\"), buf, 32768)
+        n = ctypes.windll.kernel32.GetShortPathNameW(base.replace("/", "\\"), buf, 32768)
     except (ImportError, AttributeError, OSError):
         return []
     if not 0 < n < 32768:
         return []
-    long_parts = path.replace("\\", "/").rstrip("/").split("/")
+    long_parts = base.split("/")
     short_parts = buf.value.replace("\\", "/").rstrip("/").split("/")
     if len(long_parts) != len(short_parts):
-        return [buf.value]
+        return ["/".join([buf.value.replace("\\", "/").rstrip("/")] + tail)]
     out, seen = [], {norm(path)}
     for k in range(1, len(long_parts) + 1):
-        s = "/".join(short_parts[:k] + long_parts[k:])
+        s = "/".join(short_parts[:k] + long_parts[k:] + tail)
         if norm(s) not in seen:
             seen.add(norm(s))
             out.append(s)
@@ -1284,12 +1292,13 @@ def due_numbers(c):
     last = c.last()
     roots = with_short_names({norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"]))
     slugs = {slug(r).lower() for r in roots}
-    app_prefix = slug(c.root).lower() + "--claude-worktrees-"
+    # App worktrees live under the checkout, so their folders start with any spelling of it.
+    app_prefixes = tuple(slug(r).lower() + "--claude-worktrees-" for r in with_short_names({norm(c.root)}))
 
     def ours_folder(folder):
         # Exact names only: a prefix match would also take sibling folders such as Foo-bar for Foo.
         f = folder.lower()
-        return f in slugs or f.startswith(app_prefix)
+        return f in slugs or f.startswith(app_prefixes)
 
     sessions = 0
     seen = set()
