@@ -64,7 +64,13 @@ last), so check.sh itself stays the template's and syncs cleanly.
    (one absolute path per line, gitignored because project paths are
    private) with their Template line, last sync, synced-set commits behind
    the newest tag, uncommitted files, branch, waiting upstream lessons and a
-   status: OK, BEHIND, NO-BASE, BAD-LINE or MISSING. It is read-only.
+   status: OK, BEHIND, NO-BASE, BAD-LINE or MISSING. It is read-only. A
+   commit counts as synced-set when it touches a core or catalog path, changes
+   the first 12 lines of a lessons file, or changes the AGENTS.md kernel block
+   or rules index. The sync script's --synced-commits option prints one
+   "<sha> <kind>" line per such commit, kind being the first that applies of
+   core, header, agents, catalog. fleet.sh counts every line; the release
+   notes list core, header and agents under synced and catalog under library.
 
 ## Template sync (down)
 

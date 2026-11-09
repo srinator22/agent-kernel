@@ -479,6 +479,47 @@ assert_contains "a cap that could not be counted is reported" "template-sync: sk
 assert_rc "a sync whose cap could not be counted exits 1" 1
 cd "$PRJ" || exit 1
 
+# ---- (r) a real run against a published tag: bare repo, URL transport ----
+# The template is published as a bare repository reached by a file:// URL with
+# annotated template-v* tags (what template-release.sh --tag creates), so the
+# run takes the clone, ls-remote and tag-resolution paths a GitHub URL takes,
+# without the network.
+PUBDIR="$FIX/published.git"
+# An annotated tag needs a committer identity; the bare repository has none configured.
+git clone -q --bare "$TPL" "$PUBDIR" >/dev/null 2>&1
+git -C "$PUBDIR" -c user.email=p@example.invalid -c user.name=p tag -a -m "release 0.2.0" template-v0.2.0 v1
+git -C "$PUBDIR" -c user.email=p@example.invalid -c user.name=p tag -a -m "release 0.3.0" template-v0.3.0 v2
+git -C "$PUBDIR" -c user.email=p@example.invalid -c user.name=p tag -a -m "release 0.10.0" template-v0.10.0 v2
+# Git for Windows cannot open an MSYS path (/tmp/...) in a file:// URL; cygpath -m
+# gives the C:/... form it can. Without cygpath the POSIX path is already right.
+if command -v cygpath >/dev/null 2>&1; then
+  PUB="file:///$(cygpath -m "$PUBDIR")"
+else
+  PUB="file://$PUBDIR"
+fi
+PRJ4="$FIX/project4"
+mkdir -p "$PRJ4" && cd "$PRJ4" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email p@example.invalid; git config user.name p; git config core.autocrlf false
+git -C "$TPL" archive --format=tar v1 | tar -x -C "$PRJ4"
+sed -i.bak "s|^- Template:.*|- Template: $PUB template-v0.2.0|" AGENTS.md && rm -f AGENTS.md.bak
+put docs/lessons/MAINTENANCE.log "template-sync: template-v0.2.0 2026-09-01"
+chmod +x scripts/*.sh
+./scripts/kernel-hash.sh --update >/dev/null
+proj_commit "project at template-v0.2.0"
+git checkout -q -b sync-real
+run ./scripts/template-sync.sh --latest-tag
+assert_eq "--latest-tag reads the published URL from AGENTS.md" "template-v0.10.0" "$OUT"
+run ./scripts/template-sync.sh --status
+assert_rc "--status is clean before the sync" 0
+run ./scripts/template-sync.sh --latest
+assert_contains "the run names the URL and the newest published tag" "template $PUB at template-v0.10.0"
+assert_contains "the changed file is applied from the published tag" "UPDATE    scripts/a.sh"
+assert_file_has "the applied file holds the published content" scripts/a.sh "echo a v2"
+assert_file_has "the sync is recorded with the tag it reached" docs/lessons/MAINTENANCE.log "template-sync: template-v0.10.0 2026-10-09"
+assert_file_has "the earlier record is kept" docs/lessons/MAINTENANCE.log "template-sync: template-v0.2.0 2026-09-01"
+cd "$PRJ" || exit 1
+
 # ---- usage ----
 run ./scripts/template-sync.sh --bogus
 assert_rc "an unknown flag is a usage error" 2

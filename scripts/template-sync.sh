@@ -17,7 +17,10 @@
 # core-set files match the project's most often); --latest-tag (the newest
 # template-v* tag via ls-remote, no clone); --status (offline: exit 1 unless
 # the Template line is exactly "- Template: <url> <ref>" naming the last
-# recorded sync; exit 0 in template mode); --list-set (the synced set as
+# recorded sync; exit 0 in template mode); --synced-commits <range> (the
+# commits of a range in this template repository that change the synced set,
+# as "<sha> <kind>" with kind core, header, agents or catalog, for fleet.sh
+# and template-release.sh); --list-set (the synced set as
 # "<group> <path>" lines for other scripts).
 #
 # Guard: a real apply refuses (exit 2) unless "git status --porcelain" is empty
@@ -125,6 +128,7 @@ usage_text() {
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
+  echo "  --synced-commits <range>: '<sha> <kind>' per commit of a git range here that changes what projects receive; kind is core, header, agents or catalog (offline)"
   echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage or guard failure"
 }
 usage() { usage_text >&2; exit 2; }
@@ -336,6 +340,84 @@ suggest_baseline() {
   return 0
 }
 
+
+# --synced-commits <range>: the commits of a git range in this repository (the
+# template) that change what projects receive, one "<full sha> <kind>" line
+# each, in git log order. One definition for fleet.sh (counts every line) and
+# template-release.sh (core, header and agents are "synced"; catalog is the
+# library section). A commit counts when it touches a core or catalog path; or
+# a header file whose first HEADER_LINES lines differ from its parent (a file
+# absent on one side differs); or AGENTS.md with a different KERNEL block or
+# "## Rules index" section (CR stripped). The kind is the first that applies in
+# the order core, header, agents, catalog, so a commit touching core and catalog
+# is core. Edits below a lessons header and AGENTS.md Project decisions are
+# project data and do not count.
+agents_synced_view() { # git object -> kernel block then rules index
+  git -C "$ROOT" show "$1" 2>/dev/null | tr -d '\r' | awk '
+    /<!-- KERNEL:BEGIN -->/ {k=1}
+    k {print}
+    /<!-- KERNEL:END -->/ {k=0}
+    /^## Rules index/ {r=1; print; next}
+    /^## / {r=0}
+    r'
+}
+
+commit_kind() { # sha files-newline-separated -> prints the kind, or nothing
+  local sha="$1" files="$2" g p f a b core=0 header=0 agents=0 catalog=0
+  while read -r g p; do
+    [[ -n "$g" ]] || continue
+    while IFS= read -r f; do
+      [[ -n "$f" ]] || continue
+      case "$g" in
+        core|catalog)
+          case "$p" in
+            */) [[ "$f" == "$p"* ]] || continue ;;
+            *) [[ "$f" == "$p" ]] || continue ;;
+          esac
+          if [[ "$g" == core ]]; then core=1; else catalog=1; fi ;;
+        header)
+          if [[ "$f" == "$p" ]]; then
+            if git -C "$ROOT" cat-file -e "$sha^:$p" 2>/dev/null; then
+              a="P$(git -C "$ROOT" show "$sha^:$p" | sed -n "1,${HEADER_LINES}p")"
+            else a=absent; fi
+            if git -C "$ROOT" cat-file -e "$sha:$p" 2>/dev/null; then
+              b="P$(git -C "$ROOT" show "$sha:$p" | sed -n "1,${HEADER_LINES}p")"
+            else b=absent; fi
+            [[ "$a" != "$b" ]] && header=1
+          fi ;;
+        agents)
+          if [[ "$f" == "$p" ]]              && [[ "$(agents_synced_view "$sha^:$p")" != "$(agents_synced_view "$sha:$p")" ]]; then
+            agents=1
+          fi ;;
+      esac
+    done <<FILES
+$files
+FILES
+  done <<SET
+$(list_set)
+SET
+  if [[ $core -eq 1 ]]; then echo core
+  elif [[ $header -eq 1 ]]; then echo header
+  elif [[ $agents -eq 1 ]]; then echo agents
+  elif [[ $catalog -eq 1 ]]; then echo catalog
+  fi
+}
+
+synced_commits() {
+  local range="$1" sha files kind
+  if ! git -C "$ROOT" log --no-merges --format=%H "$range" >/dev/null 2>&1; then
+    echo "template-sync: --synced-commits: cannot read the git range '$range' in $ROOT" >&2
+    return 1
+  fi
+  while IFS= read -r sha; do
+    [[ -n "$sha" ]] || continue
+    files="$(git -C "$ROOT" diff-tree --no-commit-id --name-only -r --root "$sha")"
+    kind="$(commit_kind "$sha" "$files")"
+    if [[ -n "$kind" ]]; then echo "$sha $kind"; fi
+  done < <(git -C "$ROOT" log --no-merges --format=%H "$range")
+  return 0
+}
+
 main() {
   local template="" ref="" dry=0 from_agents=0 default_tag="" resolved=0
   local baseline="" latest=0 mode=sync
@@ -343,6 +425,7 @@ main() {
     case "$1" in
       -h|--help) usage_text; exit 0 ;;
       --list-set) list_set; exit 0 ;;
+      --synced-commits) [[ $# -ge 2 ]] || usage; synced_commits "$2"; exit $? ;;
       --template) [[ $# -ge 2 ]] || usage; template="$2"; shift 2 ;;
       --ref) [[ $# -ge 2 ]] || usage; ref="$2"; shift 2 ;;
       --baseline) [[ $# -ge 2 ]] || usage; baseline="$2"; shift 2 ;;

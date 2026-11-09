@@ -111,6 +111,33 @@ assert_contains "agents kernel block synced" "chore: agents kernel block"
 assert_not_contains "index below line 12 not in synced" "chore: index below header"
 assert_not_contains "agents decisions only not in synced" "chore: agents decisions only"
 
+# ---- --synced-commits prints "<sha> <kind>"; kind is the first of core, header, agents, catalog ----
+fresh_repo
+put_full_agents "k" "r" "d"
+mkdir -p docs/lessons
+for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do echo "line $n" >> docs/lessons/INDEX.md; done
+git add -A >/dev/null 2>&1 && git commit -q -m "chore: seed" >/dev/null 2>&1
+git tag base-kinds
+commit_file scripts/k_core.sh "feat: kind core"
+sed -i 's/^line 3$/line 3 edited/' docs/lessons/INDEX.md
+git add -A >/dev/null 2>&1 && git commit -q -m "chore: kind header" >/dev/null 2>&1
+put_full_agents "k edited" "r" "d"
+git add -A >/dev/null 2>&1 && git commit -q -m "chore: kind agents" >/dev/null 2>&1
+commit_file docs/library/k_cat.md "feat: kind catalog"
+mkdir -p scripts docs/library
+echo a >> scripts/k_both.sh; echo b >> docs/library/k_both.md
+git add -A >/dev/null 2>&1 && git commit -q -m "feat: kind both" >/dev/null 2>&1
+commit_file random/k_none.md "chore: kind none"
+run bash scripts/template-sync.sh --synced-commits base-kinds..HEAD
+assert_rc "synced-commits exits 0" 0
+kinds="$(printf '%s
+' "$OUT" | while read -r sha kind; do printf '%s=%s
+' "$(git log -1 --format=%s "$sha")" "$kind"; done | sort | tr '
+' ' ')"
+assert_eq "kind column: first of core, header, agents, catalog; none for unsynced"   "chore: kind agents=agents chore: kind header=header feat: kind both=core feat: kind catalog=catalog feat: kind core=core " "$kinds"
+assert_eq "one line per synced commit" "5" "$(printf '%s
+' "$OUT" | grep -c .)"
+
 # ---- empty group prints none; kernel unchanged ----
 fresh_repo
 git tag template-v0.1.0
