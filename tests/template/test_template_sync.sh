@@ -505,6 +505,9 @@ git -C "$TPL" archive --format=tar v1 | tar -x -C "$PRJ4"
 sed -i.bak "s|^- Template:.*|- Template: $PUB template-v0.2.0|" AGENTS.md && rm -f AGENTS.md.bak
 put docs/lessons/MAINTENANCE.log "template-sync: template-v0.2.0 2026-09-01"
 chmod +x scripts/*.sh
+# .start-done puts --status in project mode; without it the template-mode
+# short-circuit would make the status assertions below check nothing.
+touch .start-done
 ./scripts/kernel-hash.sh --update >/dev/null
 proj_commit "project at template-v0.2.0"
 git checkout -q -b sync-real
@@ -512,6 +515,7 @@ run ./scripts/template-sync.sh --latest-tag
 assert_eq "--latest-tag reads the published URL from AGENTS.md" "template-v0.10.0" "$OUT"
 run ./scripts/template-sync.sh --status
 assert_rc "--status is clean before the sync" 0
+assert_contains "--status names the published URL and the recorded tag" "status: template $PUB at template-v0.2.0 (template-v0.2.0 2026-09-01)"
 run ./scripts/template-sync.sh --latest
 assert_contains "the run names the URL and the newest published tag" "template $PUB at template-v0.10.0"
 assert_contains "the changed file is applied from the published tag" "UPDATE    scripts/a.sh"

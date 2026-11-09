@@ -4,6 +4,7 @@
 # Usage: scripts/template-sync.sh [--template <git url or path>]
 #          [--ref <tag> | --latest] [--baseline <ref>] [--dry-run] [--resolved]
 #        scripts/template-sync.sh --suggest-baseline | --latest-tag | --status | --list-set
+#        scripts/template-sync.sh --synced-commits <git range>
 #        scripts/template-sync.sh --help | -h
 #
 # --template is optional: when omitted it is read from the project's AGENTS.md
@@ -103,8 +104,8 @@ PROJECT_OWNED_RE='^scripts/stack-check\.sh$'
 # HEADER_LINES lines sync; the rest is project data), catalog (synced only
 # where the project carries the folder) and agents (AGENTS.md: kernel block
 # and rules index compared, never applied). scripts/template-release.sh,
-# scripts/fleet.sh and scripts/session-context.sh read this list instead of
-# keeping their own copy.
+# scripts/fleet.sh and scripts/session-context.sh get the set through
+# --synced-commits (below) instead of keeping their own copy.
 list_set() {
   local p
   for p in "${CORE_FILES[@]}"; do echo "core $p"; done
@@ -119,6 +120,7 @@ usage_text() {
   echo "                                 [--baseline <ref>] [--dry-run] [--resolved]"
   echo "       scripts/template-sync.sh [--template <url>] --suggest-baseline | --latest-tag"
   echo "       scripts/template-sync.sh --status | --list-set | --help"
+  echo "       scripts/template-sync.sh --synced-commits <git range>"
   echo "  --template defaults to the '- Template: <url> <tag>' line of AGENTS.md (tag = default --ref)."
   echo "  A real apply needs a clean working tree and a branch other than main or master."
   echo "  --latest: sync to the newest template-v* tag (version order); not with --ref"
@@ -362,12 +364,31 @@ agents_synced_view() { # git object -> kernel block then rules index
     r'
 }
 
-commit_kind() { # sha files-newline-separated -> prints the kind, or nothing
-  local sha="$1" files="$2" g p f a b core=0 header=0 agents=0 catalog=0
+# The synced set is read once per run into SET_G / SET_P (group and path):
+# list_set runs in a subshell, and one per commit, or a here-document per set
+# line, made the range scan take seconds on Windows.
+SET_G=()
+SET_P=()
+
+load_set() {
+  local g p
+  SET_G=(); SET_P=()
   while read -r g p; do
     [[ -n "$g" ]] || continue
-    while IFS= read -r f; do
-      [[ -n "$f" ]] || continue
+    SET_G+=("$g"); SET_P+=("$p")
+  done < <(list_set)
+}
+
+# commit_kind <sha> <file>...: sets KIND to the kind of the commit, or "" when
+# it changes nothing projects receive. No subshell: it runs once per commit.
+commit_kind() {
+  local sha="$1" g p f a b i core=0 header=0 agents=0 catalog=0
+  shift
+  KIND=""
+  for f in "$@"; do
+    [[ -n "$f" ]] || continue
+    for i in "${!SET_G[@]}"; do
+      g="${SET_G[$i]}"; p="${SET_P[$i]}"
       case "$g" in
         core|catalog)
           case "$p" in
@@ -376,7 +397,7 @@ commit_kind() { # sha files-newline-separated -> prints the kind, or nothing
           esac
           if [[ "$g" == core ]]; then core=1; else catalog=1; fi ;;
         header)
-          if [[ "$f" == "$p" ]]; then
+          if [[ "$f" == "$p" && $header -eq 0 ]]; then
             if git -C "$ROOT" cat-file -e "$sha^:$p" 2>/dev/null; then
               a="P$(git -C "$ROOT" show "$sha^:$p" | sed -n "1,${HEADER_LINES}p")"
             else a=absent; fi
@@ -386,35 +407,48 @@ commit_kind() { # sha files-newline-separated -> prints the kind, or nothing
             [[ "$a" != "$b" ]] && header=1
           fi ;;
         agents)
-          if [[ "$f" == "$p" ]]              && [[ "$(agents_synced_view "$sha^:$p")" != "$(agents_synced_view "$sha:$p")" ]]; then
+          if [[ "$f" == "$p" && $agents -eq 0 ]] && [[ "$(agents_synced_view "$sha^:$p")" != "$(agents_synced_view "$sha:$p")" ]]; then
             agents=1
           fi ;;
       esac
-    done <<FILES
-$files
-FILES
-  done <<SET
-$(list_set)
-SET
-  if [[ $core -eq 1 ]]; then echo core
-  elif [[ $header -eq 1 ]]; then echo header
-  elif [[ $agents -eq 1 ]]; then echo agents
-  elif [[ $catalog -eq 1 ]]; then echo catalog
+    done
+  done
+  if [[ $core -eq 1 ]]; then KIND=core
+  elif [[ $header -eq 1 ]]; then KIND=header
+  elif [[ $agents -eq 1 ]]; then KIND=agents
+  elif [[ $catalog -eq 1 ]]; then KIND=catalog
   fi
 }
 
+# One git log reads the whole range (marker line "@@@<sha>", then that commit's
+# files); only commits that touch a header file or AGENTS.md pay for the
+# git show comparisons inside commit_kind. --no-renames keeps one path per
+# change, as diff-tree -r reported it.
 synced_commits() {
-  local range="$1" sha files kind
-  if ! git -C "$ROOT" log --no-merges --format=%H "$range" >/dev/null 2>&1; then
+  local range="$1" line sha="" out
+  local files=()
+  if ! out="$(git -C "$ROOT" log --no-merges --no-renames --format=@@@%H --name-only "$range" 2>/dev/null)"; then
     echo "template-sync: --synced-commits: cannot read the git range '$range' in $ROOT" >&2
     return 1
   fi
-  while IFS= read -r sha; do
-    [[ -n "$sha" ]] || continue
-    files="$(git -C "$ROOT" diff-tree --no-commit-id --name-only -r --root "$sha")"
-    kind="$(commit_kind "$sha" "$files")"
-    if [[ -n "$kind" ]]; then echo "$sha $kind"; fi
-  done < <(git -C "$ROOT" log --no-merges --format=%H "$range")
+  load_set
+  while IFS= read -r line; do
+    if [[ "$line" == @@@* ]]; then
+      if [[ -n "$sha" ]]; then
+        commit_kind "$sha" ${files[@]+"${files[@]}"}
+        if [[ -n "$KIND" ]]; then echo "$sha $KIND"; fi
+      fi
+      sha="${line#@@@}"; files=()
+    elif [[ -n "$line" ]]; then
+      files+=("$line")
+    fi
+  done <<LOG
+$out
+LOG
+  if [[ -n "$sha" ]]; then
+    commit_kind "$sha" ${files[@]+"${files[@]}"}
+    if [[ -n "$KIND" ]]; then echo "$sha $KIND"; fi
+  fi
   return 0
 }
 

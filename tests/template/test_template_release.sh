@@ -130,13 +130,9 @@ git add -A >/dev/null 2>&1 && git commit -q -m "feat: kind both" >/dev/null 2>&1
 commit_file random/k_none.md "chore: kind none"
 run bash scripts/template-sync.sh --synced-commits base-kinds..HEAD
 assert_rc "synced-commits exits 0" 0
-kinds="$(printf '%s
-' "$OUT" | while read -r sha kind; do printf '%s=%s
-' "$(git log -1 --format=%s "$sha")" "$kind"; done | sort | tr '
-' ' ')"
-assert_eq "kind column: first of core, header, agents, catalog; none for unsynced"   "chore: kind agents=agents chore: kind header=header feat: kind both=core feat: kind catalog=catalog feat: kind core=core " "$kinds"
-assert_eq "one line per synced commit" "5" "$(printf '%s
-' "$OUT" | grep -c .)"
+kinds="$(printf '%s\n' "$OUT" | while read -r sha kind; do printf '%s=%s\n' "$(git log -1 --format=%s "$sha")" "$kind"; done | sort | tr '\n' ' ')"
+assert_eq "kind column: first of core, header, agents, catalog; none for unsynced" "chore: kind agents=agents chore: kind header=header feat: kind both=core feat: kind catalog=catalog feat: kind core=core " "$kinds"
+assert_eq "one line per synced commit" "5" "$(printf '%s\n' "$OUT" | grep -c .)"
 
 # ---- empty group prints none; kernel unchanged ----
 fresh_repo

@@ -59,7 +59,8 @@ last), so check.sh itself stays the template's and syncs cleanly.
    `--tag` creates the annotated tag on a clean main equal to origin/main and
    prints the push command; pushing the tag is an owner approval (kernel
    rule 15). At session start the template prints how many synced-set commits
-   wait since the newest tag.
+   wait since the newest tag, counted by the same --synced-commits definition
+   as fleet.sh (below).
 4. `scripts/fleet.sh` lists the local projects named in `fleet.local.list`
    (one absolute path per line, gitignored because project paths are
    private) with their Template line, last sync, synced-set commits behind

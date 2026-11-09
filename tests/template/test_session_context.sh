@@ -264,6 +264,20 @@ sed -i 's/^- index one/- index two/' AGENTS.md
 git commit -q -am "docs: rules index"
 run bash scripts/session-context.sh
 assert_rc "a rules index change exits 0" 0
-assert_contains "a rules index change prints the line at count 0" "Template release pending: 0 synced-set commits since template-v0.2.0. Cut one with scripts/template-release.sh. The kernel or rules index changed."
+# One definition of synced-set (template-sync.sh --synced-commits): an AGENTS.md
+# commit that changes the rules index counts itself, so the count is 1 here, not
+# the 0 the old path-only count printed.
+assert_contains "a rules index change prints the line at count 1" "Template release pending: 1 synced-set commits since template-v0.2.0. Cut one with scripts/template-release.sh. The kernel or rules index changed."
+
+# A change to the first 12 lines of a lessons header file after the newest tag
+# is a synced-set commit of kind header (a fresh tag first, so the count is 1).
+git tag template-v0.3.0
+run bash scripts/session-context.sh
+assert_not_contains "a new tag clears the pending line again" "Template release pending"
+sed -i '3s/.*/header changed/' docs/lessons/PENDING.md
+git commit -q -am "docs: lessons header line"
+run bash scripts/session-context.sh
+assert_contains "a lessons header edit prints the line at count 1" "Template release pending: 1 synced-set commits since template-v0.3.0. Cut one with scripts/template-release.sh."
+assert_not_contains "a header-only change has no kernel sentence" "The kernel or rules index changed."
 
 t_finish

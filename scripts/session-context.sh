@@ -95,20 +95,8 @@ preferences_block || true
 # maintainer when synced-set commits have landed since the newest tag.
 # Opt out with TEMPLATE_UPDATE_CHECK=0. Every command is guarded: this hook
 # must print its other lines and exit 0 whatever happens here.
-# Prints the AGENTS.md sections that sync to projects (the kernel block and
-# the rules index) from stdin.
-agents_synced_sections() {
-  awk '
-    /<!-- KERNEL:BEGIN -->/ {k=1}
-    k {print}
-    /<!-- KERNEL:END -->/ {k=0}
-    /^## Rules index/ {r=1; print; next}
-    /^## / {r=0}
-    r {print}
-  ' || true
-}
 template_update_block() {
-  local line rest url ref last tag cache dir tmp lowest newest n paths p
+  local line rest url ref last tag cache dir tmp lowest newest n
   if [[ -f .start-done ]]; then
     line="$(grep -m1 -E '^- Template:' AGENTS.md 2>/dev/null | tr -d '\r' || true)"
     [[ -n "$line" ]] || return 0
@@ -150,28 +138,20 @@ template_update_block() {
   else
     newest="$(git tag -l 'template-v*' 2>/dev/null | sort -V | tail -n 1 || true)"
     [[ -n "$newest" ]] || return 0
-    # Only core and catalog paths count: lesson data and AGENTS.md Project
-    # decisions change in every project and are not a release trigger.
-    paths="$(bash scripts/template-sync.sh --list-set 2>/dev/null | awk '$1 == "core" || $1 == "catalog" {print $2}' || true)"
+    # One definition of "synced-set commit": template-sync.sh --synced-commits
+    # (core, catalog, lessons header and AGENTS.md kernel or rules index). The
+    # count and the kernel sentence come from its lines; a failure prints
+    # nothing because session start must never fail.
+    local lines
+    lines="$(bash scripts/template-sync.sh --synced-commits "$newest..HEAD" 2>/dev/null || true)"
     n=0
-    if [[ -n "$paths" ]]; then
-      local args=()
-      while IFS= read -r p; do
-        [[ -n "$p" ]] && args+=("$p")
-      done <<< "$paths"
-      n="$(git rev-list --count "$newest..HEAD" -- "${args[@]}" 2>/dev/null || true)"
+    if [[ -n "$lines" ]]; then
+      n="$(printf '%s\n' "$lines" | grep -c . || true)"
       [[ "$n" =~ ^[0-9]+$ ]] || n=0
     fi
-    # AGENTS.md syncs only its kernel block and rules index; compare those.
-    local differs=0 old_md new_md
-    old_md="$(git show "$newest:AGENTS.md" 2>/dev/null | tr -d '\r' || true)"
-    new_md="$(git show HEAD:AGENTS.md 2>/dev/null | tr -d '\r' || true)"
-    if [[ -n "$old_md" && -n "$new_md" ]]; then
-      if [[ "$(printf '%s\n' "$old_md" | agents_synced_sections)" != "$(printf '%s\n' "$new_md" | agents_synced_sections)" ]]; then
-        differs=1
-      fi
-    fi
-    if (( n > 0 || differs == 1 )); then
+    local differs=0
+    if printf '%s\n' "$lines" | grep -q ' agents$'; then differs=1; fi
+    if (( n > 0 )); then
       rest="[session-context] Template release pending: $n synced-set commits since $newest. Cut one with scripts/template-release.sh."
       if (( differs == 1 )); then rest="$rest The kernel or rules index changed."; fi
       echo "$rest"
