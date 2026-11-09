@@ -204,8 +204,15 @@ def ensure_dir(d):
 
 def memory_dir(c):
     """Claude Code keeps one auto-memory folder per repository, named after the
-    main checkout, so a linked worktree reads that folder too."""
-    return os.path.join(c.projects, slug(main_worktree(c.root)), "memory")
+    main checkout, so a linked worktree reads that folder too. The folder is named
+    after the spelling the session saw, so a short-then-long spelling of the main
+    checkout (short_spellings) names it when that folder exists."""
+    main = main_worktree(c.root)
+    for p in [main] + short_spellings(main):
+        d = os.path.join(c.projects, slug(p), "memory")
+        if os.path.isdir(d):
+            return d
+    return os.path.join(c.projects, slug(main), "memory")
 
 
 def stat_key(path):
@@ -321,28 +328,42 @@ def markers(roots):
     return list(out)
 
 
-def short_name(root):
-    """The Windows 8.3 form of an existing path, normalised like roots, or None."""
-    if os.name != "nt":
-        return None
+def short_spellings(path):
+    """Other spellings Windows can hand a process for an existing path: its first k
+    parts in 8.3 form and the rest long, for each k. A short ancestor inherited from
+    TEMP or USERPROFILE (the CI runner's C:/Users/RUNNER~1) leaves the rest of the
+    cwd long, so a transcript's cwd and folder name can match neither the long form
+    nor the all-short form. Empty off Windows, for a missing path, or when no part
+    has a short name."""
+    if os.name != "nt" or not path:
+        return []
     try:
         import ctypes
         buf = ctypes.create_unicode_buffer(32768)
-        n = ctypes.windll.kernel32.GetShortPathNameW(root.replace("/", "\\"), buf, 32768)
+        n = ctypes.windll.kernel32.GetShortPathNameW(path.replace("/", "\\"), buf, 32768)
     except (ImportError, AttributeError, OSError):
-        return None
-    return norm(buf.value) if 0 < n < 32768 else None
+        return []
+    if not 0 < n < 32768:
+        return []
+    long_parts = path.replace("\\", "/").rstrip("/").split("/")
+    short_parts = buf.value.replace("\\", "/").rstrip("/").split("/")
+    if len(long_parts) != len(short_parts):
+        return [buf.value]
+    out, seen = [], {norm(path)}
+    for k in range(1, len(long_parts) + 1):
+        s = "/".join(short_parts[:k] + long_parts[k:])
+        if norm(s) not in seen:
+            seen.add(norm(s))
+            out.append(s)
+    return out
 
 
 def with_short_names(roots):
-    """roots plus the 8.3 form of each: a session started from a short-name path
-    (a RUNNER~1 user folder) records that text as its cwd, while roots are resolved to
-    the long form."""
+    """roots (normalised) plus every short-then-long spelling of each, so the byte
+    markers, cwd_match and the project-folder slugs all accept them."""
     out = set(roots)
     for r in roots:
-        sh = short_name(r) if r else None
-        if sh:
-            out.add(sh)
+        out.update(norm(s) for s in short_spellings(r))
     return out
 
 

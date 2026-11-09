@@ -1059,4 +1059,40 @@ else
   t_ok "short path: n/a without cygpath and 8.3 names"
 fi
 
+# The Windows runner's TEMP is C:\Users\RUNNER~1\AppData\...: a short ancestor and a long rest.
+# A session started there records that mixed spelling as its cwd and names its project and
+# memory folders after it, so it matches neither the long form nor the all-short form.
+# The project here is a clone under two long-named folders, so its spelling with short
+# ancestors and a long last part differs from both the long and the all-short form on any
+# Windows machine with 8.3 names, not only where the user folder itself is long.
+MIXED=""
+CL="$PB/longancestorfolder/longdescendantclone"
+if command -v cygpath >/dev/null 2>&1 && mkdir -p "${CL%/*}" && git clone -q "$FIX" "$CL" >/dev/null 2>&1; then
+  CLN="$(cygpath -w "$CL")"
+  MIXED="$("$PY" -c 'import ctypes,sys
+b=ctypes.create_unicode_buffer(32768)
+n=ctypes.windll.kernel32.GetShortPathNameW(sys.argv[1],b,32768)
+s=b.value.split("\\") if 0<n<32768 else []
+l=sys.argv[1].split("\\")
+m="\\".join(s[:-1]+l[-1:]) if len(s)==len(l) else ""
+print(m if m and m!=b.value and m!=sys.argv[1] else "")' "$CLN" 2>/dev/null)"
+fi
+if [[ -n "$MIXED" ]]; then
+  MSLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$MIXED")"
+  PROJMX="$PB/projmx"
+  ST16="$FIX/state16"
+  mkdir -p "$PROJMX/$MSLUG/memory"
+  printf '%s\n' '# A note' 'Body.' > "$PROJMX/$MSLUG/memory/note-m.md"
+  mk "$PROJMX/$MSLUG/mmmmmmm1.jsonl" user 2026-11-14T08:00:00.000Z "a session recorded from a mixed path" "$MIXED"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" due --projects-dir "$PROJMX" --state-dir "$ST16"
+  assert_contains "mixed path: the session folder named by a short-then-long path is counted" "dream: due (1 sessions"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX" --state-dir "$ST16"
+  assert_rc "mixed path: digest exits 0" 0
+  assert_file_has "mixed path: a cwd in that spelling is read" "$ST16/digest.md" "a session recorded from a mixed path"
+  run bash "$CL/scripts/dream.sh" hygiene --projects-dir "$PROJMX"
+  assert_contains "mixed path: the memory folder named by that spelling is read" "auto-memory: 1 files"
+else
+  t_ok "mixed path: n/a without cygpath and 8.3 names"
+fi
+
 t_finish
