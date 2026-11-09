@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/dream.sh and scripts/dream/dream.py: the signal digest, the once-only offsets, the
-# due decision and the memory hygiene report. Transcripts are synthetic JSONL
+# due decision, the memory hygiene report and the scorecard. Transcripts are synthetic JSONL
 # under a fake projects folder; DREAM_PROJECTS_DIR and DREAM_NOW pin the inputs.
 # Without python the test is skipped (CI has python3).
 set -uo pipefail
@@ -476,6 +476,386 @@ assert_file_has "impact: the trend keeps the earlier dream through a stop" "$D10
 assert_file_has "impact: and counts this one" "$D10" "  this dream: U 1"
 DREAM_NOW="2026-11-09T12:00:00Z" run bash scripts/dream.sh done --state-dir "$ST10"
 assert_rc "impact: done without a report still works" 0
+
+# --- scorecard ---
+# Owner decisions from saved reports, counted by script. "Now" values come from
+# the fixture's INDEX.md (L001 used 0, L002 used 2 last 2026-11-01) and a
+# BACKLOG.md written here.
+run bash scripts/dream.sh scorecard --state-dir "$FIX/nostate"
+assert_rc "scorecard: no state folder exits 0" 0
+assert_contains "scorecard: no state folder says so" "no saved reports"
+assert_no_file "scorecard: no state folder is created" "$FIX/nostate"
+
+printf '%s\n' '# Backlog' '| item | priority | why | status |' '|---|---|---|---|' \
+  '| Alpha guard (matcher Bash\|PowerShell) with a test | P2 | recurs | done 2026-11-01 |' \
+  '| `Delta` row in backticks | P3 | x | open |' > "$FIX/BACKLOG.md"
+SCST11="$FIX/scstate11"
+mkdir -p "$SCST11"
+printf '%s\n' '# Dream report 2026-10-01' '## Proposals' \
+  '1. [Mechanize] Wire the guard' '   Evidence: s1' \
+  '   Change: BACKLOG.md rows "Alpha guard (matcher Bash|PowerShell) with a test | P2 | recurs | open" and "Beta missing | P3 | x | open", plus "Delta row in backticks | P3 | x | open"' \
+  '2. [pending:approve] Move a lesson' '   Change: docs/lessons/INDEX.md add "[L002] Guarding commits", note L001 and L099; docs/lessons/PENDING.md add "Gamma | not a row"' \
+  '3. Untagged idea' '   Change: BACKLOG.md row "Epsilon declined | P3 | x | open"; INDEX.md L077' \
+  '## Considered and dropped' '- nothing' \
+  '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: 3' 'Files: BACKLOG.md' > "$SCST11/2026-10-01-report.md"
+printf '%s\n' '# Dream report 2026-10-02' '## Proposals' '1. [stale] a' '2. [stale] b' > "$SCST11/2026-10-02-report.md"
+printf '%s\n' '# Dream report 2026-10-03' '## Proposals' '1. [stale] only' \
+  '## Outcome 2026-10-03' 'Applied: 1' 'Declined: none' \
+  '## Outcome 2026-10-04' 'Applied: none' 'Declined: 1' > "$SCST11/2026-10-03-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] one' '1. [stale] two' > "$SCST11/2026-10-04-report.md"
+printf '# r\n## Proposals\n1. [stale] bad \xff\xfe bytes\n' > "$SCST11/2026-10-05-report.md"
+mkdir -p "$SCST11/2026-10-06-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-07' 'Applied: 1, x' 'Declined: none' > "$SCST11/2026-10-07-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-08' 'Applied: 1' > "$SCST11/2026-10-08-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-09' 'Applied: 5' 'Declined: 1' > "$SCST11/2026-10-09-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '2. [stale] b' '## Outcome 2026-10-10' 'Applied: 1, 2' 'Declined: 2' > "$SCST11/2026-10-10-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [stale] ignored' '## Outcome x' 'Applied: 1' 'Declined: none' > "$SCST11/notes-report.md"
+snap() { (cd "$SCST11" && find . -type f -exec cksum {} + | sort); }
+SNAP_BEFORE="$(snap)"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
+assert_rc "scorecard: command exits 0 with skipped reports" 0
+SC="$OUT"
+assert_eq "scorecard: the command changes no file in the state folder" "$SNAP_BEFORE" "$(snap)"
+assert_contains "scorecard: heading" "## Scorecard"
+assert_contains "scorecard: says what it counts" "the owner's recorded decisions on past dream proposals, counted by script"
+assert_contains "scorecard: names the checkout and branch read" "now values read from $NATIVE (branch "
+assert_contains "scorecard: a report with an Outcome" "  2026-10-01: proposals 3, approved 2, declined 1"
+assert_contains "scorecard: a report without an Outcome" "  2026-10-02: proposals 2, no Outcome recorded"
+assert_contains "scorecard: the last Outcome counts" "  2026-10-03: proposals 1, approved 0, declined 1"
+assert_contains "scorecard: a repeated number is skipped" "skipped 2026-10-04-report.md: numbers proposal 1 twice"
+assert_contains "scorecard: invalid UTF-8 is skipped" "skipped 2026-10-05-report.md: cannot read it"
+assert_contains "scorecard: an unreadable report is skipped" "skipped 2026-10-06-report.md: cannot read it"
+assert_contains "scorecard: a non-numeric Outcome is skipped" "skipped 2026-10-07-report.md: Outcome Applied is not a number list"
+assert_contains "scorecard: an Outcome without Declined is skipped" "skipped 2026-10-08-report.md: Outcome lacks a Declined line"
+assert_contains "scorecard: an Outcome number missing from Proposals is skipped" "skipped 2026-10-09-report.md: Outcome names 5, which its Proposals lack"
+assert_contains "scorecard: a number in both lists is skipped" "skipped 2026-10-10-report.md: Outcome puts 2 in both Applied and Declined"
+case "$SC" in *notes-report*) t_bad "scorecard: a file not named YYYY-MM-DD-report.md is ignored" "$SC" ;; *) t_ok "scorecard: a file not named YYYY-MM-DD-report.md is ignored" ;; esac
+assert_contains "scorecard: kind tag lowercased" "  mechanize: approved 1, declined 0, rate 100%"
+assert_contains "scorecard: kind spacing normalised" "  pending: approve: approved 1, declined 0, rate 100%"
+assert_contains "scorecard: kinds count every report with an Outcome" "  stale: approved 0, declined 1, rate 0%"
+assert_contains "scorecard: a proposal without a tag is untagged" "  untagged: approved 0, declined 1, rate 0%"
+assert_contains "scorecard: decided total against the thresholds" "decided: 4 (self-review pass at 30, replay check at 50)"
+assert_contains "scorecard: candidates have no source without a digest" "candidates: N/A - no digest signals"
+assert_contains "scorecard: a bracketed lesson id shows its INDEX values" "  L002: used 2, last 2026-11-01"
+assert_contains "scorecard: a bare lesson id is read too" "  L001: used 0, last -"
+assert_contains "scorecard: a lesson missing from INDEX.md" "  L099: not in INDEX.md"
+case "$SC" in *L077*) t_bad "scorecard: a declined proposal's lesson is not listed" "$SC" ;; *) t_ok "scorecard: a declined proposal's lesson is not listed" ;; esac
+assert_contains "scorecard: an escaped pipe still matches its row" "  Alpha guard (matcher Bash|PowerShell) with a test: done 2026-11-01"
+assert_contains "scorecard: every quoted row in a Change line counts" "  Beta missing: not found"
+assert_contains "scorecard: backticks do not stop a match" "  Delta row in backticks: open"
+case "$SC" in *Gamma*) t_bad "scorecard: a quote outside a BACKLOG.md change is not a row" "$SC" ;; *) t_ok "scorecard: a quote outside a BACKLOG.md change is not a row" ;; esac
+case "$SC" in *Epsilon*) t_bad "scorecard: a declined proposal's row is not listed" "$SC" ;; *) t_ok "scorecard: a declined proposal's row is not listed" ;; esac
+
+NOGIT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.nogit.XXXXXX")"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$NOGIT"
+assert_contains "scorecard: outside git the branch is N/A" "(branch N/A - not a git checkout)"
+rm -rf "$NOGIT"
+git -C "$FIX" checkout -q --detach
+run bash scripts/dream.sh scorecard --state-dir "$SCST11"
+assert_contains "scorecard: a detached HEAD is named" "(branch detached)"
+git -C "$FIX" checkout -q -
+
+# In a digest the section sits between Impact and Signals and counts candidates
+# with the Impact section's word matcher.
+SCPROJ11="$FIX/scprojects11"
+mkdir -p "$SCPROJ11/$SLUG"
+mk "$SCPROJ11/$SLUG/kkkkkkkk11.jsonl" err 2026-11-07T09:00:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
+dg --projects-dir "$SCPROJ11" --state-dir "$SCST11"
+assert_rc "scorecard: a digest with skipped reports still completes" 0
+SCD11="$SCST11/digest.md"
+assert_file_has "scorecard: the digest carries the section" "$SCD11" "## Scorecard"
+ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Signals\)$' "$SCD11" | cut -d: -f2 | tr '\n' ',')"
+assert_eq "scorecard: section order Impact, Scorecard, Signals" "## Impact since the last dream,## Scorecard,## Signals," "$ORDER"
+assert_file_has "scorecard: candidates in a digest come from its signals" "$SCD11" "  L002: used 2, last 2026-11-01; candidates 1"
+assert_file_has "scorecard: and the Impact section agrees" "$SCD11" "L002 shares words with s1"
+
+# Size: 15 reports of 12 approved proposals, two lessons and two long rows each.
+SCST12="$FIX/scstate12"
+mkdir -p "$SCST12"
+LONG="$(printf 'x%.0s' $(seq 1 90))"
+for d in $(seq 1 15); do
+  f="$SCST12/2026-09-$(printf '%02d' "$d")-report.md"
+  { echo "# r"; echo "## Proposals"
+    for p in $(seq 1 12); do
+      echo "$p. [mechanize] p$p"
+      echo "   Change: BACKLOG.md rows \"row-$d-$p-a $LONG | P2 | why $LONG | open $LONG\" and \"row-$d-$p-b $LONG | P2 | why | open\"; INDEX.md L$((d * 100 + p * 2)) and L$((d * 100 + p * 2 + 1))"
+    done
+    echo "## Outcome 2026-09-$(printf '%02d' "$d")"; echo "Applied: $(seq -s ', ' 1 12)"; echo "Declined: none"
+  } > "$f"
+done
+run bash scripts/dream.sh scorecard --state-dir "$SCST12"
+assert_rc "scorecard: the size fixture exits 0" 0
+BYTES="$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
+if (( BYTES < 6000 )); then t_ok "scorecard: 15 heavy reports stay under 6000 bytes ($BYTES)"; else t_bad "scorecard: 15 heavy reports stay under 6000 bytes" "$BYTES bytes"; fi
+assert_contains "scorecard: older reports fold into one row" "  older (5 reports): proposals 60, approved 60, declined 0, no Outcome 0"
+assert_contains "scorecard: the newest report's lessons come first" "  L1502: not in INDEX.md"
+assert_contains "scorecard: lessons beyond 20 are counted" "  ... 220 more not shown"
+assert_contains "scorecard: rows beyond 20 are counted" "  ... 220 more not shown"
+case "$OUT" in *row-15-1-a*) t_ok "scorecard: the newest report's rows come first" ;; *) t_bad "scorecard: the newest report's rows come first" "$OUT" ;; esac
+case "$OUT" in *"$LONG$LONG"*) t_bad "scorecard: cells are cut to 80 characters" "$OUT" ;; *) t_ok "scorecard: cells are cut to 80 characters" ;; esac
+
+# Each lesson id and row prints once: repeated in one Change line, across
+# reports, and a row cell differing only in case or backticks.
+SCST13="$FIX/scstate13"
+mkdir -p "$SCST13"
+printf '%s\n' '# r' '## Proposals' '1. [counter] twice in one line' \
+  '   Change: INDEX.md add [L404] and set L404 last; BACKLOG.md row "Zeta repeated row | P2 | x | open"' \
+  '## Outcome 2026-08-01' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-01-report.md"
+printf '%s\n' '# r' '## Proposals' '1. [counter] again in a later report' \
+  '   Change: INDEX.md L404; BACKLOG.md row "`zeta REPEATED row` | P2 | y | open"' \
+  '## Outcome 2026-08-02' 'Applied: 1' 'Declined: none' > "$SCST13/2026-08-02-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13"
+assert_eq "scorecard: a lesson repeated across reports prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+assert_eq "scorecard: a row repeated across reports, by case or backticks, prints once" 1 "$(printf '%s\n' "$OUT" | grep -ci '^  `\{0,1\}zeta repeated row')"
+# The repeat inside one Change line alone (an earlier report would hide it).
+SCST13B="$FIX/scstate13b"
+mkdir -p "$SCST13B"
+cp "$SCST13/2026-08-01-report.md" "$SCST13B/"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13B"
+assert_eq "scorecard: a lesson repeated in one Change line prints once" 1 "$(printf '%s\n' "$OUT" | grep -c '^  L404: ')"
+
+# A long used or last value in INDEX.md is cut, so a lesson line stays short.
+LR="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.longlast.XXXXXX")"
+mkdir -p "$LR/docs/lessons"
+printf '%s\n' "- [L404] Long values - x (used: $(printf '9%.0s' $(seq 1 60)), last: $(printf 'z%.0s' $(seq 1 200)), retire-when: y)" \
+  > "$LR/docs/lessons/INDEX.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST13" --root "$LR"
+LINE="$(printf '%s\n' "$OUT" | grep '^  L404: ')"
+assert_contains "scorecard: the long lesson is listed" "  L404: used "
+if (( ${#LINE} <= 100 )); then t_ok "scorecard: long used and last values are cut (${#LINE} characters)"; else t_bad "scorecard: long used and last values are cut" "$LINE"; fi
+rm -rf "$LR"
+
+# Kind rows and skipped lines are capped too: 30 kinds and 30 bad reports.
+SCST14="$FIX/scstate14"
+mkdir -p "$SCST14"
+for k in $(seq 1 30); do
+  printf '%s\n' '# r' '## Proposals' "1. [kind-$k] one" '## Outcome 2026-07-01' 'Applied: 1' 'Declined: none' \
+    > "$SCST14/2026-07-$(printf '%02d' "$k")-report.md"
+  printf '%s\n' '# r' '## Proposals' '1. [x] a' '1. [x] b' > "$SCST14/2026-06-$(printf '%02d' "$k")-report.md"
+done
+run bash scripts/dream.sh scorecard --state-dir "$SCST14"
+assert_eq "scorecard: at most 20 kind rows" 20 "$(printf '%s\n' "$OUT" | grep -c '^  kind-[0-9]*: approved')"
+assert_eq "scorecard: at most 20 skipped lines" 20 "$(printf '%s\n' "$OUT" | grep -c '^skipped ')"
+assert_contains "scorecard: the remaining kinds are counted" "  ... 10 more kinds not shown"
+assert_contains "scorecard: the remaining skipped reports are counted" "... 10 more skipped reports not shown"
+
+# A repository with no commits yet still names its branch.
+UNBORN="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.unborn.XXXXXX")"
+git -C "$UNBORN" init -q -b fresh >/dev/null 2>&1 || git -C "$UNBORN" init -q >/dev/null 2>&1
+UB="$(git -C "$UNBORN" symbolic-ref --short HEAD 2>/dev/null)"
+run bash scripts/dream.sh scorecard --state-dir "$SCST11" --root "$UNBORN"
+assert_contains "scorecard: an unborn branch is named" "(branch $UB)"
+rm -rf "$UNBORN"
+
+# --- feedback log and repeats (A9) ---
+# The log is <main checkout>/.work/feedback/log.jsonl; the digest reads it from a saved
+# offset into state.next.json and done commits that offset, as for transcripts.
+touch "$FIX/.start-done"
+mkdir -p "$FIX/docs/preferences"
+printf '%s\n' '# UI' '| ID | Rule | Source | Check |' '|---|---|---|---|' \
+  '| U1 | Keep titles short and avoid decorative gradients | 2026-11 "owner words" | Review |' \
+  '| U2 | Never commit rendered footage | 2026-11-02 "owner words" | Review |' \
+  '```' '| ID | Rule | Source | Check |' '|---|---|---|---|' \
+  '| X9 | fenced example about gradients decorative | 2026-11 | Review |' '```' > "$FIX/docs/preferences/ui.md"
+cat > "$FIX/mkfb.py" <<'PYEOF'
+import json, os, sys
+f, kind, ts, text = sys.argv[1:5]
+rest = sys.argv[5:9]
+sess, branch, task, files = rest + ["sessXXXX", "main", "-", ""][len(rest):]
+os.makedirs(os.path.dirname(f), exist_ok=True)
+eol = "" if os.environ.get("NOEOL") else "\n"
+with open(f, "a", encoding="utf-8", newline="\n") as fh:
+    if kind == "raw":
+        fh.write(text + eol)
+    elif kind == "nl":
+        fh.write("\n")
+    elif kind == "pad":
+        n = 0
+        while n < int(text):
+            s = json.dumps({"v": 1, "ts": ts, "session": "pad", "branch": "b", "task": "-", "kind": "message",
+                            "text": "p" * 900, "files": [], "said": ""}) + "\n"
+            fh.write(s)
+            n += len(s)
+    else:
+        fh.write(json.dumps({"v": 1, "ts": ts, "session": sess[:8], "branch": branch, "task": task, "kind": kind,
+                             "text": text, "files": [x for x in files.split(",") if x], "said": ""}) + eol)
+PYEOF
+fbl() { "$PY" "$FIX/mkfb.py" "$@"; }
+fboff() { "$PY" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("feedback",{}).get("offset"))' "$1"; }
+FBLOG="$FIX/.work/feedback/log.jsonl"
+PROJE="$FIX/projectse"
+mkdir -p "$PROJE"
+STF="$FIX/statef"
+FD="$STF/digest.md"
+
+# No log: the section says so and a digest with a transcript signal still works.
+dg --projects-dir "$PROJ3" --state-dir "$FIX/statef0"
+assert_rc "feedback: a missing log is not an error" 0
+D0="$FIX/statef0/digest.md"
+assert_file_has "feedback: no log is one line" "$D0" "no feedback log yet"
+ORDER="$(grep -n '^## \(Impact since the last dream\|Scorecard\|Feedback\|Repeats\|Signals\)$' "$D0" | cut -d: -f2 | tr '\n' ',')"
+assert_eq "feedback: sections follow the Scorecard before Signals" "## Impact since the last dream,## Scorecard,## Feedback,## Repeats,## Signals," "$ORDER"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: no log and no signal exits 3" 3
+
+fbl "$FBLOG" deferral   2026-11-07T09:00:00Z "not now, later: decorative gradients" sessAAAA task/x t1 ""
+fbl "$FBLOG" correction 2026-11-07T09:10:00Z "no the gradients look cheap and decorative" sessAAAA task/x t1 "a.py,b.md"
+fbl "$FBLOG" correction 2026-11-07T09:40:00Z "wrong: you did commit rendered footage" sessBBBB task/y t2 "c.md"
+fbl "$FBLOG" preference 2026-11-07T10:00:00Z "always keep titles short, never decorative $(printf 'q%.0s' $(seq 1 500))" sessAAAA task/x t1 ""
+fbl "$FBLOG" approval   2026-11-07T10:10:00Z "perfect" sessBBBB task/y t2 ""
+fbl "$FBLOG" message    2026-11-07T10:20:00Z "run the tests again" sessBBBB task/y t2 ""
+fbl "$FBLOG" raw        2026-11-07T10:30:00Z "{not json"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: new log lines make the digest exit 0 with no transcript signal" 0
+assert_file_has "feedback: heading" "$FD" "## Feedback"
+assert_file_has "feedback: line counts" "$FD" "log: 7 new lines read, 1 malformed; 5 shown, 0 dropped by the 12000 byte cap"
+assert_file_has "feedback: a deferral line carries the situation" "$FD" "- f1 [deferral] 2026-11-07 sessAAAA task/x task t1: not now, later: decorative gradients; files: -"
+assert_file_has "feedback: newest correction first, with its files" "$FD" "- f2 [correction] 2026-11-07 sessBBBB task/y task t2: wrong: you did commit rendered footage; files: c.md"
+assert_file_has "feedback: older correction, files joined" "$FD" "- f3 [correction] 2026-11-07 sessAAAA task/x task t1: no the gradients look cheap and decorative; files: a.py, b.md"
+assert_file_has "feedback: preference line is clipped at 400" "$FD" "qqqqqqqq...; files: -"
+assert_file_lacks "feedback: and not longer" "$FD" "$(printf 'q%.0s' $(seq 1 400))"
+assert_file_has "feedback: approval line" "$FD" "- f5 [approval] 2026-11-07 sessBBBB task/y task t2: perfect; files: -"
+assert_file_lacks "feedback: a plain message is not listed" "$FD" "run the tests again"
+KORD="$(grep -o '^- f[0-9]* \[[a-z]*\]' "$FD" | tr '\n' ',')"
+assert_eq "feedback: kind priority, then newest first" "- f1 [deferral],- f2 [correction],- f3 [correction],- f4 [preference],- f5 [approval]," "$KORD"
+assert_file_has "feedback: repeats heading says candidates" "$FD" "word-overlap candidates, not proof"
+assert_file_has "feedback: a correction repeats a rule" "$FD" "ui:U2 <- f2 (commit footage rendered)"
+assert_file_has "feedback: another correction repeats a rule" "$FD" "ui:U1 <- f3 (decorative gradients)"
+assert_file_has "feedback: a preference repeats a rule" "$FD" "ui:U1 <- f4 (decorative short titles)"
+assert_file_lacks "feedback: a deferral is not matched" "$FD" "<- f1 "
+assert_file_lacks "feedback: a fenced example is not a rule" "$FD" "X9 <-"
+LOGSIZE="$(wc -c < "$FBLOG" | tr -d ' ')"
+assert_eq "feedback: the digest proposes the log size as the offset" "$LOGSIZE" "$(fboff "$STF/state.next.json")"
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done exits 0" 0
+assert_eq "feedback: done commits the offset" "$LOGSIZE" "$(fboff "$STF/state.json")"
+assert_file "feedback: a small log is not rotated" "$FBLOG"
+assert_no_file "feedback: and no rotated copy exists" "$FIX/.work/feedback/log.1.jsonl"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: nothing new exits 3" 3
+
+# A line appended between digest and done is read by the next digest.
+fbl "$FBLOG" correction 2026-11-08T08:00:00Z "no, the zebra border is wrong" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: appended line digest exits 0" 0
+assert_file_has "feedback: appended line read" "$FD" "the zebra border is wrong"
+fbl "$FBLOG" preference 2026-11-08T08:05:00Z "from now on use zebra borders" sessCCCC task/z t3 ""
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done after a late append exits 0" 0
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the late line is read by the next digest" 0
+assert_file_has "feedback: late line present" "$FD" "from now on use zebra borders"
+assert_file_lacks "feedback: and the committed line is not read again" "$FD" "the zebra border is wrong"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A partial last line waits for the next run.
+NOEOL=1 fbl "$FBLOG" correction 2026-11-08T09:00:00Z "no, the partial feedback" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a partial line alone exits 3" 3
+fbl "$FBLOG" nl 2026-11-08T09:00:00Z ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the completed line is read" 0
+assert_eq "feedback: read exactly once" "1" "$(grep -c 'the partial feedback' "$FD")"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A malformed line is counted, not fatal.
+fbl "$FBLOG" raw 2026-11-08T09:10:00Z "{broken"
+fbl "$FBLOG" correction 2026-11-08T09:11:00Z "no, the margin is wrong" sessCCCC task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a malformed line does not stop the digest" 0
+assert_file_has "feedback: malformed counted" "$FD" "log: 2 new lines read, 1 malformed; 1 shown"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# A log shorter than the offset is read again from the start.
+: > "$FBLOG"
+fbl "$FBLOG" correction 2026-11-08T10:00:00Z "no, short rewrite feedback" sessDDDD task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a shrunk log exits 0" 0
+assert_file_has "feedback: a shrunk log is re-read from 0" "$FD" "short rewrite feedback"
+assert_file_has "feedback: from the first line" "$FD" "log: 1 new lines read"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# done rotates a log over 5 MB after committing the offset; the next digest reads the new log from 0.
+fbl "$FBLOG" pad 2026-11-08T11:00:00Z 5300000
+fbl "$FBLOG" correction 2026-11-08T11:01:00Z "no, the big log feedback" sessEEEE task/z t3 ""
+BIGSIZE="$(wc -c < "$FBLOG" | tr -d ' ')"
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: a big log digest exits 0" 0
+assert_file_has "feedback: the big log's correction is shown" "$FD" "the big log feedback"
+run bash scripts/dream.sh done --state-dir "$STF"
+assert_rc "feedback: done with a big log exits 0" 0
+assert_file "feedback: a log over 5 MB is rotated to log.1.jsonl" "$FIX/.work/feedback/log.1.jsonl"
+assert_eq "feedback: the rotated copy is the whole old log" "$BIGSIZE" "$(wc -c < "$FIX/.work/feedback/log.1.jsonl" | tr -d ' ')"
+assert_no_file "feedback: the active log starts empty" "$FBLOG"
+assert_eq "feedback: the offset resets to 0" "0" "$(fboff "$STF/state.json")"
+fbl "$FBLOG" correction 2026-11-08T12:00:00Z "no, the fresh log feedback" sessEEEE task/z t3 ""
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: the new log is read" 0
+assert_file_has "feedback: the new log is read from 0" "$FD" "log: 1 new lines read, 0 malformed; 1 shown"
+assert_file_has "feedback: new line shown" "$FD" "the fresh log feedback"
+run bash scripts/dream.sh done --state-dir "$STF"
+
+# Plain messages alone are not a reason to dream; a big message-only log is still rotated.
+fbl "$FBLOG" pad 2026-11-08T13:00:00Z 5300000
+dg --projects-dir "$PROJE" --state-dir "$STF"
+assert_rc "feedback: only plain messages exits 3" 3
+assert_file "feedback: a big message-only log is rotated at exit 3" "$FIX/.work/feedback/log.1.jsonl"
+assert_eq "feedback: and its offset resets" "0" "$(fboff "$STF/state.json")"
+
+# A line logged between the digest and done (the owner approving proposals)
+# survives the rotation: the next digest reads it from log.1.jsonl first.
+ROTROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.rot.XXXXXX")"
+RLOG="$ROTROOT/.work/feedback/log.jsonl"
+fbl "$RLOG" pad 2026-11-08T14:00:00Z 5300000
+fbl "$RLOG" correction 2026-11-08T14:01:00Z "no, before the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the rotation fixture digest exits 0" 0
+fbl "$RLOG" correction 2026-11-08T14:05:00Z "no, typed during the dream" sessGGGG task/r t5 ""
+run bash scripts/dream.sh done --root "$ROTROOT" --state-dir "$ROTROOT/st"
+assert_rc "feedback: done on the rotation fixture exits 0" 0
+assert_file "feedback: the fixture log was rotated" "$ROTROOT/.work/feedback/log.1.jsonl"
+fbl "$RLOG" correction 2026-11-08T15:00:00Z "no, after the dream" sessGGGG task/r t5 ""
+dg --root "$ROTROOT" --projects-dir "$PROJE" --state-dir "$ROTROOT/st"
+assert_rc "feedback: the digest after rotation exits 0" 0
+assert_file_has "feedback: a line typed during the dream survives the rotation" "$ROTROOT/st/digest.md" "typed during the dream"
+assert_file_has "feedback: the new log is read too" "$ROTROOT/st/digest.md" "after the dream"
+assert_file_lacks "feedback: a line read before the rotation is not read again" "$ROTROOT/st/digest.md" "before the dream"
+case "$ROTROOT" in */template-selftest.rot.*) rm -rf "$ROTROOT" ;; esac
+
+# Caps: 12000 bytes of feedback lines, 40 repeat lines, each with its dropped count.
+CAPROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.cap.XXXXXX")"
+for n in $(seq 10 69); do
+  fbl "$CAPROOT/.work/feedback/log.jsonl" correction "2026-11-08T10:$(printf '%02d' $((n - 10))):00Z" "no cap-test entry $n $(printf 'p%.0s' $(seq 1 380))" sessFFFF task/c t4 ""
+done
+dg --root "$CAPROOT" --projects-dir "$PROJE" --state-dir "$CAPROOT/st"
+assert_rc "feedback: the cap fixture exits 0" 0
+DC="$CAPROOT/st/digest.md"
+CAPBYTES="$(grep '^- f[0-9]' "$DC" | wc -c | tr -d ' ')"
+if (( CAPBYTES <= 12000 && CAPBYTES > 6000 )); then t_ok "feedback: lines stay within 12000 bytes ($CAPBYTES)"; else t_bad "feedback: lines stay within 12000 bytes ($CAPBYTES)"; fi
+assert_file_has "feedback: the cap reports its dropped count" "$DC" "dropped by the 12000 byte cap"
+assert_file_lacks "feedback: and the count is not zero" "$DC" " 0 dropped by the 12000"
+assert_file_has "feedback: the newest entry is kept" "$DC" "no cap-test entry 69"
+assert_file_lacks "feedback: the oldest entry is dropped" "$DC" "no cap-test entry 10 "
+assert_file_has "feedback: no register means no repeats" "$DC" "no register rules"
+REPROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.rep.XXXXXX")"
+mkdir -p "$REPROOT/docs/preferences"
+{ printf '%s\n' '| ID | Rule | Source | Check |' '|---|---|---|---|'
+  for n in $(seq 10 54); do echo "| R$n | Rule $n about decorative gradients | 2026-11 | Review |"; done
+} > "$REPROOT/docs/preferences/big.md"
+fbl "$REPROOT/.work/feedback/log.jsonl" correction 2026-11-08T10:00:00Z "no decorative gradients please" sessFFFF task/c t4 ""
+dg --root "$REPROOT" --projects-dir "$PROJE" --state-dir "$REPROOT/st"
+assert_rc "feedback: the repeats fixture exits 0" 0
+DR="$REPROOT/st/digest.md"
+assert_eq "feedback: repeats are capped at 40 lines" "40" "$(grep -c '^big:R[0-9]* <- f1 ' "$DR")"
+assert_file_has "feedback: the repeats cap reports the rest" "$DR" "5 more not shown"
+rm -rf "$CAPROOT" "$REPROOT"
+
+# --- dreamer definitions (A10) ---
+for f in .claude/agents/dreamer.md .codex/agents/dreamer.toml; do
+  for w in "docs/preferences" "[preference]" "[escalate]" "[baseline]"; do
+    assert_file_has "dreamer: $f names $w" "$T_ROOT/$f" "$w"
+  done
+done
 
 # --- outcome files are checked against what changed; memory from a worktree ---
 # Files lists a named file only when git (against the digest's commit) or the

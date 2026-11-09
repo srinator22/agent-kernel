@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # dream.sh - wrapper for scripts/dream/dream.py, the offline memory-dream helper.
-#   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines to signals
+#   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines and feedback-log lines to signals
 #   done [--report R [--applied N...]]        commit the digest's offsets; append the outcome to R
 #   due [--offer] [--quiet]                   is a dream due (file stats only)
 #   status                                    last dream, due state, pending files
 #   hygiene [--memory-dir DIR]                memory file sizes, ages, dangling links
+#   scorecard                                 the owner's decisions on past proposals (read-only)
 #   taste digest|done|apply|check|sync ...    the cross-project taste pass (scripts/dream/taste.py)
 # Exit codes: 0 ok / due; 1 not due; 2 usage error or no Python; 3 nothing to
-# dream (digest found no new signal). Without Python, "due" prints
+# dream (digest found no new signal and no new feedback line). Without Python, "due" prints
 # "dream: not due (python not found)" (nothing with --quiet) and exits 1.
 set -euo pipefail
 

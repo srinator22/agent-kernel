@@ -61,6 +61,9 @@ cliff.toml                    # git-cliff config: Conventional Commits -> CHANGE
 docs/
   BLUEPRINT.md                # this file, saved verbatim
   DEFECT_MEMORY.md            # confirmed defects: what happened, why, the check that prevents it
+  assets/                     # the template README's illustrations (hero.svg, checks.svg, learning.svg); start may drop them
+  preferences/
+    README.md                 # register format, check grammar, ladder, baselines; other files here are project-owned
   ARCHITECTURE.md             # {{FILLED_BY_START}}: modules, boundaries, data flow
   operations.md               # {{FILLED_BY_START if deploy target}}: deploy, rollback, monitoring
   decisions/
@@ -85,6 +88,7 @@ docs/
     adr.md                    # record a decision: scripts/adr.sh new, format, superseding
     doc-eval.md               # fresh agent answers tests/docs/questions.md by navigation; traps declined
     dream.md                  # consolidate memory against session transcripts; proposals approved by number
+    preferences.md            # capture owner feedback, record register rows, repeats ladder, baselines, draft review
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -142,9 +146,13 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
-  dream.sh                    # dream digest, due, done, status, hygiene, taste (wrapper for dream/dream.py and dream/taste.py)
+  feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
+  preferences.sh              # check: the preference registers in docs/preferences/ are well formed
+  dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
+    feedback.py               # stdlib: hook body, classifies the owner's prompt and appends it with its situation to the feedback log
+    preferences.py            # stdlib: register and baseline checks behind scripts/preferences.sh
     taste.py                  # stdlib: cross-project taste digest, evidence pool, approved lines into ~/.claude/taste
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
@@ -177,9 +185,11 @@ tests/
     test_session_context.sh   # mode line, git priming, task state, template update notice
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
-    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene
+    test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
     test_selftest.sh          # quarantine list, n/a lines, summary counts
     test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
+    test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
+    test_preferences.sh       # register cells, baselines, template-mode guard, unwired-hook warning
     test_test_files.sh        # guarded lib.sh load in every test, exec bits
     fixtures/
       check.sh                # pristine template check.sh the tests run against
@@ -193,7 +203,7 @@ tests/
   jobs/                       # background-job STATE files and logs; GITIGNORED
     .gitkeep
 .claude/
-  settings.json               # attribution off; hooks: SessionStart, PreToolUse guard, Stop gate
+  settings.json               # attribution off; hooks: SessionStart, UserPromptSubmit feedback log, PreToolUse guard, Stop gate
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
@@ -322,7 +332,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 1, always: kernel hash verify via `scripts/kernel-hash.sh --verify`. On mismatch, print a loud multi-line error explaining kernel drift and the sanctioned edit path (human approval + `--update` in the same commit); exit 1.
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
-- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists. `--quick` never skips this step.
+- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, and the preference register check (`scripts/preferences.sh check`) whenever the script exists. `--quick` never skips this step.
 - Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`, `.claude/skills` equal to the `CORE_SKILLS` list in `scripts/lessons.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
@@ -575,7 +585,7 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/taskgraph.sh`: validates the `.work/TASK.md` Plan table (known nodes, no cycles, disjoint owner files within a wave, valid tiers and statuses).
 - `scripts/template-sync.sh`: fetch the template at a tag, diff the core files, apply non-conflicting updates, never touch Project decisions, re-verify the kernel hash, log the run.
 - `scripts/quickgate.sh`: the fast subset of the gauntlet for use during work; the full gate runs before publication.
-- `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function; called from check.sh in every mode whenever `tests/template/` exists.
+- `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function, and `test_feedback.sh` and `test_preferences.sh` cover the feedback hook and the preference registers; called from check.sh in every mode whenever `tests/template/` exists.
 - `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, the Context, Decision and Consequences sections in order, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
 - `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
 - `scripts/destructive-guard.sh`, `scripts/stop-gate.sh`, `scripts/tasklint.sh`, `scripts/doc-eval.sh` (Amendment 4): see the Amendment 4 entry below.

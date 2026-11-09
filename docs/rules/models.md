@@ -1,7 +1,6 @@
 # Models and harnesses - tiers, adapters, parity
 
-Procedures and rules name tiers, never model names. A model name appears
-only in harness configuration.
+Procedures and rules name tiers, never model names; a model name appears only in harness configuration.
 
 Tiers:
 - cheap: search, summaries from supplied facts, monitors, formatting.
@@ -16,12 +15,13 @@ Tier to model mapping lives only in harness config: `model:` in
 models change.
 
 Harness adapters:
-- Claude Code: hooks (commit block, session context), agents, skills,
-  background tasks, workflows for fan-out. VERIFY 2026-10-09.
-- Codex: agents in `.codex/agents/*.toml`, skills mirrored in
-  `.agents/skills`. No per-command hooks, so the worker no-commit rule is
-  prose plus the advisor gate: the advisor inspects `git status` and
-  `git log` before accepting. VERIFY 2026-10-09.
+- Claude Code: hooks (commit block, session context, feedback capture),
+  agents, skills, background tasks, workflows. VERIFY 2026-11-08.
+- Codex: agents in `.codex/agents/*.toml`, skills in `.agents/skills`. No
+  hooks wired: the worker no-commit rule is prose plus the advisor gate
+  (`git status`, `git log`). Capture gap: Codex documents UserPromptSubmit,
+  but feedback.py reads Claude Code transcripts, so Codex logs no feedback;
+  `docs/procedures/preferences.md` covers it. VERIFY 2026-11-08.
 - Gemini CLI and Cursor: AGENTS.md only; record what loads at adoption in
   the capability map. VERIFY 2026-10-09.
 

@@ -95,4 +95,54 @@ assert_contains "a value starting with the token that fails the rule warns" "WAR
 wf_case "token followed by a word" "direct-to-main on master" branch
 assert_contains "the warning names the accepted form" "direct-to-main, <details>"
 
+# Preference registers (docs/procedures/preferences.md): after scaffolding,
+# one line per register area and per baseline whose area name or Kind word is
+# in the slug; nothing when the project has no registers.
+git checkout -q -f workflow-base
+pref_case() { # slug: scaffold from the clean base and capture the output
+  git checkout -q -f workflow-base
+  run ./scripts/new-task.sh "$1"
+  assert_rc "$1: scaffolds" 0
+}
+pref_case film-teaser
+assert_not_contains "no registers: nothing is printed" "docs/preferences"
+assert_not_contains "no registers: no preferences line" "preferences:"
+git checkout -q -f workflow-base
+mkdir -p docs/preferences
+echo "# Preference registers" > docs/preferences/README.md
+cat > docs/preferences/film.md <<'REG'
+# Film
+
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| FILM-001 | Titles stay on screen two seconds. | 2026-11-08: "hold titles longer" | Review |
+
+| Kind | Reference | Owns | Check |
+|---|---|---|---|
+| title card | `docs/film/title.md` 2026-11-08 | layout, palette | Review |
+REG
+cat > docs/preferences/ui.md <<'REG'
+# UI
+
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| UI-001 | Labels stay short. | 2026-11-08: "short labels" | Review |
+REG
+git add -A >/dev/null 2>&1 && git commit -q -m "registers" >/dev/null 2>&1
+pref_case film-intro
+assert_contains "an area in the slug prints its register" "film (docs/preferences/film.md)"
+assert_contains "the line points to the procedure" "docs/procedures/preferences.md"
+assert_contains "an area in the slug also prints its baseline" "baseline title card: docs/film/title.md 2026-11-08 (owns: layout, palette)"
+assert_not_contains "an area not in the slug is not printed" "ui (docs/preferences/ui.md)"
+pref_case title-teaser
+assert_contains "a Kind word in the slug prints the baseline" "baseline title card: docs/film/title.md 2026-11-08 (owns: layout, palette)"
+assert_not_contains "a Kind word alone does not print the area" "film (docs/preferences/film.md)"
+pref_case ui-fixes
+assert_contains "another area prints" "ui (docs/preferences/ui.md)"
+assert_not_contains "its slug does not print the film baseline" "baseline title card"
+pref_case readme-cleanup
+assert_not_contains "README is not an area" "preferences/README.md"
+assert_not_contains "an unrelated slug prints nothing" "preferences:"
+git checkout -q -f workflow-base
+
 t_finish

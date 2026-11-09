@@ -16,7 +16,13 @@ Inputs (paths in your brief):
   approved lessons with used: 0 older than 45 days (retire candidates for
   item 3) and lessons that share words with new corrections, denials,
   blocks or failures (each may be a recurrence worth mechanizing, item 4,
-  or a coincidence: judge it).
+  or a coincidence: judge it). Its "Feedback" section lists the owner's
+  logged messages (ids f1, f2, ...: deferrals, corrections, preferences,
+  approvals, with task, branch and files) and its "Repeats" section lists
+  register rules that a correction or preference shares words with
+  (candidates, not proof).
+- The preference registers `docs/preferences/*.md` (rules with Source, Check
+  and Repeats; baselines). Repeats changes only through an approved proposal.
 - The memory files: `docs/lessons/INDEX.md`, `PENDING.md`, `UPSTREAM.md`,
   `QUARANTINE.md`, `docs/DEFECT_MEMORY.md`, `BACKLOG.md`, the task records in
   `.work/done/` newer than the digest's "since" date, the Claude auto-memory
@@ -43,6 +49,14 @@ What to look for, in this order:
 5. Upstream: a lesson about how work is run rather than what the product
    does, as an UPSTREAM.md entry with `applies to:`.
 6. Counters: approved lessons the signals show were used, with the signal ids.
+7. [preference] owner feedback that states a lasting preference no register
+   row holds. Propose a row for the right docs/preferences/<area>.md whose
+   Source quotes the owner's words with the date; cite the f ids.
+8. [escalate] a register rule with a Repeats candidate. Propose moving it from
+   Review to a named check (a BACKLOG row or a test) and its new Repeats
+   count; judge each candidate first, a shared word is not a repeat.
+9. [baseline] an approved deliverable the feedback shows the owner accepted.
+   Propose a baselines row (Kind, Reference, Owns, Check).
 
 Rules:
 - Every proposal cites evidence: digest signal ids (s12, s30) or file:line.
@@ -58,7 +72,7 @@ Return exactly:
     # Dream report <date>
     Read: <n> signals; <files read>
     ## Proposals
-    1. [pending: approve|merge|reject | new lesson | stale | mechanize | upstream | counter] <title>
+    1. [pending: approve|merge|reject | new lesson | stale | mechanize | upstream | counter | preference | escalate | baseline] <title>
        Why: <one or two lines>
        Evidence: <signal ids and file:line>
        Change: <the exact text to add, replace or remove, and where>

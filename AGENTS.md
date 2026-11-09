@@ -61,6 +61,7 @@ These rules govern process. Project truth lives in the Project decisions section
 - Tests from day one, quarantine, oracle first -> docs/procedures/tests.md
 - Lessons back to the template; staying in sync -> docs/procedures/upstream.md
 - Consolidating memory against session transcripts (dreaming) -> docs/procedures/dream.md
+- Owner preferences, feedback capture, baselines, draft review -> docs/procedures/preferences.md
 
 ## Project decisions
 

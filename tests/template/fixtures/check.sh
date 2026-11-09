@@ -172,6 +172,15 @@ if [[ -f scripts/template-sync.sh ]]; then
   ./scripts/template-sync.sh --status || gerr "scripts/template-sync.sh --status failed (fix the - Template: line in AGENTS.md)"
 fi
 
+# 4i. The preference registers (docs/preferences/*.md) are well formed: every
+# rule has a source date and a named check or Review, references exist, IDs
+# are unique, baselines resolve. Warnings (an unwired feedback hook) are
+# printed by the script and do not fail. Skipped where the project does not
+# carry the script (docs/procedures/preferences.md).
+if [[ -f scripts/preferences.sh ]]; then
+  bash scripts/preferences.sh check || gerr "scripts/preferences.sh check failed (docs/preferences/README.md has the format)"
+fi
+
 # Step 5: template-mode gate. Before start runs there is no stack to
 # check, so the gauntlet checks the template itself: a green badge means
 # the template is intact, not merely that nothing executed.
@@ -261,6 +270,10 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_destructive_guard.sh tests/template/test_stop_gate.sh
     tests/template/test_tasklint.sh tests/template/test_doc_eval.sh
     tests/template/test_session_context.sh tests/template/test_test_files.sh
+    scripts/feedback-log.sh scripts/preferences.sh
+    scripts/dream/feedback.py scripts/dream/preferences.py
+    docs/preferences/README.md docs/procedures/preferences.md
+    tests/template/test_feedback.sh tests/template/test_preferences.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -405,7 +418,7 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers)"
   exit 0
 fi
 
