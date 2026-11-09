@@ -10,9 +10,11 @@ moves them.
 
 ## When
 
-`scripts/dream.sh due` decides from file stats alone: a dream is due when
-sessions have new activity since the last dream and either a task retro
-landed in `.work/done/` since then or three days passed. Two places ask the
+`scripts/dream.sh due` decides from file stats and, for task retros, from the
+git commit date of each `.work/done` record (an untracked or changed record
+is dated by its file time): a dream is due when sessions have new activity
+since the last dream and either a task retro landed in `.work/done/` since
+then or three days passed. Two places ask the
 human, never more than once a day for the same state:
 - the Stop hook, when a turn ends with no live task (`scripts/stop-gate.sh`
   runs `scripts/dream.sh due --offer`);

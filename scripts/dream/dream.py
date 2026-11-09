@@ -204,8 +204,15 @@ def ensure_dir(d):
 
 def memory_dir(c):
     """Claude Code keeps one auto-memory folder per repository, named after the
-    main checkout, so a linked worktree reads that folder too."""
-    return os.path.join(c.projects, slug(main_worktree(c.root)), "memory")
+    main checkout, so a linked worktree reads that folder too. The folder is named
+    after the spelling the session saw, so a short-then-long spelling of the main
+    checkout (short_spellings) names it when that folder exists."""
+    main = main_worktree(c.root)
+    for p in [main] + short_spellings(main):
+        d = os.path.join(c.projects, slug(p), "memory")
+        if os.path.isdir(d):
+            return d
+    return os.path.join(c.projects, slug(main), "memory")
 
 
 def stat_key(path):
@@ -319,6 +326,53 @@ def markers(roots):
         out.add(r.encode("utf-8"))
         out.add(r.replace("/", "\\\\").encode("utf-8"))
     return list(out)
+
+
+def short_spellings(path):
+    """Other spellings Windows can hand a process for an existing path: its first k
+    parts in 8.3 form and the rest long, for each k. A short ancestor inherited from
+    TEMP or USERPROFILE (the CI runner's C:/Users/RUNNER~1) leaves the rest of the
+    cwd long, so a transcript's cwd and folder name can match neither the long form
+    nor the all-short form. A path that no longer or never existed (a removed
+    worktree, a --match path) takes the spellings of its nearest existing folder,
+    with the missing tail kept long, as a cwd under it was recorded. Empty off
+    Windows or when no part has a short name."""
+    if os.name != "nt" or not path:
+        return []
+    base, tail = path.replace("\\", "/").rstrip("/"), []
+    while not os.path.exists(base):
+        if "/" not in base:
+            return []
+        base, part = base.rsplit("/", 1)
+        tail.insert(0, part)
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32768)
+        n = ctypes.windll.kernel32.GetShortPathNameW(base.replace("/", "\\"), buf, 32768)
+    except (ImportError, AttributeError, OSError):
+        return []
+    if not 0 < n < 32768:
+        return []
+    long_parts = base.split("/")
+    short_parts = buf.value.replace("\\", "/").rstrip("/").split("/")
+    if len(long_parts) != len(short_parts):
+        return ["/".join([buf.value.replace("\\", "/").rstrip("/")] + tail)]
+    out, seen = [], {norm(path)}
+    for k in range(1, len(long_parts) + 1):
+        s = "/".join(short_parts[:k] + long_parts[k:] + tail)
+        if norm(s) not in seen:
+            seen.add(norm(s))
+            out.append(s)
+    return out
+
+
+def with_short_names(roots):
+    """roots (normalised) plus every short-then-long spelling of each, so the byte
+    markers, cwd_match and the project-folder slugs all accept them."""
+    out = set(roots)
+    for r in roots:
+        out.update(norm(s) for s in short_spellings(r))
+    return out
 
 
 def cwd_match(cwd, roots):
@@ -530,6 +584,7 @@ def read_report(path):
     except (OSError, UnicodeDecodeError) as e:
         raise ReportError("cannot read it: %s" % e, "dream: cannot read the report %s: %s" % (path, e))
     props, outcomes, cur, section = {}, [], None, None
+    wrapping = False
     for row in rows:
         if row.startswith("## "):
             head = row.strip()
@@ -553,6 +608,15 @@ def read_report(path):
             props[cur] = (kind_name(tag.group(1) if tag else ""), [])
         elif cur is not None and row.strip().startswith("Change:"):
             props[cur][1].append(row.strip()[7:].strip())
+            wrapping = True
+            continue
+        elif (wrapping and cur is not None and row[:1].isspace() and row.strip()
+              and not re.match(r"\s*(Why|Evidence):", row)):
+            # Change is the last field of a proposal, so an indented line after it
+            # continues it; the format forbids wrapping but a model does it anyway.
+            props[cur][1][-1] += " " + row.strip()
+            continue
+        wrapping = False
     return props, outcomes
 
 
@@ -1044,7 +1108,7 @@ def cmd_digest(c, a):
         die("dream: --max-bytes must be at least %d (got %d)" % (MIN_BYTES, a.max_bytes))
     wts = c.worktrees()
     roots = {norm(c.root)} | set(wts) | set(c.state["known_roots"]) | {norm(os.path.abspath(m)) for m in a.match}
-    roots = sorted(r for r in roots if r)
+    roots = sorted(r for r in with_short_names(roots) if r)
     marks = markers(roots)
     newfiles = {k: dict(v) for k, v in c.state["files"].items()}
     read_n = hit_n = lines_n = bad_n = 0
@@ -1195,16 +1259,46 @@ def cmd_done(c, a):
     return 0
 
 
+def record_dates(root, rel):
+    """{path relative to root: time of its last commit} for the tracked, unmodified
+    files under rel; {} outside git. A checkout stamps every file with the time it
+    was written, so only the commit date says when a record was made. A file with
+    uncommitted changes or no commit is left out: its modification time decides."""
+    out = {}
+    try:
+        r = subprocess.run(["git", "-C", root, "-c", "core.quotepath=off", "log", "--relative",
+                            "--format=@%ct", "--name-only", "--", rel],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if r.returncode != 0:
+        return {}
+    cur = None
+    for row in r.stdout.splitlines():
+        if re.fullmatch(r"@[0-9]+", row):
+            cur = dt.datetime.fromtimestamp(int(row[1:]), dt.timezone.utc)
+        elif row and cur is not None:
+            out.setdefault(row, cur)
+    tracked = git_z(root, "-c", "core.quotepath=off", "ls-files", "-z", "--", rel)
+    changed = git_z(root, "-c", "core.quotepath=off", "diff", "--relative", "--name-only", "-z", "HEAD", "--", rel)
+    if tracked is None or changed is None:
+        return {}
+    # Only files still tracked: a record deleted and recreated untracked keeps its file time.
+    # diff against HEAD also catches an edit that is staged but not committed.
+    return {k: v for k, v in out.items() if k in set(tracked) and k not in set(changed)}
+
+
 def due_numbers(c):
     last = c.last()
-    roots = {norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"])
+    roots = with_short_names({norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"]))
     slugs = {slug(r).lower() for r in roots}
-    app_prefix = slug(c.root).lower() + "--claude-worktrees-"
+    # App worktrees live under the checkout, so their folders start with any spelling of it.
+    app_prefixes = tuple(slug(r).lower() + "--claude-worktrees-" for r in with_short_names({norm(c.root)}))
 
     def ours_folder(folder):
         # Exact names only: a prefix match would also take sibling folders such as Foo-bar for Foo.
         f = folder.lower()
-        return f in slugs or f.startswith(app_prefix)
+        return f in slugs or f.startswith(app_prefixes)
 
     sessions = 0
     seen = set()
@@ -1227,11 +1321,14 @@ def due_numbers(c):
                 if os.path.abspath(p) not in seen:
                     sessions += 1
     retros = 0
+    dates = record_dates(c.root, ".work/done")
     for p in glob.glob(os.path.join(c.root, ".work", "done", "*.md")):
-        try:
-            m = dt.datetime.fromtimestamp(os.path.getmtime(p), dt.timezone.utc)
-        except OSError:
-            continue
+        m = dates.get(".work/done/" + os.path.basename(p))
+        if m is None:
+            try:
+                m = dt.datetime.fromtimestamp(os.path.getmtime(p), dt.timezone.utc)
+            except OSError:
+                continue
         if m > last:
             retros += 1
     elapsed = (c.now - last) >= dt.timedelta(days=3)
