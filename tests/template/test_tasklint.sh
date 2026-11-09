@@ -152,9 +152,19 @@ task_crit "- [x] C1 done -> tests/x_test.sh (see twice.md)"
 run ./scripts/tasklint.sh check
 assert_rc "a bare name tracked twice fails" 1
 assert_contains "names the ambiguity and the count" "file name twice.md is ambiguous (2 tracked files); use a path"
-task_crit "- [x] C1 done -> tests/x_test.sh (see lib/nope.md)"
+task_crit "- [x] C1 done -> deep/once.md"
 run ./scripts/tasklint.sh check
 assert_rc "a path with a slash is never resolved by name" 1
+assert_contains "names the slash path" "does not exist: deep/once.md"
+task_crit "- [x] C1 done -> tests/x_test.sh (see ghost.md)"
+run env GIT_DIR=/nonexistent/git-dir ./scripts/tasklint.sh check
+assert_rc "a git failure means no matches, not a silent exit" 1
+assert_contains "a git failure reports the missing name" "does not exist: ghost.md"
+task_crit "- [x] C1 done -> notes.md" "      -> tests/x_test.sh"
+run ./scripts/tasklint.sh check
+assert_rc "evidence naming a missing path beside a continuation fails" 1
+assert_contains "the missing path is named" "does not exist: notes.md"
+assert_contains "the continuation is named beside a path problem" "line 6 is an indented continuation"
 task_crit "- [x] C1 done -> https://example.com/docs/page.md"
 run ./scripts/tasklint.sh check
 assert_rc "a URL is not path-like" 1

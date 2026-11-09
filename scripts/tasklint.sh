@@ -135,7 +135,7 @@ function flush() {
   emit(pk, pa, pb)
   pend = 0
 }
-BEGIN { SEP ="\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
+BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
 /^## / {
   flush()
   sec = tolower(trim(substr($0, 4)))
@@ -249,6 +249,7 @@ while IFS= read -r rec; do
         problem "evidence names no existing path; write the file or test, or \`judgment: <reason>\`: $a"
       else
         read -r -a toks <<< "$b"
+        before=$probs
         for tok in "${toks[@]}"; do
           path_exists "$tok" && continue
           # A bare file name resolves like scripts/dream/preferences.py: exactly
@@ -256,7 +257,7 @@ while IFS= read -r rec; do
           case "$tok" in
             */*|*\**|*\?*) problem "evidence path does not exist: $tok" ;;
             *)
-              hits="$(git ls-files 2>/dev/null | awk -v n="$tok" '{ f = $0; sub(/^.*\//, "", f); if (f == n) c++ } END { print c + 0 }')"
+              hits="$({ git ls-files 2>/dev/null || true; } | awk -v n="$tok" '{ f = $0; sub(/^.*\//, "", f); if (f == n) c++ } END { print c + 0 }')"
               if (( hits == 1 )); then :
               elif (( hits > 1 )); then problem "file name $tok is ambiguous ($hits tracked files); use a path"
               else problem "evidence path does not exist: $tok"
@@ -264,6 +265,10 @@ while IFS= read -r rec; do
               ;;
           esac
         done
+        # The continuation note rides in $a; show it beside the path problems too.
+        if (( probs > before )) && [[ "$a" == *"is an indented continuation"* ]]; then
+          problem "line ${a##*; line }"
+        fi
       fi
       ;;
     INFO) taskmode="$a"; ticked="$b"; assumed="$c" ;;
