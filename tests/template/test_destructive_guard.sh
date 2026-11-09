@@ -55,6 +55,8 @@ allowed_in() {
 for shell in Bash PowerShell; do
   # Removal family: always-forbidden targets, any flags.
   blocked "$shell" "rm -rf / is blocked" 'rm -rf /'
+  # A trap that fired on the block path would add the failure notice here.
+  assert_not_contains "$shell: a judged block does not say the guard failed" "the guard failed"
   blocked "$shell" "rm -rf /* is blocked" 'rm -rf /*'
   blocked "$shell" "rm -rf ~ is blocked" 'rm -rf ~'
   blocked "$shell" "rm -fr ~ is blocked" 'rm -fr ~'
@@ -590,18 +592,37 @@ for shell in Bash PowerShell; do
   blocked "$shell" "git --git-dir .git push --force is blocked" 'git --git-dir .git push --force origin main'
   blocked "$shell" "git --work-tree . reset --hard is blocked" 'git --work-tree . reset --hard'
   blocked "$shell" "git --namespace x push --force is blocked" 'git --namespace x push --force origin main'
+  blocked "$shell" "git --shallow-file x push --force is blocked" 'git --shallow-file x push --force origin main'
   allowed "$shell" "git --config-env=user.name=NAME commit is allowed" 'git --config-env=user.name=NAME commit -m x'
   allowed "$shell" "git --git-dir .git status is allowed" 'git --git-dir .git status'
 done
 
 # Case folding covers every letter the locale knows on bash 4+: an accented
 # home folder spelled in another case is still the home folder.
-U_UP="$(printf '\303\211')"
-U_LO="$(printf '\303\251')"
-payload="$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf c:/users/%smile"}}' "$U_LO")"
-OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" bash "$GUARD" 2>&1)"; RC=$?
-assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
-assert_contains "the non-ASCII home block names the guard" "$PREFIX"
+if (( BASH_VERSINFO[0] >= 4 )); then
+  U_UP="$(printf '\303\211')"
+  U_LO="$(printf '\303\251')"
+  payload="$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf c:/users/%smile"}}' "$U_LO")"
+  OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" bash "$GUARD" 2>&1)"; RC=$?
+  assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
+  assert_contains "the non-ASCII home block names the guard" "$PREFIX"
+else
+  t_ok "a non-ASCII home spelled in another case is blocked: n/a on bash 3.2 (folds ASCII only by design)"
+fi
+
+# Under a Turkic locale bash 4+ ${x,,} turns ASCII I into dotless U+0131, so
+# Remove-Item, RMDIR and IMAGENAME would not match their lowercase names.
+TR_LOC="$(locale -a 2>/dev/null | grep -i -m1 -E '^tr_TR\.utf-?8$')"
+if [[ -n "$TR_LOC" ]]; then
+  for shell in Bash PowerShell; do
+    LC_ALL="$TR_LOC" blocked "$shell" "Remove-Item under a Turkic locale is blocked" 'pwsh -Command \"Remove-Item -Recurse -Force ~\"'
+    LC_ALL="$TR_LOC" blocked "$shell" "taskkill /IM under a Turkic locale is blocked" 'taskkill /IM node.exe /F'
+    LC_ALL="$TR_LOC" blocked "$shell" "RMDIR /S /Q of home under a Turkic locale is blocked" 'RMDIR /S /Q C:\\Users\\tester'
+    LC_ALL="$TR_LOC" blocked "$shell" "taskkill /FI IMAGENAME under a Turkic locale is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+  done
+else
+  t_ok "Turkic locale case folding: n/a (no tr_TR UTF-8 locale installed)"
+fi
 
 # An unexpected bash error inside the guard must block, not exit 1 (which the
 # harness treats as a non-blocking error and runs the command).
@@ -616,6 +637,21 @@ assert_contains "the unexpected-error block names the guard" "$PREFIX"
 cp "$GUARD" "$GFIX/guard.sh"
 OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
 assert_rc "the unmodified guard allows the same harmless command" 0
+assert_eq "the unmodified guard prints nothing for a harmless command" "" "$OUT"
+
+# An error bash recovers from does not end the shell, so the EXIT trap alone
+# would let it fall through to an allow. Leaving main without an explicit exit,
+# or reading no segment at all, must also block.
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak '/^main() {$/a\
+return 0' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+assert_rc "main returning without an explicit exit blocks" 2
+assert_contains "main returning without an exit says the guard failed" "the guard failed"
+cp "$GUARD" "$GFIX/guard.sh"
+sed -i.bak 's|^  done <<< "\$in"$|  done < /nonexistent/guard-test-input|' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>/dev/null)"; RC=$?
+assert_rc "a check_text loop that never ran blocks" 2
 rm -rf "$GFIX"
 
 # Documented under-block: the segment split is quote-unaware, so a protected

@@ -74,8 +74,11 @@
 # command, a false allow can destroy work that git cannot recover. There is no
 # bypass flag or environment variable.
 # Exit: 0 allow; 2 block, with the reason on stderr for the agent to read.
-# Written for bash 3.2 (CI runs bash 5); any unexpected error blocks. Bash 3.2
-# folds ASCII letters only (bash 4+ folds every letter the locale knows). Code
+# Written for bash 3.2 (CI runs bash 5); any unexpected error blocks: an EXIT
+# trap turns an error that ends the shell into a block, and main is followed by
+# exit 3 so an error bash recovers from cannot fall through to an allow.
+# ASCII letters fold by table on every bash (locale-proof, a Turkic locale
+# included); bash 4+ also folds the other letters the locale knows. Code
 # that must parse on 3.2 uses no ${x,,} outside eval, no associative arrays, no
 # mapfile, no $'..' inside "${..}", and guards every array expansion for an
 # empty array under set -u.
@@ -95,13 +98,12 @@ fi
 NL=$'\n'
 
 # lc STRING -> LC. Lowercase with builtins only: a fork per call is too slow
-# for a hook that runs on every command. Bash 4+ folds every letter the locale
-# knows (a home folder with an accented letter must still match another case);
-# the ${1,,} sits in eval so bash 3.2 never parses it. Bash 3.2 gets the A-Z
-# table, so it folds ASCII letters only.
-if (( BASH_VERSINFO[0] >= 4 )); then
-  eval 'lc() { LC="${1,,}"; }'
-else
+# for a hook that runs on every command. The A-Z table runs on every bash, so
+# ASCII always folds the same way: ${x,,} under a Turkic locale (tr_TR, az_AZ)
+# turns I into dotless U+0131 and "Remove-Item" would no longer match. Bash 4+
+# then folds the other letters the locale knows (a home folder with an accented
+# letter must still match another case; towlower leaves lowercase ASCII alone).
+# The ${LC,,} sits in eval so bash 3.2 never parses it.
 lc() {
   LC="$1"
   case "$LC" in
@@ -114,7 +116,12 @@ lc() {
       LC=${LC//Z/z}
       ;;
   esac
+  lc_fold
 }
+if (( BASH_VERSINFO[0] >= 4 )); then
+  eval 'lc_fold() { LC="${LC,,}"; }'
+else
+  lc_fold() { :; }
 fi
 
 block() { # reason segment
@@ -137,24 +144,8 @@ json_unescape() {
   UNESC=${s//$ph/$bs}
 }
 
-payload="$(cat)"
-text="$payload"
-fallback=0
 re_cmd='"command"[[:space:]]*:[[:space:]]*"((\\.|[^"\\])*)"'
 re_cwd='"cwd"[[:space:]]*:[[:space:]]*"((\\.|[^"\\])*)"'
-if [[ "$payload" =~ $re_cmd ]]; then
-  text="${BASH_REMATCH[1]}"
-else
-  fallback=1
-fi
-cwd_raw=""
-if [[ "$payload" =~ $re_cwd ]]; then
-  json_unescape "${BASH_REMATCH[1]}"
-  cwd_raw="$UNESC"
-fi
-json_unescape "$text"
-text="$UNESC"
-
 re_assign='^[A-Za-z_][A-Za-z0-9_]*='
 re_pct='%[^%[:space:]]+%'
 re_top_posix='^/[^/]+/?$'
@@ -200,16 +191,7 @@ norm_path() {
   return 0
 }
 
-# Protected folders: home and workspace. Normalised once.
 PROT=()
-for hv in "${HOME:-}" "${USERPROFILE:-}"; do
-  if [[ -n "$hv" && -z "$NHOME" ]] && norm_path "$hv"; then NHOME="$NP"; fi
-done
-if [[ -n "$cwd_raw" ]] && norm_path "$cwd_raw"; then NCWD="$NP"; fi
-NBASE="$NCWD"
-for pv in "${HOME:-}" "${USERPROFILE:-}" "${CLAUDE_PROJECT_DIR:-}" "$cwd_raw"; do
-  if [[ -n "$pv" ]] && norm_path "$pv"; then PROT+=("$NP"); fi
-done
 
 has_var() { [[ "$1" == *'$'* || "$1" =~ $re_pct ]]; }
 
@@ -356,7 +338,7 @@ check_git() { # arguments in ARGS
           fi
           i=$((i + 2))
           ;;
-        -C | --git-dir | --work-tree | --namespace | --attr-source | --super-prefix)
+        -C | --git-dir | --work-tree | --namespace | --attr-source | --super-prefix | --shallow-file)
           i=$((i + 2))
           ;;
         *)
@@ -599,7 +581,7 @@ change_dir() {
 # recurse. The state tokenize/check_* share is local so recursion cannot
 # clobber the caller's segment.
 check_text() {
-  local in="$1" depth="$2" SEG w name n i m r
+  local in="$1" depth="$2" SEG w name n i m r ran=0
   local -a toks=() ARGS=() GARGS=()
   local re_brace='\$\{([A-Za-z_][A-Za-z0-9_]*)\}'
   if (( depth > 3 )); then
@@ -636,6 +618,7 @@ check_text() {
     in=${in//,/$NL}
   fi
   while IFS= read -r SEG; do
+    ran=1
     SEG="${SEG#"${SEG%%[![:space:]]*}"}"
     SEG="${SEG%"${SEG##*[![:space:]]}"}"
     tokenize "$SEG"
@@ -677,6 +660,9 @@ check_text() {
       taskkill | stop-process | spps | kill | pkill | killall) check_kill "$name" ;;
     esac
   done <<< "$in"
+  # A here-string that failed to open (bash before 5.1 writes it to a temp
+  # file) skips the loop and bash carries on; reading nothing is a failure.
+  (( ran )) || exit 3
 }
 
 # A backslash before a space or a double quote, or a backtick before a space,
@@ -685,11 +671,46 @@ check_text() {
 # (C:\ -Recurse). Check both readings; either one can refuse. The cd state
 # starts over for the second reading.
 ESC_READ=0
-check_text "$text" 0
-if [[ "$text" == *"\\ "* || "$text" == *'` '* || "$text" == *'\"'* ]]; then
-  ESC_READ=1
+fallback=0
+cwd_raw=""
+
+# All runtime work lives here and ends in an explicit exit. The call below is
+# followed by exit 3, so any path that leaves main without one (an error bash
+# recovers from, which the EXIT trap never sees) is blocked.
+main() {
+  local payload hv pv
+  payload="$(cat)"
+  text="$payload"
+  if [[ "$payload" =~ $re_cmd ]]; then
+    text="${BASH_REMATCH[1]}"
+  else
+    fallback=1
+  fi
+  if [[ "$payload" =~ $re_cwd ]]; then
+    json_unescape "${BASH_REMATCH[1]}"
+    cwd_raw="$UNESC"
+  fi
+  json_unescape "$text"
+  text="$UNESC"
+
+  # Protected folders: home and workspace. Normalised once.
+  for hv in "${HOME:-}" "${USERPROFILE:-}"; do
+    if [[ -n "$hv" && -z "$NHOME" ]] && norm_path "$hv"; then NHOME="$NP"; fi
+  done
+  if [[ -n "$cwd_raw" ]] && norm_path "$cwd_raw"; then NCWD="$NP"; fi
   NBASE="$NCWD"
-  CURUNK=0
+  for pv in "${HOME:-}" "${USERPROFILE:-}" "${CLAUDE_PROJECT_DIR:-}" "$cwd_raw"; do
+    if [[ -n "$pv" ]] && norm_path "$pv"; then PROT+=("$NP"); fi
+  done
+
   check_text "$text" 0
-fi
-exit 0
+  if [[ "$text" == *"\\ "* || "$text" == *'` '* || "$text" == *'\"'* ]]; then
+    ESC_READ=1
+    NBASE="$NCWD"
+    CURUNK=0
+    check_text "$text" 0
+  fi
+  exit 0
+}
+main "$@"
+exit 3
