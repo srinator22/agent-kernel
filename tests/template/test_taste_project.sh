@@ -238,6 +238,35 @@ assert_rc "a wrapped proposal applies" 0
 assert_file_has "the full wrapped text is the rule" "$PREF/working.md" "Say what changed first, then name the risk in one clause."
 assert_file_lacks "the Why line is not part of the rule" "$PREF/working.md" "stated once"
 
+# a wrapped Why tail never joins the rule; a wrapped Evidence tail adds its ids
+R5="$ST/reports/2026-11-12-report.md"
+printf '%s\n' '## Proposals' '1. add working: Keep commit subjects short.' '   Why: said in a review' '   and again later' "   Evidence: $SID_P" \
+  '2. add working: Name the test file in each fix.' "   Evidence: $SID_P2" "   $SID_T1" > "$R5"
+ta apply --report "$R5" 1 2
+assert_rc "wrapped Why and Evidence proposals apply" 0
+assert_file_has "a wrapped Why tail is not part of the rule" "$PREF/working.md" "| Keep commit subjects short. |"
+assert_file_lacks "the Why tail is nowhere in the register" "$PREF/working.md" "and again later"
+assert_file_has "a wrapped Evidence tail is not part of the rule" "$PREF/working.md" "| Name the test file in each fix. |"
+assert_file_has "a wrapped Evidence tail counts as evidence" "$ST/ledger.json" "$SID_T1"
+
+# removing a hand-written top row keeps its number taken, even within one apply
+cat > "$PREF/voice.md" <<'EOF'
+# Voice
+
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| VOICE-001 | Speak plainly. | 2026-10-01: "plain" | Review |
+| VOICE-007 | Keep it short. | 2026-10-02: "short" | Review |
+EOF
+git add "$PREF/voice.md" >/dev/null 2>&1
+R6="$ST/reports/2026-11-13-report.md"
+printf '%s\n' '## Proposals' '1. remove voice VOICE-007: replaced' '2. add voice: Keep each answer under ten lines.' "   Evidence: $SID_P" > "$R6"
+ta apply --report "$R6" 1 2
+assert_rc "remove of a hand-written top row then add exits 0" 0
+assert_file_has "the add takes the number after the removed one" "$PREF/voice.md" "| VOICE-008 | Keep each answer under ten lines. |"
+assert_file_lacks "the removed number is not given out again" "$PREF/voice.md" "VOICE-007"
+assert_file_has "the ledger keeps the removed number as the floor" "$ST/ledger.json" '"voice": 8'
+
 # --- A5 again, after every command ---
 ta done --report "$R1"
 assert_rc "done exits 0" 0

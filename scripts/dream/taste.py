@@ -695,7 +695,7 @@ def parse_report(path):
             lines = f.read().splitlines()
     except OSError as e:
         die("taste: cannot read the report %s: %s" % (path, e))
-    props, cur, inside = {}, None, False
+    props, cur, inside, part = {}, None, False, "head"
     for line in lines:
         if line.startswith("## "):
             inside = line.strip().lower() == "## proposals"
@@ -706,17 +706,27 @@ def parse_report(path):
         m = ITEM.match(line)
         if m:
             cur = {"head": m.group(2), "evidence": []}
+            part = "head"
             num = int(m.group(1))
             if num in props:
                 die("taste: %s numbers proposal %d twice; fix the report before applying" % (path, num))
             props[num] = cur
         elif cur is not None and line[:1] in (" ", "\t"):
+            # An indented line continues the part above it: the head until the first
+            # Evidence: or Why: line, then that part. A wrapped Evidence line adds its
+            # signal ids; Why text is commentary and never reaches the rule.
             ev = re.match(r"\s+Evidence:\s*(.*)$", line)
             if ev:
+                part = "evidence"
                 cur["evidence"] += SIG_ID.findall(ev.group(1))
-            elif line.strip() and not re.match(r"\s+Why:", line):
-                # A wrapped proposal line continues the head; Why lines are commentary.
+            elif re.match(r"\s+Why:", line):
+                part = "why"
+            elif not line.strip():
+                continue
+            elif part == "head":
                 cur["head"] += " " + line.strip()
+            elif part == "evidence":
+                cur["evidence"] += SIG_ID.findall(line)
     for cur in props.values():
         head = cur["head"]
         ma, mr, mx = ADD.match(head), REVISE.match(head), REMOVE.match(head)
@@ -870,6 +880,9 @@ def cmd_apply(c, a):
                 use = "%s:%s" % (area, tid)
             else:
                 P.write_rows(c.root, area, [], [], [{"id": p["id"]}], high.get(area, 0), warn=warns.append)
+                # The removed number stays taken: a hand-written or ported top row
+                # leaves no other trace, so a later add would get it again.
+                high[area] = max(high.get(area, 0), id_number(p["id"]))
                 notes.append("taste: %s removed from %s" % (p["id"], area))
                 hist.append({"report": rid, "num": num, "op": "remove", "id": p["id"], "area": area})
                 use = None
