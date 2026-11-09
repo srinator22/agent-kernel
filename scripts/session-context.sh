@@ -44,6 +44,55 @@ if [[ -f .work/TASK.md ]] && ! grep -q '{{title}}' .work/TASK.md; then
   cat .work/TASK.md
 fi
 
+# Prints each register's rules (ID and Rule) grouped by area, so a session
+# starts knowing them. POSIX awk only (mawk and BSD awk too): CR stripped, an
+# escaped pipe kept as a pipe, fenced blocks and baselines tables skipped.
+# Bytes are counted under LC_ALL=C and the printed lines stay within 4000
+# bytes; past that one line names the files that hold the rest.
+preference_rules() {
+  LC_ALL=C awk -v cap=4000 '
+    function flush() {
+      if (cur != "") { print line; used += length(line) + 1 }
+      cur = ""; line = ""
+    }
+    function note(p) { if (!(p in listed)) { listed[p] = 1; rest = rest (rest == "" ? "" : ", ") p } }
+    FNR == 1 {
+      f = FILENAME; sub(/^.*\//, "", f); sub(/\.md$/, "", f)
+      fence = 0; t = 0; skip = 0
+    }
+    { gsub(/\r/, "") }
+    /^[ \t]*(```|~~~)/ { fence = !fence; t = 0; next }
+    fence { next }
+    !/^[ \t]*\|/ { t = 0; next }
+    {
+      row = $0
+      gsub(/\\[|]/, "\001", row)
+      n = split(row, c, "|")
+      for (i = 1; i <= n; i++) { gsub(/\001/, "|", c[i]); gsub(/^[ \t]+|[ \t]+$/, "", c[i]) }
+    }
+    c[2] == "ID" && c[3] == "Rule" { t = 1; skip = 1; next }
+    c[2] == "Kind" { t = 0; next }
+    t && f != "README" {
+      if (skip) { skip = 0; next }
+      if (c[2] == "" || c[3] == "" || c[2] ~ /^:?-+:?$/) next
+      path = "docs/preferences/" f ".md"
+      if (over) { note(path); next }
+      if (f != cur) { flush(); cur = f; line = "[session-context] Preferences (" f "):"; first = 1 }
+      add = " " c[2] " " c[3]
+      if (used + length(line) + length(add) + 1 > cap) {
+        over = 1
+        if (first) { cur = ""; line = "" } else flush()
+        note(path); next
+      }
+      line = line add; first = 0
+    }
+    END {
+      if (!over) flush()
+      if (rest != "") print "[session-context] Preferences: more rules in " rest "; not printed here, read them there."
+    }
+  ' docs/preferences/*.md 2>/dev/null || true
+}
+
 # Owner preferences (docs/procedures/preferences.md): one line with the
 # register areas, the rule count and how many rules are still Review, counted
 # with bash and awk so it works without Python. Prints nothing without
@@ -66,7 +115,8 @@ preferences_block() {
       /^[ \t]*\|[ \t]*ID[ \t]*\|[ \t]*Rule[ \t]*\|/ { t = 1; skip = 1; next }
       t && /^[ \t]*\|/ {
         if (skip) { skip = 0; next }
-        n = split($0, c, "|")
+        row = $0; gsub(/\\[|]/, "\001", row)
+        n = split(row, c, "|")
         chk = c[5]; gsub(/\r/, "", chk); gsub(/^[ \t]+/, "", chk)
         rules++
         if (chk ~ /^Review/) review++
@@ -79,6 +129,7 @@ preferences_block() {
       rules="${BASH_REMATCH[1]}"; review="${BASH_REMATCH[2]}"
     fi
     echo "[session-context] Preferences: $areas ($rules rules, $review Review)"
+    preference_rules
   fi
   if [[ -f scripts/feedback-log.sh ]]; then
     if [[ -f .claude/settings.json ]]; then settings="$(cat .claude/settings.json 2>/dev/null || true)"; fi

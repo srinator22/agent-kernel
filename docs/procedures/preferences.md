@@ -38,6 +38,38 @@ The format, the check grammar and the baselines table are in
 `docs/preferences/README.md`. `scripts/preferences.sh check` validates every
 register, and `./scripts/check.sh` runs it. A new rule starts as `Review`.
 
+## How rows are written
+
+`scripts/dream/preferences.py` holds the one writer, `write_rows`, that the
+taste pass and port both use. A new row goes after the last row of the file's
+first rules table; a file with only baselines gets a rules table above them; a
+new file gets a title, a purpose line and the rules header. The ID prefix is the
+one most rows in the file use, else the area name in capitals without
+punctuation. Numbers have three digits, run above the file's highest number and
+are never reused. A pipe in a cell is escaped and a newline is refused. A rule
+whose text (case and spacing aside) already exists in any register is not added
+again. Revising a rule appends the date and the owner's words to its Source and
+keeps its Check. Removing or revising a row guarded by a named check prints a
+warning naming that check. Line endings stay as the file has them, and nothing
+is written in template mode or when the result fails `scripts/preferences.sh check`.
+
+## Porting rules from another project
+
+Only when the owner asks. `scripts/preferences.sh port --from <path>` lists
+the rules rows of the other project's registers that would be copied and those
+skipped as duplicates, and writes nothing. Add `--apply` to copy them, and
+`--area <a>` and `--id <ID>` (which needs `--area`) to narrow the list. Each
+copied row has the Source `YYYY-MM-DD: ported from <folder> (<original source>)`,
+the Check `Review (was <original check> in <folder>)` (plain `Review` when it
+was Review) and no Repeats. Baselines are never copied. Port refuses in template
+mode, when the path has no registers and when it is this project's own root.
+
+## What a session starts with
+
+Session start prints a one-line summary of the registers and then each area's
+rules (ID and Rule), up to 4000 bytes. Past that cap one line names the files
+that hold the rest; read them there.
+
 ## The ladder
 
 1. `Review`: a reviewer looks for the rule.

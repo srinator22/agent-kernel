@@ -140,6 +140,62 @@ run bash scripts/session-context.sh
 assert_not_contains "no registers: the summary disappears again" "Preferences:"
 t_cleanup
 
+# Preference rules at session start: ID and Rule per area, read by awk.
+make_fixture
+cp_script session-context.sh
+git add scripts && git commit -q -m "chore: scripts"
+mkdir -p docs/preferences
+echo "# Preference registers" > docs/preferences/README.md
+run bash scripts/session-context.sh
+assert_not_contains "no registers: no rule lines" "Preferences ("
+cat > docs/preferences/film.md <<'REG'
+# Film
+
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| FILM-001 | Titles stay on screen two seconds. | 2026-11-08: "hold titles longer" | Review |
+| FILM-002 | Use a\|b alike. | 2026-11: "pipes" | Review |
+
+```
+| ID | Rule | Source | Check |
+|---|---|---|---|
+| FENCED-001 | Fenced example row. | 2026-01 | Review |
+```
+
+## Baselines
+
+| Kind | Reference | Owns | Check |
+|---|---|---|---|
+| BASEKIND | `scripts/session-context.sh` 2026-11-08 | BASEOWNS | Review |
+REG
+printf '# UI\r\n\r\n| ID | Rule | Source | Check | Repeats |\r\n|---|---|---|---|---|\r\n| UI-001 | Labels stay short. | 2026-11-08: "short" | Review | 2 |\r\n| UI-002 | Buttons use the brand colour. | 2026-11 | Review | |\r\n' > docs/preferences/ui.md
+run bash scripts/session-context.sh
+assert_rc "rules: exits 0" 0
+assert_contains "rules: the summary line stays" "[session-context] Preferences: film, ui (4 rules, 4 Review)"
+assert_contains "rules: grouped by area with ID and Rule" "[session-context] Preferences (film): FILM-001 Titles stay on screen two seconds. FILM-002 Use a|b alike."
+assert_contains "rules: a CRLF register is read without CR" "[session-context] Preferences (ui): UI-001 Labels stay short. UI-002 Buttons use the brand colour."
+assert_eq "rules: no carriage return reaches the output" "0" "$(printf '%s' "$OUT" | tr -cd '\r' | wc -c | tr -d ' ')"
+assert_not_contains "rules: a fenced example row is not printed" "FENCED-001"
+assert_not_contains "rules: baselines rows are not printed" "BASEKIND"
+assert_not_contains "rules: a baselines Owns cell is not printed" "BASEOWNS"
+assert_not_contains "rules: Source text is not printed" "hold titles longer"
+# Over the cap: one line names the files that hold the rest.
+{
+  printf '# Big\n\n| ID | Rule | Source | Check |\n|---|---|---|---|\n'
+  for i in $(seq 1 120); do printf '| BIG-%03d | Rule number %03d keeps its words short and plain. | 2026-11-08: "x" | Review |\n' "$i" "$i"; done
+} > docs/preferences/big.md
+printf '# Zed\n\n| ID | Rule | Source | Check |\n|---|---|---|---|\n| ZED-001 | Last one. | 2026-11 | Review |\n' > docs/preferences/zed.md
+run bash scripts/session-context.sh
+assert_rc "cap: exits 0" 0
+assert_contains "cap: the first rules still print" "BIG-001 Rule number 001 keeps its words short and plain."
+assert_contains "cap: the overflow line names the file that was cut" "docs/preferences/big.md"
+assert_contains "cap: the overflow line names the later file" "docs/preferences/zed.md"
+assert_not_contains "cap: a rule past the cap is not printed" "BIG-120"
+assert_not_contains "cap: a later file's rule is not printed" "ZED-001"
+printed="$(printf '%s\n' "$OUT" | grep '^\[session-context\] Preferences (' | LC_ALL=C wc -c | tr -d ' ')"
+if (( printed <= 4000 && printed > 3000 )); then t_ok "cap: the printed rule lines stay within 4000 bytes ($printed)"; else t_bad "cap: the printed rule lines stay within 4000 bytes ($printed)"; fi
+t_cleanup
+
 # Template update awareness. The template URL is a local repo so no network
 # is touched; TEMPLATE_UPDATE_SYNC=1 runs the cache refresh in the foreground.
 make_fixture
