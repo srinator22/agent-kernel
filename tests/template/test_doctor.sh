@@ -258,13 +258,19 @@ drun
 assert_rc "a failing python outside WindowsApps: exit 1" 1
 assert_not_contains "a failing python outside WindowsApps is not the Store stub" "Microsoft Store"
 
-# A18: README names every tool doctor lists.
-new_sb
-OUT="$(cd "$FIX" && env PATH="$SB" "$BASH" scripts/doctor.sh --list 2>&1)"
-while IFS= read -r name; do
-  [[ -n "$name" ]] || continue
-  if grep -qF -- "$name" "$T_ROOT/README.md"; then t_ok "README names $name"; else t_bad "README names $name"; fi
-done <<< "$OUT"
+# A18: README names every tool doctor lists. The README is the template's
+# own; a started project writes its own README, so the case belongs to the
+# template only.
+if [[ -f "$T_ROOT/.start-done" ]]; then
+  t_na "README names every doctor tool: this repository is a started project (.start-done) with its own README; covered in the template"
+else
+  new_sb
+  OUT="$(cd "$FIX" && env PATH="$SB" "$BASH" scripts/doctor.sh --list 2>&1)"
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    if grep -qF -- "$name" "$T_ROOT/README.md"; then t_ok "README names $name"; else t_bad "README names $name"; fi
+  done <<< "$OUT"
+fi
 
 sb_clean
 t_finish
