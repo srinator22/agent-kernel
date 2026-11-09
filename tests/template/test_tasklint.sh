@@ -136,6 +136,25 @@ task_crit "- [x] C1 done -> nothing.md"
 run ./scripts/tasklint.sh check
 assert_rc "a bare file name that does not exist fails" 1
 assert_contains "names the bare file" "does not exist: nothing.md"
+mkdir -p lib docs/deep
+echo "x" > lib/once.md
+echo "x" > lib/twice.md
+echo "x" > docs/deep/twice.md
+git add lib docs >/dev/null 2>&1
+task_crit "- [x] C1 done -> tests/x_test.sh (see once.md)"
+run ./scripts/tasklint.sh check
+assert_rc "a bare name found once among tracked files passes" 0
+task_crit "- [x] C1 done -> tests/x_test.sh (see ghost.md)"
+run ./scripts/tasklint.sh check
+assert_rc "a bare name tracked nowhere fails" 1
+assert_contains "a bare name tracked nowhere is reported missing" "does not exist: ghost.md"
+task_crit "- [x] C1 done -> tests/x_test.sh (see twice.md)"
+run ./scripts/tasklint.sh check
+assert_rc "a bare name tracked twice fails" 1
+assert_contains "names the ambiguity and the count" "file name twice.md is ambiguous (2 tracked files); use a path"
+task_crit "- [x] C1 done -> tests/x_test.sh (see lib/nope.md)"
+run ./scripts/tasklint.sh check
+assert_rc "a path with a slash is never resolved by name" 1
 task_crit "- [x] C1 done -> https://example.com/docs/page.md"
 run ./scripts/tasklint.sh check
 assert_rc "a URL is not path-like" 1
@@ -170,6 +189,25 @@ task_crit $'<!-- example:\n- [x] C1 hidden, no evidence\n-->' "- [ ] C2 real"
 run ./scripts/tasklint.sh check
 assert_rc "a ticked line inside a multi-line comment is ignored" 0
 assert_contains "and is not counted" "0 ticked criteria"
+
+# An indented continuation line under a criterion is named; evidence must sit on its first line.
+task_crit "- [x] C1 done" "      -> tests/x_test.sh"
+run ./scripts/tasklint.sh check
+assert_rc "evidence on a continuation line fails" 1
+assert_contains "names the continuation line" "line 6 is an indented continuation"
+assert_contains "says evidence sits on the first line" "evidence must sit on the criterion's first line"
+task_crit "- [x] C1 done -> diff inspection" "      and a second line"
+run ./scripts/tasklint.sh check
+assert_contains "a prose-only first line also names the continuation" "line 6 is an indented continuation"
+task_crit "- [x] C1 done" "" "      stray text after a blank line"
+run ./scripts/tasklint.sh check
+assert_not_contains "a blank line ends the criterion" "indented continuation"
+task_crit "- [x] C1 done -> tests/x_test.sh" "      more detail on a second line"
+run ./scripts/tasklint.sh check
+assert_rc "a continuation beside valid first-line evidence still passes" 0
+task_crit "- [x] C1 done" "  - [ ] C2 nested bullet"
+run ./scripts/tasklint.sh check
+assert_not_contains "a nested bullet is not a continuation" "indented continuation"
 
 # Ticked lines outside the Acceptance criteria section are not criteria.
 printf '# Task: fixture\n\n## Progress log\n- [x] a progress item without evidence\n' > .work/TASK.md
@@ -284,6 +322,18 @@ task_auto "" "todo"
 printf '| {{node}} | {{deps}} | {{paths}} | {{tier}} | done |\n' >> .work/TASK.md
 run ./scripts/tasklint.sh check
 assert_rc "a template placeholder row is not a started node" 0
+
+# A verdict section listing several rounds: the first line must be the current verdict.
+printf '# Task: fixture\nMode: autopilot\n\n## Plan\n| node | depends on | owner files | worker tier | status |\n|---|---|---|---|---|\n| N1 a | - | src/a | standard | done |\n\n## Plan verdict\nRound 2: FAIL - rework\nRound 1: PASS\n' > .work/TASK.md
+run ./scripts/tasklint.sh check
+assert_rc "an older PASS below a current FAIL still fails" 1
+assert_contains "the message says the first line is the current verdict" "the first line must be the current verdict"
+task_auto "Plan reviewed, nothing to add" todo
+run ./scripts/tasklint.sh ship
+assert_contains "a non-PASS first line at ship gets the hint" "the first line must be the current verdict"
+task_auto "" todo
+run ./scripts/tasklint.sh ship
+assert_not_contains "no verdict section gets no first-line hint" "must be the current verdict"
 
 # Mode.
 printf '# Task: fixture\nMode: standard | quick | autopilot\n\n## Assumptions\n- [open] x\n' > .work/TASK.md
