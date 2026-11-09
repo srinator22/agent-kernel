@@ -321,6 +321,31 @@ def markers(roots):
     return list(out)
 
 
+def short_name(root):
+    """The Windows 8.3 form of an existing path, normalised like roots, or None."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32768)
+        n = ctypes.windll.kernel32.GetShortPathNameW(root.replace("/", "\\"), buf, 32768)
+    except (ImportError, AttributeError, OSError):
+        return None
+    return norm(buf.value) if 0 < n < 32768 else None
+
+
+def with_short_names(roots):
+    """roots plus the 8.3 form of each: a session started from a short-name path
+    (a RUNNER~1 user folder) records that text as its cwd, while roots are resolved to
+    the long form."""
+    out = set(roots)
+    for r in roots:
+        sh = short_name(r) if r else None
+        if sh:
+            out.add(sh)
+    return out
+
+
 def cwd_match(cwd, roots):
     c = norm(cwd if isinstance(cwd, str) else "")
     return any(c == r or c.startswith(r + "/") for r in roots)
@@ -1054,7 +1079,7 @@ def cmd_digest(c, a):
         die("dream: --max-bytes must be at least %d (got %d)" % (MIN_BYTES, a.max_bytes))
     wts = c.worktrees()
     roots = {norm(c.root)} | set(wts) | set(c.state["known_roots"]) | {norm(os.path.abspath(m)) for m in a.match}
-    roots = sorted(r for r in roots if r)
+    roots = sorted(r for r in with_short_names(roots) if r)
     marks = markers(roots)
     newfiles = {k: dict(v) for k, v in c.state["files"].items()}
     read_n = hit_n = lines_n = bad_n = 0
@@ -1225,14 +1250,18 @@ def record_dates(root, rel):
             cur = dt.datetime.fromtimestamp(int(row[1:]), dt.timezone.utc)
         elif row and cur is not None:
             out.setdefault(row, cur)
-    for path in git_z(root, "-c", "core.quotepath=off", "ls-files", "-m", "-z", "--", rel) or []:
-        out.pop(path, None)
-    return out
+    tracked = git_z(root, "-c", "core.quotepath=off", "ls-files", "-z", "--", rel)
+    changed = git_z(root, "-c", "core.quotepath=off", "diff", "--relative", "--name-only", "-z", "HEAD", "--", rel)
+    if tracked is None or changed is None:
+        return {}
+    # Only files still tracked: a record deleted and recreated untracked keeps its file time.
+    # diff against HEAD also catches an edit that is staged but not committed.
+    return {k: v for k, v in out.items() if k in set(tracked) and k not in set(changed)}
 
 
 def due_numbers(c):
     last = c.last()
-    roots = {norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"])
+    roots = with_short_names({norm(c.root)} | set(c.worktrees()) | set(c.state["known_roots"]))
     slugs = {slug(r).lower() for r in roots}
     app_prefix = slug(c.root).lower() + "--claude-worktrees-"
 

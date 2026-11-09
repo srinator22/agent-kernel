@@ -22,6 +22,7 @@ SLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' 
 # by the slug of $FIX, so nesting them inside $FIX doubles the path and passes the
 # 260-character limit on Windows when TMPDIR is long.
 PB="$(mktemp -d /tmp/template-selftest.pb.XXXXXX 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/template-selftest.pb.XXXXXX")"
+[[ -n "$PB" && -d "$PB" ]] || { t_bad "no temp folder for the project folders"; t_finish; }
 FIX0="$FIX"
 # Folders made beside the fixture go with it on an early exit too, not only at the end.
 cleanup_extra() {
@@ -248,6 +249,33 @@ assert_rc "due: a record committed after the last dream, with an old file time" 
 assert_contains "due counts a record by its commit date" "1 task retros"
 git rm -q -f .work/done/old.md .work/done/new.md >/dev/null 2>&1
 git commit -q -m drop-retros >/dev/null 2>&1
+
+# Edge cases of the commit date: an edit that is staged but not committed, and a record
+# deleted in a commit and recreated untracked, are dated by their file time.
+EDGE="$FIX/.work/done/edge.md"
+echo edge > "$EDGE"
+git add .work/done/edge.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-06T12:00:00Z" GIT_COMMITTER_DATE="2026-11-06T12:00:00Z" git commit -q -m edge-retro >/dev/null 2>&1
+SETM() { "$PY" -c "import os,datetime as d,sys; t=d.datetime(2026,11,int(sys.argv[2]),6,0,tzinfo=d.timezone.utc).timestamp(); os.utime(sys.argv[1],(t,t))" "$1" "$2"; }
+SETM "$EDGE" 8
+run bash scripts/dream.sh due
+assert_rc "not due: a clean committed record keeps its commit date" 1
+assert_contains "clean committed record is not counted" "0 task retros"
+echo more >> "$EDGE"
+git add .work/done/edge.md >/dev/null 2>&1
+SETM "$EDGE" 8
+run bash scripts/dream.sh due
+assert_rc "due: a record edited and staged is dated by its file time" 0
+assert_contains "staged edit is counted" "1 task retros"
+GIT_AUTHOR_DATE="2026-11-06T13:00:00Z" GIT_COMMITTER_DATE="2026-11-06T13:00:00Z" git commit -q -m edge-staged >/dev/null 2>&1
+git rm -q -f .work/done/edge.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-08T06:00:00Z" GIT_COMMITTER_DATE="2026-11-08T06:00:00Z" git commit -q -m edge-deleted >/dev/null 2>&1
+echo edge > "$EDGE"
+SETM "$EDGE" 6
+run bash scripts/dream.sh due
+assert_rc "not due: a record recreated untracked after a deletion commit" 1
+assert_contains "recreated record is dated by its file time, not the deletion" "0 task retros"
+rm -f "$EDGE"
 export DREAM_NOW="2026-11-11T12:30:00Z"
 run bash scripts/dream.sh due
 assert_rc "due: last dream 4 days ago" 0
@@ -647,6 +675,16 @@ run bash scripts/dream.sh scorecard --state-dir "$SCST16"
 assert_rc "scorecard: a wrapped Change line exits 0" 0
 assert_contains "scorecard: a row named on a wrapped Change line is found" "  Delta row in backticks: open"
 
+# A wrapped Change continues only while indented lines follow it directly: a Why or
+# Evidence line, or a blank line, ends it.
+SCST17="$FIX/scstate17"
+mkdir -p "$SCST17"
+printf '%s\n' '# r' '## Proposals' '1. [stale] why after change' '   Change: edit BACKLOG.md' '   Why: "Zeta row | P3 | x | open"'   '2. [stale] blank after change' '   Change: edit BACKLOG.md' '' '   "Eta row | P3 | x | open"'   '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: none' > "$SCST17/2026-10-01-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST17"
+assert_rc "scorecard: lines that end a Change exit 0" 0
+assert_not_contains "scorecard: a Why line is not part of the Change" "Zeta row"
+assert_not_contains "scorecard: a line after a blank is not part of the Change" "Eta row"
+
 # Each lesson id and row prints once: repeated in one Change line, across
 # reports, and a row cell differing only in case or backticks.
 SCST13="$FIX/scstate13"
@@ -999,5 +1037,26 @@ printf '%s\n' '# Dream report 2026-11-12' '## Proposals' '1. [stale] One' '   Ch
 DREAM_NOW="2026-11-12T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST14" --report "$R14" --applied 1
 assert_rc "files: done when git cannot compare exits 0" 0
 assert_file_has "files: git cannot compare says the files were not checked" "$R14" "not checked: git cannot compare against 0123456789ab"
+
+# A session started from a Windows 8.3 short path (a RUNNER~1 user folder) records that text as its
+# cwd; the roots are resolved to the long form, so the short form must match too.
+SHORT=""
+if command -v cygpath >/dev/null 2>&1; then
+  SHORT="$("$PY" -c 'import ctypes,sys;b=ctypes.create_unicode_buffer(32768);n=ctypes.windll.kernel32.GetShortPathNameW(sys.argv[1],b,32768);print(b.value if 0<n<32768 else "")' "$NATIVE" 2>/dev/null)"
+fi
+if [[ -n "$SHORT" ]]; then
+  SSLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$SHORT")"
+  PROJSN="$PB/projsn"
+  ST15="$FIX/state15"
+  mkdir -p "$PROJSN/$SSLUG"
+  mk "$PROJSN/$SSLUG/sssssss1.jsonl" user 2026-11-13T08:00:00.000Z "a session recorded from the short path" "$SHORT"
+  DREAM_NOW="2026-11-13T12:00:00Z" run bash scripts/dream.sh due --projects-dir "$PROJSN" --state-dir "$ST15"
+  assert_contains "short path: the session folder named by the short path is counted" "dream: due (1 sessions"
+  DREAM_NOW="2026-11-13T12:00:00Z" dg --projects-dir "$PROJSN" --state-dir "$ST15"
+  assert_rc "short path: digest exits 0" 0
+  assert_file_has "short path: a cwd in short form is read" "$ST15/digest.md" "a session recorded from the short path"
+else
+  t_ok "short path: n/a without cygpath and 8.3 names"
+fi
 
 t_finish
