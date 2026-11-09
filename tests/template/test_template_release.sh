@@ -126,7 +126,7 @@ put_full_agents "k edited" "r" "d"
 git add -A >/dev/null 2>&1 && git commit -q -m "chore: kind agents" >/dev/null 2>&1
 commit_file docs/library/k_cat.md "feat: kind catalog"
 mkdir -p scripts docs/library
-echo a >> scripts/k_both.sh; echo b >> docs/library/k_both.md
+echo a >> scripts/k_both.sh; chmod +x scripts/k_both.sh; echo b >> docs/library/k_both.md
 git add -A >/dev/null 2>&1 && git commit -q -m "feat: kind both" >/dev/null 2>&1
 commit_file random/k_none.md "chore: kind none"
 run bash scripts/template-sync.sh --synced-commits base-kinds..HEAD

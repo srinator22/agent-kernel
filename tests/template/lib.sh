@@ -121,7 +121,9 @@ t_check_exec() {
     exempt=0
     for x in "$@"; do [[ "$x" == "$rel" ]] && exempt=1; done
     (( exempt )) || [[ -x "$f" ]] || bad="$bad $rel"
-  done < <(find "$FIX/scripts" "$FIX/tests/template" -name '*.sh' -type f 2>/dev/null | sort)
+  # tests/template/fixtures/ holds data copies (fixtures/check.sh is 100644 in
+  # git on purpose), not scripts a test runs.
+  done < <(find "$FIX/scripts" "$FIX/tests/template" -path "$FIX/tests/template/fixtures" -prune -o -name '*.sh' -type f -print 2>/dev/null | sort)
   assert_eq "$name: every script the fixture writes is executable on disk" "" "${bad# }"
 }
 
