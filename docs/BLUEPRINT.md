@@ -150,7 +150,7 @@ scripts/
   preferences.sh              # check: the preference registers in docs/preferences/ are well formed
   dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
-    dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats
+    dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats and retro commit dates
     feedback.py               # stdlib: hook body, classifies the owner's prompt and appends it with its situation to the feedback log
     preferences.py            # stdlib: register and baseline checks behind scripts/preferences.sh
     taste.py                  # stdlib: cross-project taste digest, evidence pool, approved lines into ~/.claude/taste

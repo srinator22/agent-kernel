@@ -18,7 +18,21 @@ make_fixture
 cp_script dream.sh dream/dream.py
 NATIVE="$(cygpath -w "$FIX" 2>/dev/null || echo "$FIX")"
 SLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$NATIVE")"
-PROJ="$FIX/projects"
+# Project folders live under a short folder of their own: each holds a folder named
+# by the slug of $FIX, so nesting them inside $FIX doubles the path and passes the
+# 260-character limit on Windows when TMPDIR is long.
+PB="$(mktemp -d /tmp/template-selftest.pb.XXXXXX 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/template-selftest.pb.XXXXXX")"
+[[ -n "$PB" && -d "$PB" ]] || { t_bad "no temp folder for the project folders"; t_finish; }
+FIX0="$FIX"
+# Folders made beside the fixture go with it on an early exit too, not only at the end.
+cleanup_extra() {
+  local d
+  for d in "$FIX0-wt" "$FIX0-wt2" "$FIX0-wt3" "$FIX0-wt4" "$FIX0-m1" "$FIX0-m2" "$PB"; do
+    case "$d" in */template-selftest.*) rm -rf "$d" ;; esac
+  done
+}
+trap 'cleanup_extra; t_cleanup' EXIT
+PROJ="$PB/projects"
 mkdir -p "$PROJ/$SLUG" "$PROJ/elsewhere"
 export DREAM_PROJECTS_DIR="$PROJ"
 export DREAM_NOW="2026-11-07T12:00:00Z"
@@ -217,6 +231,51 @@ assert_contains "due counts the retro" "1 task retros"
 "$PY" -c "import os,datetime as d,sys; t=d.datetime(2026,11,7,6,0,tzinfo=d.timezone.utc).timestamp(); os.utime(sys.argv[1],(t,t))" "$FIX/.work/done/task.md"
 run bash scripts/dream.sh due
 assert_rc "not due: a retro older than the last dream" 1
+# A retro counts by the date its record was committed: a fresh checkout stamps every
+# archived record with a new modification time, so mtime alone makes a dream look due.
+echo old > "$FIX/.work/done/old.md"
+git add .work/done/old.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-06T12:00:00Z" GIT_COMMITTER_DATE="2026-11-06T12:00:00Z" git commit -q -m old-retro >/dev/null 2>&1
+"$PY" -c "import os,datetime as d,sys; t=d.datetime(2026,11,8,6,0,tzinfo=d.timezone.utc).timestamp(); os.utime(sys.argv[1],(t,t))" "$FIX/.work/done/old.md"
+run bash scripts/dream.sh due
+assert_rc "not due: a record committed before the last dream, with a new file time" 1
+assert_contains "due ignores the file time of a committed record" "0 task retros"
+echo new > "$FIX/.work/done/new.md"
+git add .work/done/new.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-08T06:00:00Z" GIT_COMMITTER_DATE="2026-11-08T06:00:00Z" git commit -q -m new-retro >/dev/null 2>&1
+"$PY" -c "import os,datetime as d,sys; t=d.datetime(2026,11,6,6,0,tzinfo=d.timezone.utc).timestamp(); os.utime(sys.argv[1],(t,t))" "$FIX/.work/done/new.md"
+run bash scripts/dream.sh due
+assert_rc "due: a record committed after the last dream, with an old file time" 0
+assert_contains "due counts a record by its commit date" "1 task retros"
+git rm -q -f .work/done/old.md .work/done/new.md >/dev/null 2>&1
+git commit -q -m drop-retros >/dev/null 2>&1
+
+# Edge cases of the commit date: an edit that is staged but not committed, and a record
+# deleted in a commit and recreated untracked, are dated by their file time.
+EDGE="$FIX/.work/done/edge.md"
+echo edge > "$EDGE"
+git add .work/done/edge.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-06T12:00:00Z" GIT_COMMITTER_DATE="2026-11-06T12:00:00Z" git commit -q -m edge-retro >/dev/null 2>&1
+SETM() { "$PY" -c "import os,datetime as d,sys; t=d.datetime(2026,11,int(sys.argv[2]),6,0,tzinfo=d.timezone.utc).timestamp(); os.utime(sys.argv[1],(t,t))" "$1" "$2"; }
+SETM "$EDGE" 8
+run bash scripts/dream.sh due
+assert_rc "not due: a clean committed record keeps its commit date" 1
+assert_contains "clean committed record is not counted" "0 task retros"
+echo more >> "$EDGE"
+git add .work/done/edge.md >/dev/null 2>&1
+SETM "$EDGE" 8
+run bash scripts/dream.sh due
+assert_rc "due: a record edited and staged is dated by its file time" 0
+assert_contains "staged edit is counted" "1 task retros"
+GIT_AUTHOR_DATE="2026-11-06T13:00:00Z" GIT_COMMITTER_DATE="2026-11-06T13:00:00Z" git commit -q -m edge-staged >/dev/null 2>&1
+git rm -q -f .work/done/edge.md >/dev/null 2>&1
+GIT_AUTHOR_DATE="2026-11-08T06:00:00Z" GIT_COMMITTER_DATE="2026-11-08T06:00:00Z" git commit -q -m edge-deleted >/dev/null 2>&1
+echo edge > "$EDGE"
+SETM "$EDGE" 6
+run bash scripts/dream.sh due
+assert_rc "not due: a record recreated untracked after a deletion commit" 1
+assert_contains "recreated record is dated by its file time, not the deletion" "0 task retros"
+rm -f "$EDGE"
 export DREAM_NOW="2026-11-11T12:30:00Z"
 run bash scripts/dream.sh due
 assert_rc "due: last dream 4 days ago" 0
@@ -234,7 +293,7 @@ assert_rc "no python: digest exits 2" 2
 assert_contains "no python: digest text" "dream: python not found"
 
 # --- the cap (the minimum is 2000 bytes, so this set holds more than that) ---
-PROJ3="$FIX/projects3"
+PROJ3="$PB/projects3"
 mkdir -p "$PROJ3/$SLUG"
 S3="$PROJ3/$SLUG/cccccccc33.jsonl"
 mk "$S3" user    2026-11-07T08:00:00.000Z "plain message oldest-marker $(printf 'p%.0s' $(seq 1 120))"
@@ -264,7 +323,7 @@ dg --projects-dir "$PROJ3" --state-dir "$ST3" --max-bytes 1999
 assert_rc "max-bytes below 2000 exits 2" 2
 assert_contains "max-bytes below 2000 says why" "--max-bytes must be at least 2000"
 # Exit 3 only when no signal existed before the cap.
-PROJ0="$FIX/projects0"
+PROJ0="$PB/projects0"
 mkdir -p "$PROJ0/$SLUG"
 mk "$PROJ0/$SLUG/dddddddd44.jsonl" meta 2026-11-07T07:00:00.000Z "only meta"
 dg --projects-dir "$PROJ0" --state-dir "$FIX/state0"
@@ -308,7 +367,7 @@ assert_rc "status exits 0" 0
 assert_contains "status shows the last dream" "last dream: 2026-11-07T12:00:00Z"
 
 # --- sibling folders never count for due ---
-PROJ4="$FIX/projects4"
+PROJ4="$PB/projects4"
 mkdir -p "$PROJ4/${SLUG}-bar"
 mk "$PROJ4/${SLUG}-bar/eeeeeeee55.jsonl" user 2026-11-07T07:00:00.000Z "sibling activity" "${NATIVE}-bar"
 run env DREAM_PROJECTS_DIR="$PROJ4" bash scripts/dream.sh due --state-dir "$FIX/state4"
@@ -317,14 +376,14 @@ mkdir -p "$PROJ4/$SLUG"
 mk "$PROJ4/$SLUG/ffffffff66.jsonl" user 2026-11-07T07:00:00.000Z "own activity"
 run env DREAM_PROJECTS_DIR="$PROJ4" bash scripts/dream.sh due --state-dir "$FIX/state4"
 assert_rc "due: the same activity in the root folder is due" 0
-PROJ5="$FIX/projects5"
+PROJ5="$PB/projects5"
 mkdir -p "$PROJ5/${SLUG}--claude-worktrees-foo"
 mk "$PROJ5/${SLUG}--claude-worktrees-foo/gggggggg77.jsonl" user 2026-11-07T07:00:00.000Z "app worktree activity" "$NATIVE/.claude/worktrees/foo"
 run env DREAM_PROJECTS_DIR="$PROJ5" bash scripts/dream.sh due --state-dir "$FIX/state5"
 assert_rc "due: an app worktree folder counts" 0
 
 # --- a partial line survives done and is read exactly once ---
-PROJ6="$FIX/projects6"
+PROJ6="$PB/projects6"
 ST6="$FIX/state6"
 mkdir -p "$PROJ6/$SLUG"
 S6="$PROJ6/$SLUG/hhhhhhhh88.jsonl"
@@ -345,7 +404,7 @@ assert_eq "partial: read exactly once" "1" "$(grep -c 'beta partial line' "$ST6/
 assert_file_lacks "partial: earlier line not read again" "$ST6/digest.md" "alpha complete line"
 
 # --- a transcript rewritten shorter is read again from the start ---
-PROJ9="$FIX/projects9"
+PROJ9="$PB/projects9"
 ST9="$FIX/state9"
 mkdir -p "$PROJ9/$SLUG"
 S9="$PROJ9/$SLUG/iiiiiiii99.jsonl"
@@ -365,7 +424,7 @@ git commit -q -m fixture >/dev/null 2>&1
 WT="$FIX-wt"
 WTN="$(cygpath -w "$WT" 2>/dev/null || echo "$WT")"
 git worktree add -q --detach "$WT" >/dev/null 2>&1
-PROJ7="$FIX/projects7"
+PROJ7="$PB/projects7"
 ST7="$FIX/state7"
 mkdir -p "$PROJ7/wtproj" "$PROJ7/matchproj" "$PROJ7/wtproj/sess/subagents"
 M1="$FIX-m1"
@@ -393,7 +452,7 @@ assert_file_has "worktree: a removed worktree stays known" "$ST7/digest.md" "wor
 WT2="$FIX-wt2"
 WT2N="$(cygpath -w "$WT2" 2>/dev/null || echo "$WT2")"
 git worktree add -q --detach "$WT2" >/dev/null 2>&1
-PROJ8="$FIX/projects8"
+PROJ8="$PB/projects8"
 mkdir -p "$PROJ8/wt2proj"
 mk "$PROJ8/wt2proj/w2.jsonl" user 2026-11-07T07:00:00.000Z "linked worktree activity" "$WT2N"
 run bash "$WT2/scripts/dream.sh" digest --projects-dir "$PROJ8"
@@ -405,7 +464,7 @@ git worktree remove --force "$WT2" >/dev/null 2>&1
 # --- outcome and impact ---
 # Lesson ages come from the git date of each INDEX.md line, so the lines are
 # committed with pinned dates: L001 and L002 on 2026-09-01, L003 on 2026-11-01.
-PROJ10="$FIX/projects10"
+PROJ10="$PB/projects10"
 ST10="$FIX/state10"
 mkdir -p "$PROJ10/$SLUG"
 S10="$PROJ10/$SLUG/jjjjjjjj10.jsonl"
@@ -518,7 +577,10 @@ SC="$OUT"
 assert_eq "scorecard: the command changes no file in the state folder" "$SNAP_BEFORE" "$(snap)"
 assert_contains "scorecard: heading" "## Scorecard"
 assert_contains "scorecard: says what it counts" "the owner's recorded decisions on past dream proposals, counted by script"
-assert_contains "scorecard: names the checkout and branch read" "now values read from $NATIVE (branch "
+# The checkout is printed resolved (dream.py uses realpath), which on a runner whose TEMP is a
+# short name differs from the cygpath spelling of the fixture.
+REALFIX="$("$PY" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$NATIVE")"
+assert_contains "scorecard: names the checkout and branch read" "now values read from $REALFIX (branch "
 assert_contains "scorecard: a report with an Outcome" "  2026-10-01: proposals 3, approved 2, declined 1"
 assert_contains "scorecard: a report without an Outcome" "  2026-10-02: proposals 2, no Outcome recorded"
 assert_contains "scorecard: the last Outcome counts" "  2026-10-03: proposals 1, approved 0, declined 1"
@@ -557,7 +619,7 @@ git -C "$FIX" checkout -q -
 
 # In a digest the section sits between Impact and Signals and counts candidates
 # with the Impact section's word matcher.
-SCPROJ11="$FIX/scprojects11"
+SCPROJ11="$PB/scprojects11"
 mkdir -p "$SCPROJ11/$SLUG"
 mk "$SCPROJ11/$SLUG/kkkkkkkk11.jsonl" err 2026-11-07T09:00:00.000Z "PreToolUse hook error: BLOCKED worker commits by the guard"
 dg --projects-dir "$SCPROJ11" --state-dir "$SCST11"
@@ -593,6 +655,38 @@ assert_contains "scorecard: lessons beyond 20 are counted" "  ... 220 more not s
 assert_contains "scorecard: rows beyond 20 are counted" "  ... 220 more not shown"
 case "$OUT" in *row-15-1-a*) t_ok "scorecard: the newest report's rows come first" ;; *) t_bad "scorecard: the newest report's rows come first" "$OUT" ;; esac
 case "$OUT" in *"$LONG$LONG"*) t_bad "scorecard: cells are cut to 80 characters" "$OUT" ;; *) t_ok "scorecard: cells are cut to 80 characters" ;; esac
+
+# A skipped report's reason is cut to 160 characters, ending in "...".
+SCST15="$FIX/scstate15"
+mkdir -p "$SCST15"
+HUGE="$(printf '9%.0s' $(seq 1 300))"
+printf '%s\n' '# r' '## Proposals' '1. [stale] a' '## Outcome 2026-10-01' "Applied: $HUGE" 'Declined: none' > "$SCST15/2026-10-01-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST15"
+assert_rc "scorecard: a long skip reason exits 0" 0
+SKIPLINE="$(printf '%s\n' "$OUT" | grep '^skipped 2026-10-01-report.md')"
+assert_eq "scorecard: a skipped line is cut to 160 characters" "160" "${#SKIPLINE}"
+case "$SKIPLINE" in *...) t_ok "scorecard: a cut skipped line ends in an ellipsis" ;; *) t_bad "scorecard: a cut skipped line ends in an ellipsis" "$SKIPLINE" ;; esac
+
+# A Change line wrapped onto the next lines still counts whole: the row named on the
+# wrapped line is found.
+SCST16="$FIX/scstate16"
+mkdir -p "$SCST16"
+printf '%s\n' '# r' '## Proposals' '1. [stale] wrapped' '   Why: x' '   Change: edit these BACKLOG.md rows' \
+  '   "Delta row in backticks | P3 | x | open" after the first one' \
+  '## Outcome 2026-10-01' 'Applied: 1' 'Declined: none' > "$SCST16/2026-10-01-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST16"
+assert_rc "scorecard: a wrapped Change line exits 0" 0
+assert_contains "scorecard: a row named on a wrapped Change line is found" "  Delta row in backticks: open"
+
+# A wrapped Change continues only while indented lines follow it directly: a Why or
+# Evidence line, or a blank line, ends it.
+SCST17="$FIX/scstate17"
+mkdir -p "$SCST17"
+printf '%s\n' '# r' '## Proposals' '1. [stale] why after change' '   Change: edit BACKLOG.md' '   Why: "Zeta row | P3 | x | open"'   '2. [stale] blank after change' '   Change: edit BACKLOG.md' '' '   "Eta row | P3 | x | open"'   '## Outcome 2026-10-01' 'Applied: 1, 2' 'Declined: none' > "$SCST17/2026-10-01-report.md"
+run bash scripts/dream.sh scorecard --state-dir "$SCST17"
+assert_rc "scorecard: lines that end a Change exit 0" 0
+assert_not_contains "scorecard: a Why line is not part of the Change" "Zeta row"
+assert_not_contains "scorecard: a line after a blank is not part of the Change" "Eta row"
 
 # Each lesson id and row prints once: repeated in one Change line, across
 # reports, and a row cell differing only in case or backticks.
@@ -868,7 +962,7 @@ done
 git add -u >/dev/null 2>&1
 git add BACKLOG.md >/dev/null 2>&1
 git commit -q -m before-dream11 >/dev/null 2>&1
-PROJ11="$FIX-p11"
+PROJ11="$PB/p11"
 ST11="$FIX/state11"
 MEM11="$PROJ11/$SLUG/memory"
 mkdir -p "$MEM11"
@@ -933,6 +1027,98 @@ DREAM_NOW="2026-11-11T12:00:00Z" run bash "$WT4/scripts/dream.sh" done --project
 assert_rc "files: done on another history exits 0" 0
 assert_file_has "files: another history says the files were not checked" "$R13" "not checked: the digest's commit is not in this checkout's history"
 git worktree remove --force "$WT4" >/dev/null 2>&1
-case "$PROJ11" in */template-selftest.*-p11) rm -rf "$PROJ11" ;; esac
+
+# done when git cannot tell what changed since the digest's commit (here a commit the
+# repository does not hold) says so instead of listing guesses.
+ST14="$FIX/state14"
+mk "$PROJ11/$SLUG/kkkkkkkk11.jsonl" user 2026-11-12T08:00:00.000Z "a digest whose commit git cannot find"
+DREAM_NOW="2026-11-12T12:00:00Z" dg --projects-dir "$PROJ11" --state-dir "$ST14"
+assert_rc "files: fourth digest exits 0" 0
+"$PY" -c 'import json,sys;p=sys.argv[1];s=json.load(open(p));s["head"]="0123456789abcdef0123456789abcdef01234567";json.dump(s,open(p,"w"))' "$ST14/state.next.json"
+R14="$ST14/2026-11-12-report.md"
+printf '%s\n' '# Dream report 2026-11-12' '## Proposals' '1. [stale] One' '   Change: edit BACKLOG.md' > "$R14"
+DREAM_NOW="2026-11-12T12:00:00Z" run bash scripts/dream.sh done --projects-dir "$PROJ11" --state-dir "$ST14" --report "$R14" --applied 1
+assert_rc "files: done when git cannot compare exits 0" 0
+assert_file_has "files: git cannot compare says the files were not checked" "$R14" "not checked: git cannot compare against 0123456789ab"
+
+# A session started from a Windows 8.3 short path (a RUNNER~1 user folder) records that text as its
+# cwd; the roots are resolved to the long form, so the short form must match too.
+SHORT=""
+if command -v cygpath >/dev/null 2>&1; then
+  SHORT="$("$PY" -c 'import ctypes,sys;b=ctypes.create_unicode_buffer(32768);n=ctypes.windll.kernel32.GetShortPathNameW(sys.argv[1],b,32768);print(b.value if 0<n<32768 else "")' "$NATIVE" 2>/dev/null)"
+fi
+if [[ -n "$SHORT" ]]; then
+  SSLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$SHORT")"
+  PROJSN="$PB/projsn"
+  ST15="$FIX/state15"
+  mkdir -p "$PROJSN/$SSLUG"
+  mk "$PROJSN/$SSLUG/sssssss1.jsonl" user 2026-11-13T08:00:00.000Z "a session recorded from the short path" "$SHORT"
+  DREAM_NOW="2026-11-13T12:00:00Z" run bash scripts/dream.sh due --projects-dir "$PROJSN" --state-dir "$ST15"
+  assert_contains "short path: the session folder named by the short path is counted" "dream: due (1 sessions"
+  DREAM_NOW="2026-11-13T12:00:00Z" dg --projects-dir "$PROJSN" --state-dir "$ST15"
+  assert_rc "short path: digest exits 0" 0
+  assert_file_has "short path: a cwd in short form is read" "$ST15/digest.md" "a session recorded from the short path"
+else
+  t_na "short path: needs cygpath and 8.3 names (the Windows CI job runs it)"
+fi
+
+# The Windows runner's TEMP is C:\Users\RUNNER~1\AppData\...: a short ancestor and a long rest.
+# A session started there records that mixed spelling as its cwd and names its project and
+# memory folders after it, so it matches neither the long form nor the all-short form.
+# The project here is a clone under two long-named folders, so its spelling with short
+# ancestors and a long last part differs from both the long and the all-short form on any
+# Windows machine with 8.3 names, not only where the user folder itself is long.
+MIXED=""
+CL="$PB/longancestorfolder/longdescendantclone"
+if command -v cygpath >/dev/null 2>&1 && mkdir -p "${CL%/*}" && git clone -q "$FIX" "$CL" >/dev/null 2>&1; then
+  CLN="$(cygpath -w "$CL")"
+  MIXED="$("$PY" -c 'import ctypes,sys
+b=ctypes.create_unicode_buffer(32768)
+n=ctypes.windll.kernel32.GetShortPathNameW(sys.argv[1],b,32768)
+s=b.value.split("\\") if 0<n<32768 else []
+l=sys.argv[1].split("\\")
+m="\\".join(s[:-1]+l[-1:]) if len(s)==len(l) else ""
+print(m if m and m!=b.value and m!=sys.argv[1] else "")' "$CLN" 2>/dev/null)"
+fi
+if [[ -n "$MIXED" ]]; then
+  MSLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$MIXED")"
+  PROJMX="$PB/projmx"
+  ST16="$FIX/state16"
+  mkdir -p "$PROJMX/$MSLUG/memory"
+  printf '%s\n' '# A note' 'Body.' > "$PROJMX/$MSLUG/memory/note-m.md"
+  mk "$PROJMX/$MSLUG/mmmmmmm1.jsonl" user 2026-11-14T08:00:00.000Z "a session recorded from a mixed path" "$MIXED"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" due --projects-dir "$PROJMX" --state-dir "$ST16"
+  assert_contains "mixed path: the session folder named by a short-then-long path is counted" "dream: due (1 sessions"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX" --state-dir "$ST16"
+  assert_rc "mixed path: digest exits 0" 0
+  assert_file_has "mixed path: a cwd in that spelling is read" "$ST16/digest.md" "a session recorded from a mixed path"
+  run bash "$CL/scripts/dream.sh" hygiene --projects-dir "$PROJMX"
+  assert_contains "mixed path: the memory folder named by that spelling is read" "auto-memory: 1 files"
+  # An app worktree folder takes its name from that spelling too.
+  PROJMX2="$PB/projmx2"
+  mkdir -p "$PROJMX2/${MSLUG}--claude-worktrees-foo"
+  mk "$PROJMX2/${MSLUG}--claude-worktrees-foo/nnnnnnn1.jsonl" user 2026-11-14T08:00:00.000Z "a mixed app worktree line" "$MIXED\\.claude\\worktrees\\foo"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" due --projects-dir "$PROJMX2" --state-dir "$FIX/state17"
+  assert_contains "mixed path: an app worktree folder named from that spelling counts" "dream: due (1 sessions"
+  # A removed worktree and a --match path that never existed have no short name of their own;
+  # their cwd is recorded with the short ancestors of the folder above them.
+  PROJMX3="$PB/projmx3"
+  ST18="$FIX/state18"
+  mkdir -p "$PROJMX3/any"
+  git -C "$CL" worktree add -q --detach "$CL-wt" >/dev/null 2>&1
+  mk "$PROJMX3/any/ooooooo1.jsonl" user 2026-11-14T08:00:00.000Z "a mixed first pass" "$MIXED"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX3" --state-dir "$ST18"
+  assert_rc "mixed path: a first digest that records the worktree exits 0" 0
+  run bash "$CL/scripts/dream.sh" done --state-dir "$ST18"
+  git -C "$CL" worktree remove --force "$CL-wt" >/dev/null 2>&1
+  mk "$PROJMX3/any/ooooooo2.jsonl" user 2026-11-14T09:00:00.000Z "a mixed removed worktree line" "${MIXED}-wt"
+  mk "$PROJMX3/any/ooooooo3.jsonl" user 2026-11-14T09:01:00.000Z "a mixed missing match line" "${MIXED}-m9"
+  DREAM_NOW="2026-11-14T12:00:00Z" run bash "$CL/scripts/dream.sh" digest --projects-dir "$PROJMX3" --state-dir "$ST18" --match "$CL-m9"
+  assert_rc "mixed path: digest after the worktree is removed exits 0" 0
+  assert_file_has "mixed path: a removed worktree in that spelling is read" "$ST18/digest.md" "a mixed removed worktree line"
+  assert_file_has "mixed path: a --match path that never existed matches that spelling" "$ST18/digest.md" "a mixed missing match line"
+else
+  t_na "mixed path: needs cygpath and 8.3 names (the Windows CI job runs it)"
+fi
 
 t_finish

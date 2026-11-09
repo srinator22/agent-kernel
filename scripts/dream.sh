@@ -2,7 +2,7 @@
 # dream.sh - wrapper for scripts/dream/dream.py, the offline memory-dream helper.
 #   digest [--match PATH]... [--max-bytes N]  reduce new transcript lines and feedback-log lines to signals
 #   done [--report R [--applied N...]]        commit the digest's offsets; append the outcome to R
-#   due [--offer] [--quiet]                   is a dream due (file stats only)
+#   due [--offer] [--quiet]                   is a dream due (file stats and .work/done commit dates)
 #   status                                    last dream, due state, pending files
 #   hygiene [--memory-dir DIR]                memory file sizes, ages, dangling links
 #   scorecard                                 the owner's decisions on past proposals (read-only)
