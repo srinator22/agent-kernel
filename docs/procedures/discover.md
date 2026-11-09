@@ -24,6 +24,9 @@ for exactly that and nothing else.
    artefact), or human only (judgment, physical action, sign-off). Write
    the reason for each class in one line.
 2. Tool inventory. Per activity, list:
+   - Known-good tool sets for common activities are in
+     `docs/library/toolchains/` (for example engineering analysis and
+     product media); check those first, they may already be installed.
    - CLI tools that exist; verify each with `<tool> --version` and record
      the output. Not installed is a finding, not an assumption.
    - MCP servers that exist. Policy: CLI over MCP (manifest.md). An MCP

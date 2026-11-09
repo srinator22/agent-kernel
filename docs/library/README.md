@@ -26,6 +26,7 @@ asks for it.
     docs/library/tools/<tool>           generic tool; tests in tools/tests/
     docs/library/hooks/<hook>           harness hook; tests in hooks/tests/
     docs/library/examples/<name>/       worked example of a procedure (records, no outputs)
+    docs/library/toolchains/<name>.md   checked set of external tools for an activity
     docs/library/README.md              this file
 
 Every tools/ and hooks/ test runs in the template self-test
@@ -175,6 +176,7 @@ one that proved unhelpful is archived with its reason.
 | render_overlay | tool | Label track with side consistency, safe area, overlap and title hold | a product film project |
 | fit_check | tool | Box-level collisions, clearances and scale checks at every keyframe state | new (product-render) |
 | product-render-sample | example | Primitive-only scene taken through every stage, with its records | new (template demonstration) |
+| engineering-media | toolchain | Free tools checked together for structural FEA, flow, mechanisms, people and results-to-render, with licences, install sources, the check each passed and install pitfalls; read at discover step 2 | a consumer hardware product project |
 
 ## Considered and not ported
 
