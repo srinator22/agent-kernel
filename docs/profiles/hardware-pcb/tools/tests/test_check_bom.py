@@ -91,7 +91,10 @@ class ParserTests(unittest.TestCase):
     def test_manifest_keys_cover_paths_links_and_directories(self):
         keys = cb.manifest_keys(MANIFEST, "datasheets")
         self.assertEqual(keys, {"power/reg100.pdf", "conn/", "conn/hdr.pdf"})
-        self.assertTrue(cb.datasheet_is_stored("datasheets/conn/ANY.pdf", keys, "datasheets"))
+        # A directory row covers nothing below it; check_manifest requires a per-file row, so the two tools agree.
+        self.assertFalse(cb.datasheet_is_stored("datasheets/conn/ANY.pdf", keys, "datasheets"))
+        self.assertTrue(cb.datasheet_is_stored("datasheets/conn/HDR.pdf", keys, "datasheets"))
+        self.assertFalse(cb.datasheet_is_stored("datasheets/conn/", keys, "datasheets"))
         self.assertTrue(cb.datasheet_is_stored("C:\\work\\datasheets\\power\\REG100.pdf", keys, "datasheets"))
         self.assertFalse(cb.datasheet_is_stored("datasheets/other/X.pdf", keys, "datasheets"))
         self.assertFalse(cb.datasheet_is_stored("pending", keys, "datasheets"))
@@ -168,9 +171,19 @@ class DatasheetTests(unittest.TestCase):
         return cb.check_datasheets(parse(rows), params(extra), self.stored, "datasheets")
 
     def test_active_with_a_stored_datasheet_via_field_or_parts_list_passes(self):
-        findings = self.check(row("U1", "x", "QFN", mpn="REG100ABC") + row("U2", "x", "QFN", mpn="XYZ9000", datasheet="datasheets/conn/XYZ.pdf"))
+        findings = self.check(row("U1", "x", "QFN", mpn="REG100ABC") + row("U2", "x", "QFN", mpn="XYZ9000", datasheet="datasheets/conn/HDR.pdf"))
         self.assertEqual(of_level(findings, "FAIL"), [])
         self.assertIn("2 of 2 parts", joined(of_level(findings, "PASS")))
+
+    def test_datasheet_under_a_directory_row_without_its_own_row_fails(self):
+        findings = self.check(row("U1", "x", "QFN", mpn="XYZ9000", datasheet="datasheets/conn/XYZ.pdf"))
+        self.assertIn("U1", joined(of_level(findings, "FAIL")))
+
+    def test_bare_name_row_covers_the_file_below_a_directory_row(self):
+        bare = "\n| File | SHA-256 |\n|---|---|\n| BARE.pdf | " + "ef" * 32 + " |\n"
+        keys = cb.manifest_keys(MANIFEST + bare, "datasheets")
+        self.assertTrue(cb.datasheet_is_stored("datasheets/conn/BARE.pdf", keys, "datasheets"))
+        self.assertFalse(cb.datasheet_is_stored("datasheets/conn/OTHER.pdf", keys, "datasheets"))
 
     def test_alt_part_number_in_the_parts_list_is_recognised(self):
         self.assertEqual(of_level(self.check(row("U1", "x", "QFN", mpn="REG100XYZ")), "FAIL"), [])
