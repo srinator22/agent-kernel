@@ -16,6 +16,22 @@ fi
 
 echo "[session-context] Kernel rule 7: read AGENTS.md, .work/TASK.md, and BACKLOG.md before acting; scan docs/lessons/INDEX.md before non-trivial work."
 
+# First-run setup: doctor's required checks only (git, bash, Python 3 through
+# find-python.sh). No network command runs here. One line names the first
+# problem; nothing prints when all work. Guarded: this hook must exit 0.
+setup_block() {
+  local out="" rc=0 first=""
+  [[ -f scripts/doctor.sh ]] || return 0
+  out="$(bash scripts/doctor.sh --required --quiet 2>/dev/null)" || rc=$?
+  if (( rc != 0 )); then
+    first="${out%%$'\n'*}"
+    first="${first%% - install:*}"
+    echo "[session-context] Setup: ${first:-a required tool is missing}; run bash scripts/doctor.sh"
+  fi
+  return 0
+}
+setup_block || true
+
 # Git state: commit bodies carry the why (kernel rule 6), so the last commits
 # and the working-tree status are the cheapest memory to load. Capped so a
 # large untracked tree cannot flood the context. Outside a git repository

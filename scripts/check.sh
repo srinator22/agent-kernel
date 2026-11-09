@@ -275,6 +275,7 @@ if [[ ! -f .start-done ]]; then
     docs/preferences/README.md docs/procedures/preferences.md
     tests/template/test_feedback.sh tests/template/test_preferences.sh
     tests/template/test_find_python.sh tests/template/test_taste_project.sh
+    scripts/doctor.sh tests/template/test_doctor.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"

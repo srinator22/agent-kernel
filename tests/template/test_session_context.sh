@@ -54,7 +54,7 @@ t_cleanup
 # Preference registers: one summary line, a warning while the feedback hook is
 # unwired, and exit 0 whatever the registers hold or whether Python exists.
 make_fixture
-cp_script session-context.sh
+cp_script session-context.sh doctor.sh find-python.sh
 git add scripts && git commit -q -m "chore: scripts"
 run bash scripts/session-context.sh
 assert_rc "no registers: exits 0" 0
@@ -120,6 +120,8 @@ fi
 run env PATH="$NOPY_PATH" "$BASH" scripts/session-context.sh
 assert_rc "registers with no python on PATH: exits 0" 0
 assert_contains "no python: the summary still prints" "[session-context] Preferences: film, ui (4 rules, 3 Review)"
+assert_contains "no python: the Setup line names python and doctor" "[session-context] Setup: python (required): not found; run bash scripts/doctor.sh"
+assert_eq "no python: exactly one Setup line" "1" "$(printf '%s\n' "$OUT" | grep -c '^\[session-context\] Setup:')"
 case "$NOPY_ROOT" in */template-selftest.nopy.*) rm -rf "$NOPY_ROOT" ;; esac
 # The unwired hook warning.
 echo '#!/usr/bin/env bash' > scripts/feedback-log.sh
@@ -321,5 +323,26 @@ git commit -q -am "docs: rules index"
 run bash scripts/session-context.sh
 assert_rc "a rules index change exits 0" 0
 assert_contains "a rules index change prints the line at count 0" "Template release pending: 0 synced-set commits since template-v0.2.0. Cut one with scripts/template-release.sh. The kernel or rules index changed."
+
+t_cleanup
+
+# Setup line (doctor's required checks only): PATH shims in front of the real
+# PATH. No gh, winget, brew or curl call may happen at session start.
+make_fixture
+cp_script session-context.sh doctor.sh find-python.sh
+git add scripts && git commit -q -m "chore: scripts"
+SHIMS="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.shim.XXXXXX")"
+for t in gh winget brew curl; do
+  printf '#!%s\nprintf "%%s\\n" "%s $*" >> "%s/log"\nexit 1\n' "$BASH" "$t" "$SHIMS" > "$SHIMS/$t"
+  chmod +x "$SHIMS/$t"
+done
+printf '#!%s\nexit 0\n' "$BASH" > "$SHIMS/python3"; chmod +x "$SHIMS/python3"
+: > "$SHIMS/log"
+run env PATH="$SHIMS:$PATH" bash scripts/session-context.sh
+assert_rc "all required tools work: exits 0" 0
+assert_not_contains "all required tools work: no Setup line" "Setup:"
+assert_eq "session start calls no gh, winget, brew or curl" "" "$(cat "$SHIMS/log")"
+case "$SHIMS" in */template-selftest.shim.*) rm -rf "$SHIMS" ;; esac
+t_cleanup
 
 t_finish
