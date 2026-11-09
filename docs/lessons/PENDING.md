@@ -95,3 +95,44 @@ Entry format (all four fields required):
 - what was added: none.
 - retire-when: tasklint reads a criterion's continuation lines or reports
   them as such.
+
+### Scripts created on Windows lose the executable bit
+
+- what happened: scripts/doctor.sh, tests/template/test_doctor.sh and
+  tests/template/test_taste_project.sh were committed as 100644 from a
+  Windows worktree (2026-11-09, v0.5.2); Git Bash runs them anyway, so every
+  local test passed and only the Linux CI check failed ("scripts lost the
+  executable bit").
+- what check should have caught it: a pre-commit or check.sh quick-lane
+  check that every staged or tracked *.sh under scripts/ and tests/template/
+  is 100755 in the index, so the miss shows on Windows before the push.
+- what was added: none; the PR CI caught it.
+- retire-when: a local check on index modes runs before commit.
+
+### Windows path behaviour shows only on the Windows runner
+
+- what happened: dream.py matched sessions by path spelling; the runner
+  records cwds as C:/Users/RUNNER~1/... with a long rest while the code
+  resolved roots to the long form. Linux CI and this computer (a short user
+  folder name) were green; main's Windows job failed after merge and two
+  fix rounds were needed (2026-11-09, PR 6 and PR 8).
+- what check should have caught it: running the selftest-windows job on the
+  branch (gh workflow run ci.yml --ref <branch>) before merging any change
+  to path matching, transcript discovery or Windows-specific scripts.
+- what was added: the mixed-spelling test cases in test_dream.sh, which
+  reproduce the runner's shape on any Windows machine with 8.3 names.
+- retire-when: the Windows job runs on every pull request, or ship.md names
+  the dispatch step for such changes.
+
+### MSYS_NO_PATHCONV=1 breaks git -C for the native git.exe
+
+- what happened: an advisor shell exported MSYS_NO_PATHCONV=1 (to stop Git
+  Bash rewriting "ref:path" arguments) and then ran a template script; the
+  script's `git -C /c/dev/...` reached git.exe unconverted and failed with
+  "cannot read the git range" (2026-11-09).
+- what check should have caught it: none, this note is the guard: set
+  MSYS_NO_PATHCONV only on the single git command that needs it, never
+  export it into a shell that runs scripts.
+- what was added: none.
+- retire-when: the scripts stop relying on MSYS path conversion, or a
+  session-start warning flags the variable.
