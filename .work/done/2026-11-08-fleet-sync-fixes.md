@@ -49,7 +49,7 @@ keeps its own), so every selftest run grows the system temp dir.
 - [verified] check.sh runs its template self-test only when "$ROOT/.start-done" is absent -> scripts/check.sh
 - [verified] A folder ruff.toml replaces a stricter root config for the files under it, and its [format] exclude keeps ruff format off them -> scratch run with ruff 0.16.10, 2026-11-08: root select ALL and line-length 60; the nested file reported only F401; format --diff listed only src/a.py (A10 now re-proves this on every template run)
 - [verified] GitHub ubuntu-latest (24.04) ships pipx 1.16.7 and neither uv nor ruff -> actions/runner-images images/ubuntu/Ubuntu2404-Readme.md, read 2026-11-08
-- [verified] Of the eight projects that record direct-to-main, six write the token followed by a comma; one project ("direct-to-main on master") and another project ("direct-to-main as an explicit ...") do not, and will read as gated (the safe side) until reworded at their next sync -> survey of eleven project AGENTS.md "- Git workflow:" lines, 2026-11-08
+- [verified] Of the eight projects that record direct-to-main, six write the token followed by a comma; two ("direct-to-main on master", "direct-to-main as an explicit ...") do not, and will read as gated (the safe side) until reworded at their next sync -> survey of eleven project AGENTS.md "- Git workflow:" lines, 2026-11-08
 - [verified] .work/ is outside the synced set, so the live TASK.md inside template-v0.3.0 reached no project -> scripts/template-sync.sh CORE_DIRS and CORE_FILES
 - [verified] Under ruff's default rules (E4, E7, E9, F, target py311) the template has 49 findings (codes across all 49: E702, E731, E741, F841): 45 in docs/library, 1 in docs/profiles (E731), 3 in scripts/dream.py (all E741), none needing a behavior change -> ruff 0.16.10 runs, 2026-11-08
 - [verified] scripts/dream.py is the only tracked Python outside docs/library and docs/profiles, and no released tag carries it yet, so moving it hurts no project -> git ls-files '*.py'; git tag --contains for its first commit is empty
@@ -120,7 +120,7 @@ Existing damage:
 PASS - round 3 (reviewer, 2026-11-08): the round-2 blocker (self-tests reaching a real ruff runner) is fixed by A15, and notes 2 to 9 are taken in; no new blocker. Non-blocking: (1) the taste-profile ordering assumption overstated the agreement, since that session already edits dream.py; reworded to the agreed diff limit, with an N4 pitfall; (2) optional: lib.sh exports a default fake TEMPLATE_RUFF, taken. Rounds 1 and 2 were FAIL (see Progress log).
 
 ## Progress log
-- 2026-11-08 Branch task/fleet-sync-fixes from task/dreaming 274ffed; causes located for all six (see Goal). Survey of the project branches: 11 of 12 quarantined the two tests, 9 wrote their own selftest reader, and a third project and one project exclude docs/profiles from ruff.
+- 2026-11-08 Branch task/fleet-sync-fixes from task/dreaming 274ffed; causes located for all six (see Goal). Survey of the project branches: 11 of 12 quarantined the two tests, 9 wrote their own selftest reader, and two exclude docs/profiles from ruff.
 - 2026-11-08 Repro of defect 3 in Git Bash: `set -o pipefail; printf '%s\n' "$big" | head -20` gives rc 0 at 2000 lines (60892 bytes) and rc 141 at 4000 lines (122892 bytes).
 - 2026-11-08 Plan review round 1: FAIL, 4 blocking findings. Revised:
   - dream.py goes under a folder ruff.toml, and a coverage check is added;

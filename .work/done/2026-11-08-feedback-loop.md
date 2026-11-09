@@ -28,13 +28,13 @@ keep it learned. There are five parts:
 ## Assumptions
 - [confirmed] the owner asked for this, general across all task types, in the template first and then in three started projects ("Make note taking and my feedback more relevant ... it should log the situation somewhere so dreams have a better chance to change the project repo for the better", "apply it in new project and then in all 3 project repos", "generalize it ... applicable across all types of tasks", 2026-11-08)
 - [confirmed] the owner approved the four ideas behind this design (repeat detection, baselines, draft review, registers in every project): "I like those correction- apply it", 2026-11-08
-- [confirmed] approval path for register rows (kernel rule 9). Same-turn recording is allowed only for an explicit owner statement: the row quotes the owner's words with the date, and the reply shows the row so the owner can veto it. Everything inferred goes through the dream's numbered approval. The owner asked for automatic recording -> C:/dev/a started project/docs/FILM_TASTE.md:98 and "make note taking and my feedback more relevant", 2026-11-08
+- [confirmed] approval path for register rows (kernel rule 9). Same-turn recording is allowed only for an explicit owner statement: the row quotes the owner's words with the date, and the reply shows the row so the owner can veto it. Everything inferred goes through the dream's numbered approval. The owner asked for automatic recording -> a started project's film taste file and "make note taking and my feedback more relevant", 2026-11-08
 - [verified] a UserPromptSubmit hook gets JSON on stdin (prompt, session_id, cwd, transcript_path), and its stdout is added to the model's context; a per-hook "timeout" key bounds it -> the Claude Code hooks reference
 - [verified] dream.py has is_human, MACHINE_PREFIXES, is_correction, MSG_LIMIT, main_worktree and offset state committed by done from state.next.json -> scripts/dream/dream.py:55-71, 173-253, 803-879
 - [verified] dream.sh runs python -I, so a sibling import needs taste.py's sys.path pattern -> scripts/dream.sh:39, scripts/dream/taste.py:55-56
-- [verified] a started project's docs/FILM_TASTE.md is a working register whose real cell formats the check must accept (month-only dates, "Review (note)", bare test file names, commands with arguments, several checks per cell) -> C:/dev/a started project/docs/FILM_TASTE.md:14-98
+- [verified] a started project's film taste file is a working register whose real cell formats the check must accept (month-only dates, "Review (note)", bare test file names, commands with arguments, several checks per cell) -> that project's film taste file
 - [verified] the digest drops many signals at its 40 KB cap (294, 179 and 701 in the three 2026-11-08 project dreams) -> the three digests
-- [verified] started projects customise .claude/settings.json, so a sync reports it as CONFLICT and the hook entry needs a hand merge -> C:/dev/a started project/.claude/settings.json:28-54, scripts/template-sync.sh:83
+- [verified] started projects customise .claude/settings.json, so a sync reports it as CONFLICT and the hook entry needs a hand merge -> a started project's .claude/settings.json, scripts/template-sync.sh:83
 
 ## Design
 Capture works only in Claude Code sessions whose settings wire the hook. For Codex, the fallback is the prose step in docs/procedures/preferences.md (A13).
@@ -137,7 +137,7 @@ The dreamer definitions (.claude/agents/dreamer.md and .codex/agents/dreamer.tom
 PASS. Reviewer plan review, round 2, 2026-11-08: all nine round-1 blocking findings are resolved, each with a criterion. Applied after the verdict:
 - the non-blocking notes: rotation only at done (A4, A9), the Goal scope wording, the deferral context line (A3), and no Python in A12;
 - valid A6 fixtures carry .start-done;
-- one project's film taste file rows that fall outside the grammar (a "::name" continuation, a Python expression, a flag, "Tested ...") are rewritten in the a started project rollout.
+- That project's film taste rows that fall outside the grammar (a "::name" continuation, a Python expression, a flag, "Tested ...") are rewritten in that project's rollout.
 
 Round 1: FAIL with nine blocking findings: B1 latency, B2 classifier order, B3 digest bounds, B4 offsets, B5 approval path, B6 public-template guard, B7 settings conflict, B8 real cell formats, B9 graph.
 
