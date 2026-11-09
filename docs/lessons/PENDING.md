@@ -12,19 +12,25 @@ Entry format (all four fields required):
 - what was added:
 - retire-when:
 
-### Windows-created scripts lose the executable bit; Windows-green hides it
+### Two ways a script loses its executable bit on Windows
 
-- what happened: a self-test fixture stub (CI run 40819768925) and, on
-  2026-11-09, three tracked scripts (scripts/doctor.sh and two test files)
-  were committed as 100644 from a Windows worktree; Git Bash runs them
-  anyway, so every local check passed and only Linux CI failed.
-- what check should have caught it: an index-mode check in check.sh's quick
-  lane that every tracked *.sh under scripts/ and tests/template/ is 100755
+- what happened: (a) a self-test fixture wrote a stub script at run time
+  without the bit; Git Bash runs it anyway, so the Windows gate passed and
+  Linux CI failed (run 40819768925). (b) on 2026-11-09 three tracked
+  scripts (scripts/doctor.sh and two test files) were committed as 100644
+  from a Windows worktree; every local test passed, and CI failed at
+  check.sh step 5g ("scripts lost the executable bit"), which reads the git
+  index and would fail on Windows too, but runs after the self-test step,
+  so slow local runs never reached it.
+- what check should have caught it: (a) lib.sh t_check_exec on every
+  fixture (PR 12; it can only run where chmod sets the bit, so Linux CI);
+  (b) step 5g extended to tests/template/ and run before the self-test step
   (BACKLOG row).
 - what was added: fixtures run chmod +x on the scripts they write; the CI
   runs that failed are the regression evidence.
-- retire-when: the index-mode check and the self-test executable-bit
-  assertion both run before commit.
+- retire-when: step 5g covers tests/template/ and runs before the
+  self-tests, and t_check_exec runs in CI.
+
 ### Lookdev data points from the sample scene (one project, to confirm)
 
 - what happened: a 12 cm product under area lights of 120, 40 and 60 W

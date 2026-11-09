@@ -106,6 +106,6 @@ Entry format (all five fields required):
 - what check should have caught it: a count of running background tasks
   before each wave against a cap (BACKLOG row for a session-start warning).
 - what was added: docs/rules/orchestration.md caps background tasks at 8;
-  "as parallel as possible" means waves of the cap.
+  a request for maximum parallel speed means waves of the cap.
 - retire-when: the harness enforces a concurrency limit itself.
 - applies to: core
