@@ -24,7 +24,8 @@
 # present (CORE_SKILLS, at most 8) + 2 project skills + profile skill sets
 # (the number of skills listed on the "Skills:" or "- Skills:" line of each
 # docs/profiles/*/PROFILE.md, comma-separated; when AGENTS.md has a
-# "- Profiles:" line naming profiles, only those count), so a core skill the
+# "- Profiles:" line naming profiles, only those count; with AGENTS.md but no
+# such line, only software counts), so a core skill the
 # template adds never takes a project's slot (ADR 0012);
 # every .claude/agents/<name>.md has a .codex/agents/<name>.toml or a line in
 # docs/rules/models.md naming it with "no Codex counterpart"; the agent and
@@ -386,8 +387,8 @@ library_inventory_errors() {
   return 0
 }
 
-# Total profile skills over the adopted profiles (all profiles when AGENTS.md
-# names none).
+# Total profile skills over the adopted profiles (only software when AGENTS.md
+# exists but names none; all profiles when there is no AGENTS.md).
 profile_skill_sets() {
   local adopted f name total=0 n
   adopted="$(adopted_profiles)"
@@ -395,6 +396,12 @@ profile_skill_sets() {
     [[ -f "$f" ]] || continue
     name="$(basename "$(dirname "$f")")"
     if [[ -n "$adopted" ]] && ! printf '%s\n' "$adopted" | grep -qx -- "$name"; then
+      continue
+    fi
+    # Template mode (AGENTS.md present, no usable Profiles line): software is
+    # the one profile every project adopts, so only it counts. Without
+    # AGENTS.md nothing says which profiles apply, so all count.
+    if [[ -z "$adopted" && -f AGENTS.md && "$name" != software ]]; then
       continue
     fi
     n="$(profile_skill_count "$f")"
