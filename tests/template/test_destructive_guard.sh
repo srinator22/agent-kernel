@@ -607,7 +607,7 @@ if (( BASH_VERSINFO[0] >= 4 )); then
   assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
   assert_contains "the non-ASCII home block names the guard" "$PREFIX"
 else
-  t_ok "a non-ASCII home spelled in another case is blocked: n/a on bash 3.2 (folds ASCII only by design)"
+  t_na "a non-ASCII home spelled in another case: bash 3.2 folds ASCII only by design"
 fi
 
 # Under a Turkic locale bash 4+ ${x,,} turns ASCII I into dotless U+0131, so
@@ -621,7 +621,35 @@ if [[ -n "$TR_LOC" ]]; then
     LC_ALL="$TR_LOC" blocked "$shell" "taskkill /FI IMAGENAME under a Turkic locale is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
   done
 else
-  t_ok "Turkic locale case folding: n/a (no tr_TR UTF-8 locale installed)"
+  t_na "Turkic locale case folding: no tr_TR UTF-8 locale installed; the simulated Turkic fold below covers it"
+fi
+
+# The same without the locale, so it runs on every bash 4+ (CI included): a copy
+# of the guard whose fold turns any ASCII I it still receives into another
+# character, as towlower does under tr_TR. The A-Z table runs before the fold,
+# so no uppercase I reaches it and these still block; with the fold alone
+# (${1,,} first) "Remove-Item" would become "remove-#tem" and pass.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  TRFIX="$(mktemp -d)"
+  tr_src="$(cat "$GUARD")"
+  tr_old='eval '\''lc_fold() { LC="${LC,,}"; }'\'''
+  tr_new='eval '\''lc_fold() { LC="${LC//I/#}"; LC="${LC,,}"; }'\'''
+  if [[ "$tr_src" == *"$tr_old"* ]]; then
+    printf '%s\n' "${tr_src/"$tr_old"/"$tr_new"}" > "$TRFIX/guard.sh"
+    GUARD_REAL="$GUARD"; GUARD="$TRFIX/guard.sh"
+    for shell in Bash PowerShell; do
+      blocked "$shell" "Remove-Item under a simulated Turkic fold is blocked" 'pwsh -Command \"Remove-Item -Recurse -Force ~\"'
+      blocked "$shell" "taskkill /IM under a simulated Turkic fold is blocked" 'taskkill /IM node.exe /F'
+      blocked "$shell" "RMDIR /S /Q of home under a simulated Turkic fold is blocked" 'RMDIR /S /Q C:\\Users\\tester'
+      blocked "$shell" "taskkill /FI IMAGENAME under a simulated Turkic fold is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+    done
+    GUARD="$GUARD_REAL"
+  else
+    t_bad "the simulated Turkic fold could not find lc_fold in the guard to replace"
+  fi
+  rm -rf "$TRFIX"
+else
+  t_na "simulated Turkic fold: bash 3.2 has no locale fold"
 fi
 
 # An unexpected bash error inside the guard must block, not exit 1 (which the

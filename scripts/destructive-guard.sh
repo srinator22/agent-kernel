@@ -76,7 +76,9 @@
 # Exit: 0 allow; 2 block, with the reason on stderr for the agent to read.
 # Written for bash 3.2 (CI runs bash 5); any unexpected error blocks: an EXIT
 # trap turns an error that ends the shell into a block, and main is followed by
-# exit 3 so an error bash recovers from cannot fall through to an allow.
+# exit 3 so an error that discards the running command cannot fall through to
+# an allow (an error that only fails one command, such as one inside (( )),
+# still carries on, as any bash script does).
 # ASCII letters fold by table on every bash (locale-proof, a Turkic locale
 # included); bash 4+ also folds the other letters the locale knows. Code
 # that must parse on 3.2 uses no ${x,,} outside eval, no associative arrays, no
@@ -660,8 +662,9 @@ check_text() {
       taskkill | stop-process | spps | kill | pkill | killall) check_kill "$name" ;;
     esac
   done <<< "$in"
-  # A here-string that failed to open (bash before 5.1 writes it to a temp
-  # file) skips the loop and bash carries on; reading nothing is a failure.
+  # A here-string that failed to open skips the loop and bash carries on (bash
+  # writes it to a temp file before 5.1, and for long text on later versions);
+  # reading nothing is a failure.
   (( ran )) || exit 3
 }
 
