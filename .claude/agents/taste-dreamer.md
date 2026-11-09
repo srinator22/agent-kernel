@@ -28,8 +28,8 @@ A register rule is a durable preference about how the owner wants things done
 in this project, one that would change what a future session does. Areas are
 free names, one register file each (`communication`, `writing`, `design`,
 `code`, `working`, or the project's own such as `film`); reuse an existing
-area, and name a new one only when three or more rules would land there, in
-lowercase letters, digits and hyphens.
+area, and name a new one only when three or more rules would land there:
+a lowercase letter, then up to 23 lowercase letters, digits and hyphens.
 Not a rule: a task instruction, a one-off reaction, a part or tool choice
 that belongs in a decision record, or anything a repository's own rules
 already enforce.
@@ -57,8 +57,9 @@ assistant ("Lead with the result in one plain sentence"); at most 160
 characters; no quotes; plain hyphens only, no em or en dashes.
 
 Return exactly this. Each proposal's first line must match one of the three
-forms, because the apply script parses it (an area is lowercase letters,
-digits and hyphens; an ID is a register ID such as COMMUNICATION-004):
+forms, because the apply script parses it (an area is a lowercase letter
+then up to 23 lowercase letters, digits and hyphens; an ID is a register ID
+such as COMMUNICATION-004):
 
     # Taste report <date>
     Read: <n> signals; <files read>

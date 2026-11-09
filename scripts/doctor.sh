@@ -39,17 +39,22 @@ if (( LIST )); then
   exit 0
 fi
 
-ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
-cd "$ROOT" || exit 2
+# No subshell for the root: session start runs this, and every process start
+# counts there. "bash doctor.sh" from inside scripts/ has no slash in its path.
+SELF="${BASH_SOURCE[0]}"
+case "$SELF" in */*) DIR="${SELF%/*}" ;; *) DIR="." ;; esac
+cd "$DIR/.." || exit 2
+ROOT="$PWD"
 
-case "$(uname -s 2>/dev/null)" in
-  MINGW*|MSYS*|CYGWIN*) OS=windows ;;
-  Darwin*) OS=mac ;;
-  *) OS=linux ;;
-esac
-
-# install_cmd TOOL: the install command for the detected system.
+# install_cmd TOOL: the install command for the detected system. uname runs
+# only here, so a run with nothing missing never starts it.
 install_cmd() {
+  local OS
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) OS=windows ;;
+    Darwin*) OS=mac ;;
+    *) OS=linux ;;
+  esac
   case "$1:$OS" in
     git:windows) echo "winget install --id Git.Git --exact" ;;
     git:mac) echo "brew install git" ;;
@@ -128,7 +133,9 @@ fi
 # shellcheck source=find-python.sh
 PY=""
 . "$ROOT/scripts/find-python.sh"
-if [[ -n "$PY" ]]; then
+if [[ -n "$PY" ]] && (( QUIET )); then
+  good "python - $PY" # --quiet prints no ok lines, so skip a second interpreter start
+elif [[ -n "$PY" ]]; then
   pyv="$("$PY" --version 2>&1)"; pyv="${pyv%%$'\n'*}"
   good "python - $PY, $pyv"
 else

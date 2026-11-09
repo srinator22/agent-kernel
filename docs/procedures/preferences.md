@@ -45,8 +45,10 @@ taste pass and port both use. A new row goes after the last row of the file's
 first rules table; a file with only baselines gets a rules table above them; a
 new file gets a title, a purpose line and the rules header. The ID prefix is the
 one most rows in the file use, else the area name in capitals without
-punctuation. Numbers have three digits, run above the file's highest number and
-are never reused. A pipe in a cell is escaped and a newline is refused. A rule
+punctuation. Numbers have three digits and run above the file's highest number;
+the taste pass also keeps above every number it has written or removed on this
+computer, while port and another computer start from the file alone. A pipe in
+a cell is escaped and a newline is refused. A rule
 whose text (case and spacing aside) already exists in any register is not added
 again. Revising a rule appends the date and the owner's words to its Source and
 keeps its Check. Removing or revising a row guarded by a named check prints a

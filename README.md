@@ -342,4 +342,4 @@ MIT, see LICENSE. A project built from this template may relicense itself.
 - Dreaming follows Anthropic's agent-memory research, [The components of agent memory](https://www.anthropic.com/engineering/components-of-agent-memory) (ADR 0009).
 - Declared budgets come from Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) and from Claude Code's [dynamic workflows](https://code.claude.com/docs/en/workflows) (ADR 0002).
 - Built for [Claude Code](https://code.claude.com/docs/en/overview) and [Codex](https://github.com/openai/codex).
-- `check.sh` runs [git-cliff](https://git-cliff.org), [gitleaks](https://github.com/gitleaks/gitleaks), [ruff](https://docs.astral.sh/ruff/), [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com).
+- The checks and helper scripts use [git-cliff](https://git-cliff.org), [gitleaks](https://github.com/gitleaks/gitleaks), [ruff](https://docs.astral.sh/ruff/), [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com).

@@ -13,8 +13,8 @@ first rules table (a rules table is added before any baselines table; a new
 file gets a title, a purpose line and the rules header). A pipe in a cell is
 written with an escaped pipe, and a newline is refused. The ID prefix is the one most rows in
 the file use, else the area upper-cased without punctuation; numbers have 3
-digits, are above the file's highest number and the caller's floor, and a
-removed number is never reused. An add whose folded text (case, whitespace)
+digits, are above the file's highest number and the caller's floor (the floor
+is what keeps a removed top number from coming back). An add whose folded text (case, whitespace)
 exists in any register file, or earlier in the call, is skipped. A revise
 replaces the Rule and appends "; date: "words"" to Source. Line endings are
 kept, template mode refuses, and the result must pass the register check.
@@ -284,7 +284,8 @@ def write_rows(root, area, adds, revises, removes, floor, warn=None):
     removes: [{"id": "FILM-001"}]
     floor:   int; new numbers are above it and above the file's highest number
              for the prefix (the taste pass passes its ledger's high-water mark,
-             port passes 0), so a removed number is never reused.
+             port passes 0); a removed top number comes back unless the
+             floor covers it.
     warn:    callable(str) for warnings; default prints "warning: ..." on stderr.
 
     Returns {"added": [ids], "skipped": [{"rule", "existing"}], "revised": [ids],

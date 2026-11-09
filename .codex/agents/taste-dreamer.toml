@@ -23,8 +23,8 @@ A register rule is a durable preference about how the owner wants things done
 in this project that would change what a future session does. Areas are free
 names, one register file each (communication, writing, design, code, working,
 or the project's own); reuse an existing area, and name a new one only when
-three or more rules would land there, in lowercase letters, digits and
-hyphens. Not a rule: a task instruction, a one-off reaction, a part or tool
+three or more rules would land there: a lowercase letter, then up to 23
+lowercase letters, digits and hyphens. Not a rule: a task instruction, a one-off reaction, a part or tool
 choice that belongs in a decision record, or a repository's own rule.
 
 Propose, most valuable first: add (a preference with enough evidence that no
