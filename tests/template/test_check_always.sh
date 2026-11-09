@@ -408,8 +408,10 @@ if [[ -f "$T_ROOT/.start-done" ]]; then
   t_na "a started project passes check.sh with tests/template kept: this repository is a started project (.start-done); covered by its own ./scripts/check.sh run"
 else
   # Both branches of the real-tree parity case are asserted: here, on the
-  # template tree, it runs; in the started copy below it prints n/a.
-  run bash "$T_ROOT/tests/template/test_blueprint_parity.sh"
+  # template tree, it runs; in the started copy below it prints n/a. The
+  # executable-bit check is off for this run: where chmod cannot set the bit it
+  # prints its own n/a line, which says nothing about the parity case.
+  run env T_EXEC_CHECK= bash "$T_ROOT/tests/template/test_blueprint_parity.sh"
   assert_contains "on the template tree the real parity case runs" "ok   the real blueprint and required list agree"
   assert_not_contains "on the template tree no case is n/a" "n/a  "
   make_fixture
