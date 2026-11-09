@@ -16,6 +16,22 @@ fi
 
 echo "[session-context] Kernel rule 7: read AGENTS.md, .work/TASK.md, and BACKLOG.md before acting; scan docs/lessons/INDEX.md before non-trivial work."
 
+# First-run setup: doctor's required checks only (git, bash, Python 3 through
+# find-python.sh). No network command runs here. One line names the first
+# problem; nothing prints when all work. Guarded: this hook must exit 0.
+setup_block() {
+  local out="" rc=0 first=""
+  [[ -f scripts/doctor.sh ]] || return 0
+  out="$(bash scripts/doctor.sh --required --quiet 2>/dev/null)" || rc=$?
+  if (( rc != 0 )); then
+    first="${out%%$'\n'*}"
+    first="${first%% - install:*}"
+    echo "[session-context] Setup: ${first:-a required tool is missing}; run bash scripts/doctor.sh"
+  fi
+  return 0
+}
+setup_block || true
+
 # Git state: commit bodies carry the why (kernel rule 6), so the last commits
 # and the working-tree status are the cheapest memory to load. Capped so a
 # large untracked tree cannot flood the context. Outside a git repository
@@ -44,6 +60,55 @@ if [[ -f .work/TASK.md ]] && ! grep -q '{{title}}' .work/TASK.md; then
   cat .work/TASK.md
 fi
 
+# Prints each register's rules (ID and Rule) grouped by area, so a session
+# starts knowing them. POSIX awk only (mawk and BSD awk too): CR stripped, an
+# escaped pipe kept as a pipe, fenced blocks and baselines tables skipped.
+# Bytes are counted under LC_ALL=C and the printed lines stay within 4000
+# bytes; past that one line names the files that hold the rest.
+preference_rules() {
+  LC_ALL=C awk -v cap=4000 '
+    function flush() {
+      if (cur != "") { print line; used += length(line) + 1 }
+      cur = ""; line = ""
+    }
+    function note(p) { if (!(p in listed)) { listed[p] = 1; rest = rest (rest == "" ? "" : ", ") p } }
+    FNR == 1 {
+      f = FILENAME; sub(/^.*\//, "", f); sub(/\.md$/, "", f)
+      fence = 0; t = 0; skip = 0
+    }
+    { gsub(/\r/, "") }
+    /^[ \t]*(```|~~~)/ { fence = !fence; t = 0; next }
+    fence { next }
+    !/^[ \t]*\|/ { t = 0; next }
+    {
+      row = $0
+      gsub(/\\[|]/, "\001", row)
+      n = split(row, c, "|")
+      for (i = 1; i <= n; i++) { gsub(/\001/, "|", c[i]); gsub(/^[ \t]+|[ \t]+$/, "", c[i]) }
+    }
+    c[2] == "ID" && c[3] == "Rule" { t = 1; skip = 1; next }
+    c[2] == "Kind" { t = 0; next }
+    t && f != "README" {
+      if (skip) { skip = 0; next }
+      if (c[2] == "" || c[3] == "" || c[2] ~ /^:?-+:?$/) next
+      path = "docs/preferences/" f ".md"
+      if (over) { note(path); next }
+      if (f != cur) { flush(); cur = f; line = "[session-context] Preferences (" f "):"; first = 1 }
+      add = " " c[2] " " c[3]
+      if (used + length(line) + length(add) + 1 > cap) {
+        over = 1
+        if (first) { cur = ""; line = "" } else flush()
+        note(path); next
+      }
+      line = line add; first = 0
+    }
+    END {
+      if (!over) flush()
+      if (rest != "") print "[session-context] Preferences: more rules in " rest "; not printed here, read them there."
+    }
+  ' docs/preferences/*.md 2>/dev/null || true
+}
+
 # Owner preferences (docs/procedures/preferences.md): one line with the
 # register areas, the rule count and how many rules are still Review, counted
 # with bash and awk so it works without Python. Prints nothing without
@@ -66,7 +131,8 @@ preferences_block() {
       /^[ \t]*\|[ \t]*ID[ \t]*\|[ \t]*Rule[ \t]*\|/ { t = 1; skip = 1; next }
       t && /^[ \t]*\|/ {
         if (skip) { skip = 0; next }
-        n = split($0, c, "|")
+        row = $0; gsub(/\\[|]/, "\001", row)
+        n = split(row, c, "|")
         chk = c[5]; gsub(/\r/, "", chk); gsub(/^[ \t]+/, "", chk)
         rules++
         if (chk ~ /^Review/) review++
@@ -79,6 +145,7 @@ preferences_block() {
       rules="${BASH_REMATCH[1]}"; review="${BASH_REMATCH[2]}"
     fi
     echo "[session-context] Preferences: $areas ($rules rules, $review Review)"
+    preference_rules
   fi
   if [[ -f scripts/feedback-log.sh ]]; then
     if [[ -f .claude/settings.json ]]; then settings="$(cat .claude/settings.json 2>/dev/null || true)"; fi
@@ -95,20 +162,8 @@ preferences_block || true
 # maintainer when synced-set commits have landed since the newest tag.
 # Opt out with TEMPLATE_UPDATE_CHECK=0. Every command is guarded: this hook
 # must print its other lines and exit 0 whatever happens here.
-# Prints the AGENTS.md sections that sync to projects (the kernel block and
-# the rules index) from stdin.
-agents_synced_sections() {
-  awk '
-    /<!-- KERNEL:BEGIN -->/ {k=1}
-    k {print}
-    /<!-- KERNEL:END -->/ {k=0}
-    /^## Rules index/ {r=1; print; next}
-    /^## / {r=0}
-    r {print}
-  ' || true
-}
 template_update_block() {
-  local line rest url ref last tag cache dir tmp lowest newest n paths p
+  local line rest url ref last tag cache dir tmp lowest newest n
   if [[ -f .start-done ]]; then
     line="$(grep -m1 -E '^- Template:' AGENTS.md 2>/dev/null | tr -d '\r' || true)"
     [[ -n "$line" ]] || return 0
@@ -150,28 +205,23 @@ template_update_block() {
   else
     newest="$(git tag -l 'template-v*' 2>/dev/null | sort -V | tail -n 1 || true)"
     [[ -n "$newest" ]] || return 0
-    # Only core and catalog paths count: lesson data and AGENTS.md Project
-    # decisions change in every project and are not a release trigger.
-    paths="$(bash scripts/template-sync.sh --list-set 2>/dev/null | awk '$1 == "core" || $1 == "catalog" {print $2}' || true)"
+    # One definition of "synced-set commit": template-sync.sh --synced-commits
+    # (core, catalog, lessons header and AGENTS.md kernel or rules index). The
+    # count and the kernel sentence come from its lines; a failure prints
+    # nothing because session start must never fail.
+    local lines NL
+    NL="
+"
+    if lines="$(bash scripts/template-sync.sh --synced-commits "$newest..HEAD" 2>/dev/null)"; then :; else lines=""; fi
     n=0
-    if [[ -n "$paths" ]]; then
-      local args=()
-      while IFS= read -r p; do
-        [[ -n "$p" ]] && args+=("$p")
-      done <<< "$paths"
-      n="$(git rev-list --count "$newest..HEAD" -- "${args[@]}" 2>/dev/null || true)"
+    if [[ -n "$lines" ]]; then
+      n="$(printf '%s\n' "$lines" | grep -c . || true)"
       [[ "$n" =~ ^[0-9]+$ ]] || n=0
     fi
-    # AGENTS.md syncs only its kernel block and rules index; compare those.
-    local differs=0 old_md new_md
-    old_md="$(git show "$newest:AGENTS.md" 2>/dev/null | tr -d '\r' || true)"
-    new_md="$(git show HEAD:AGENTS.md 2>/dev/null | tr -d '\r' || true)"
-    if [[ -n "$old_md" && -n "$new_md" ]]; then
-      if [[ "$(printf '%s\n' "$old_md" | agents_synced_sections)" != "$(printf '%s\n' "$new_md" | agents_synced_sections)" ]]; then
-        differs=1
-      fi
-    fi
-    if (( n > 0 || differs == 1 )); then
+    local differs=0
+    # A bash match, not a pipe into grep -q: an early-exit reader under pipefail.
+    case "$NL$lines$NL" in *" agents$NL"*) differs=1 ;; esac
+    if (( n > 0 )); then
       rest="[session-context] Template release pending: $n synced-set commits since $newest. Cut one with scripts/template-release.sh."
       if (( differs == 1 )); then rest="$rest The kernel or rules index changed."; fi
       echo "$rest"

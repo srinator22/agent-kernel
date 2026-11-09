@@ -16,9 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh
 make_fixture
 nleak=0
 cd "$T_ROOT" || exit 1
-PY=""
-command -v python3 >/dev/null 2>&1 && PY=python3
-[[ -n "$PY" ]] || { command -v python >/dev/null 2>&1 && PY=python; } || true
+. "$T_ROOT/scripts/find-python.sh"
 
 shopt -s nullglob
 dirs=(docs/profiles/*/tools/tests docs/library/tools/tests docs/library/hooks/tests)

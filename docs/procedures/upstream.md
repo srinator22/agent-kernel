@@ -59,12 +59,20 @@ last), so check.sh itself stays the template's and syncs cleanly.
    `--tag` creates the annotated tag on a clean main equal to origin/main and
    prints the push command; pushing the tag is an owner approval (kernel
    rule 15). At session start the template prints how many synced-set commits
-   wait since the newest tag.
+   wait since the newest tag, counted by the same --synced-commits definition
+   as fleet.sh (below).
 4. `scripts/fleet.sh` lists the local projects named in `fleet.local.list`
    (one absolute path per line, gitignored because project paths are
    private) with their Template line, last sync, synced-set commits behind
    the newest tag, uncommitted files, branch, waiting upstream lessons and a
-   status: OK, BEHIND, NO-BASE, BAD-LINE or MISSING. It is read-only.
+   status: OK, BEHIND, NO-BASE, BAD-LINE or MISSING. It is read-only. A
+   commit counts as synced-set when it touches a core or catalog path, changes
+   the first 12 lines of a lessons file, or changes the AGENTS.md kernel block
+   or rules index. The sync script's --synced-commits option prints one
+   "<sha> <kind>" line per such commit, kind being the first that applies of
+   agents, core, header, catalog (a commit that also changes the kernel or rules
+   index is agents). fleet.sh counts every line; the release
+   notes list agents, core and header under synced and catalog under library.
 
 ## Template sync (down)
 

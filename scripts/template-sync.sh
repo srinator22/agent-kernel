@@ -4,6 +4,7 @@
 # Usage: scripts/template-sync.sh [--template <git url or path>]
 #          [--ref <tag> | --latest] [--baseline <ref>] [--dry-run] [--resolved]
 #        scripts/template-sync.sh --suggest-baseline | --latest-tag | --status | --list-set
+#        scripts/template-sync.sh --synced-commits <git range>
 #        scripts/template-sync.sh --help | -h
 #
 # --template is optional: when omitted it is read from the project's AGENTS.md
@@ -17,7 +18,10 @@
 # core-set files match the project's most often); --latest-tag (the newest
 # template-v* tag via ls-remote, no clone); --status (offline: exit 1 unless
 # the Template line is exactly "- Template: <url> <ref>" naming the last
-# recorded sync; exit 0 in template mode); --list-set (the synced set as
+# recorded sync; exit 0 in template mode); --synced-commits <range> (the
+# commits of a range in this template repository that change the synced set,
+# as "<sha> <kind>" with kind agents, core, header or catalog, for fleet.sh
+# and template-release.sh); --list-set (the synced set as
 # "<group> <path>" lines for other scripts).
 #
 # Guard: a real apply refuses (exit 2) unless "git status --porcelain" is empty
@@ -100,8 +104,8 @@ PROJECT_OWNED_RE='^scripts/stack-check\.sh$'
 # HEADER_LINES lines sync; the rest is project data), catalog (synced only
 # where the project carries the folder) and agents (AGENTS.md: kernel block
 # and rules index compared, never applied). scripts/template-release.sh,
-# scripts/fleet.sh and scripts/session-context.sh read this list instead of
-# keeping their own copy.
+# scripts/fleet.sh and scripts/session-context.sh get the set through
+# --synced-commits (below) instead of keeping their own copy.
 list_set() {
   local p
   for p in "${CORE_FILES[@]}"; do echo "core $p"; done
@@ -116,6 +120,7 @@ usage_text() {
   echo "                                 [--baseline <ref>] [--dry-run] [--resolved]"
   echo "       scripts/template-sync.sh [--template <url>] --suggest-baseline | --latest-tag"
   echo "       scripts/template-sync.sh --status | --list-set | --help"
+  echo "       scripts/template-sync.sh --synced-commits <git range>"
   echo "  --template defaults to the '- Template: <url> <tag>' line of AGENTS.md (tag = default --ref)."
   echo "  A real apply needs a clean working tree and a branch other than main or master."
   echo "  --latest: sync to the newest template-v* tag (version order); not with --ref"
@@ -125,6 +130,7 @@ usage_text() {
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
+  echo "  --synced-commits <range>: '<sha> <kind>' per commit of a git range here that changes what projects receive; kind is agents, core, header or catalog (offline)"
   echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage or guard failure"
 }
 usage() { usage_text >&2; exit 2; }
@@ -336,6 +342,120 @@ suggest_baseline() {
   return 0
 }
 
+
+# --synced-commits <range>: the commits of a git range in this repository (the
+# template) that change what projects receive, one "<full sha> <kind>" line
+# each, in git log order. One definition for fleet.sh (counts every line) and
+# template-release.sh (agents, core and header are "synced"; catalog is the
+# library section). A commit counts when it touches a core or catalog path; or
+# a header file whose first HEADER_LINES lines differ from its parent (a file
+# absent on one side differs); or AGENTS.md with a different KERNEL block or
+# "## Rules index" section (CR stripped). The kind is the first that applies in
+# the order agents, core, header, catalog, so a commit touching core and catalog
+# is core, and one that also changes the AGENTS.md kernel or rules index is
+# agents (agents first because session-context.sh prints its kernel sentence
+# only for that kind). Edits below a lessons header and AGENTS.md Project
+# decisions are project data and do not count.
+agents_synced_view() { # git object -> kernel block then rules index
+  git -C "$ROOT" show "$1" 2>/dev/null | tr -d '\r' | awk '
+    /<!-- KERNEL:BEGIN -->/ {k=1}
+    k {print}
+    /<!-- KERNEL:END -->/ {k=0}
+    /^## Rules index/ {r=1; print; next}
+    /^## / {r=0}
+    r'
+}
+
+# The synced set is read once per run into SET_G / SET_P (group and path):
+# list_set runs in a subshell, and one per commit, or a here-document per set
+# line, made the range scan take seconds on Windows.
+SET_G=()
+SET_P=()
+
+load_set() {
+  local g p
+  SET_G=(); SET_P=()
+  while read -r g p; do
+    [[ -n "$g" ]] || continue
+    SET_G+=("$g"); SET_P+=("$p")
+  done < <(list_set)
+}
+
+# commit_kind <sha> <file>...: sets KIND to the kind of the commit, or "" when
+# it changes nothing projects receive. No subshell: it runs once per commit.
+commit_kind() {
+  local sha="$1" g p f a b i core=0 header=0 agents=0 catalog=0
+  shift
+  KIND=""
+  for f in "$@"; do
+    [[ -n "$f" ]] || continue
+    for i in "${!SET_G[@]}"; do
+      g="${SET_G[$i]}"; p="${SET_P[$i]}"
+      case "$g" in
+        core|catalog)
+          case "$p" in
+            */) [[ "$f" == "$p"* ]] || continue ;;
+            *) [[ "$f" == "$p" ]] || continue ;;
+          esac
+          if [[ "$g" == core ]]; then core=1; else catalog=1; fi ;;
+        header)
+          if [[ "$f" == "$p" && $header -eq 0 ]]; then
+            if git -C "$ROOT" cat-file -e "$sha^:$p" 2>/dev/null; then
+              a="P$(git -C "$ROOT" show "$sha^:$p" | sed -n "1,${HEADER_LINES}p")"
+            else a=absent; fi
+            if git -C "$ROOT" cat-file -e "$sha:$p" 2>/dev/null; then
+              b="P$(git -C "$ROOT" show "$sha:$p" | sed -n "1,${HEADER_LINES}p")"
+            else b=absent; fi
+            [[ "$a" != "$b" ]] && header=1
+          fi ;;
+        agents)
+          if [[ "$f" == "$p" && $agents -eq 0 ]] && [[ "$(agents_synced_view "$sha^:$p")" != "$(agents_synced_view "$sha:$p")" ]]; then
+            agents=1
+          fi ;;
+      esac
+    done
+  done
+  if [[ $agents -eq 1 ]]; then KIND=agents
+  elif [[ $core -eq 1 ]]; then KIND=core
+  elif [[ $header -eq 1 ]]; then KIND=header
+  elif [[ $catalog -eq 1 ]]; then KIND=catalog
+  fi
+}
+
+# One git log reads the whole range (marker line "SOH then the sha", then that
+# commit's files; SOH is a control character git always quotes in a path, so no
+# path line can look like a marker); only commits that touch a header file or
+# AGENTS.md pay for the git show comparisons inside commit_kind. --no-renames
+# keeps one path per change, as diff-tree -r reported it.
+synced_commits() {
+  local range="$1" line sha="" out mark
+  mark="$(printf '\001')"
+  local files=()
+  if ! out="$(git -C "$ROOT" -c core.quotePath=false -c log.showRoot=true log --no-merges --no-renames --format=%x01%H --name-only "$range" 2>/dev/null)"; then
+    echo "template-sync: --synced-commits: cannot read the git range '$range' in $ROOT" >&2
+    return 1
+  fi
+  load_set
+  while IFS= read -r line; do
+    if [[ "$line" == "$mark"* ]]; then
+      if [[ -n "$sha" ]]; then
+        commit_kind "$sha" ${files[@]+"${files[@]}"}
+        if [[ -n "$KIND" ]]; then echo "$sha $KIND"; fi
+      fi
+      sha="${line#"$mark"}"; files=()
+    elif [[ -n "$line" ]]; then
+      files+=("$line")
+    fi
+  done <<LOG
+$out
+LOG
+  if [[ -n "$sha" ]]; then
+    commit_kind "$sha" ${files[@]+"${files[@]}"}
+    if [[ -n "$KIND" ]]; then echo "$sha $KIND"; fi
+  fi
+  return 0
+}
+
 main() {
   local template="" ref="" dry=0 from_agents=0 default_tag="" resolved=0
   local baseline="" latest=0 mode=sync
@@ -343,6 +463,7 @@ main() {
     case "$1" in
       -h|--help) usage_text; exit 0 ;;
       --list-set) list_set; exit 0 ;;
+      --synced-commits) [[ $# -ge 2 ]] || usage; synced_commits "$2"; exit $? ;;
       --template) [[ $# -ge 2 ]] || usage; template="$2"; shift 2 ;;
       --ref) [[ $# -ge 2 ]] || usage; ref="$2"; shift 2 ;;
       --baseline) [[ $# -ge 2 ]] || usage; baseline="$2"; shift 2 ;;

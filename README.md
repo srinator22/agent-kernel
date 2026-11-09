@@ -22,6 +22,12 @@ mistakes, and a memory that gets better each time you work together.
 </tr>
 </table>
 
+## Before you start
+
+Run `bash scripts/doctor.sh`. It runs each tool the template uses, says which
+are missing or broken, and prints the install command for your system. It
+installs nothing.
+
 ## Start a project in three steps
 
 1. Click **Use this template** on GitHub, or clone this repository into a new folder.
@@ -71,30 +77,37 @@ When a session's work is done, Claude asks whether to dream (`/dream`).
 3. You get a numbered list of proposals and pick the numbers to keep.
 
 A scorecard counts which kinds of proposals you accept, so each dream knows
-what was useful last time. A taste pass does the same for your personal style
-across all your projects, in `~/.claude/taste/`.
+what was useful last time. A taste pass does the same for your style in one
+project: it proposes preference rules from that project's own sessions, and the
+ones you approve become rows in `docs/preferences/`. Git carries them to your
+other computers, and every session start loads them. Rules move to another
+project only when you ask (`scripts/preferences.sh port`).
 
 ## Reference
 
 <details>
 <summary><b>What you need installed</b></summary>
 
-- git and bash (on Windows, Git Bash; `scripts\check.cmd` forwards to it).
-  Required: without them nothing runs.
+`bash scripts/doctor.sh` checks all of this and prints what to install.
+
+Required:
+- git.
+- bash 3.2 or newer (on Windows, Git Bash; `scripts\check.cmd` forwards to it).
+- Python 3, as `python3` or `python`: validates `.claude/settings.json`, runs
+  the dream and preference tools and the feedback hook. A Windows Store stub
+  that does not run is skipped.
+- ruff 0.16.10, `uvx` or `pipx`, template repository only: `check.sh` in
+  template mode lints the template's own Python with exactly this version.
+  Started projects do not need it.
+
+Recommended:
 - gh (GitHub CLI): CI watching, repo settings, branch protection. Without it
   those steps are done by hand and `scripts/ci-watch.sh` cannot run.
 - gitleaks: the secret scan. Without it start logs the gap and CI is the only
   scan.
 - git-cliff: CHANGELOG generation and its freshness check. Without it the
   changelog is written by hand.
-- python (python3 or python): validates `.claude/settings.json`, runs the
-  dream and preference tools and the feedback hook. Without it those checks
-  are skipped locally and CI runs them.
-- ruff 0.16.10, template repository only: `check.sh` in template mode lints
-  the template's own Python with exactly this version, from `ruff` on PATH or
-  fetched through `uvx` or `pipx` (network on first use). Without any of them
-  that check fails. Started projects do not need it.
-- GNU grep or git grep with PCRE (`-P`): the no-dash scan. Without it the scan
+- `git grep -P` (git built with PCRE): the no-dash scan. Without it the scan
   is deferred to CI.
 
 </details>
@@ -322,3 +335,11 @@ via Git Bash. Git Bash is required.
 ## License
 
 MIT, see LICENSE. A project built from this template may relicense itself.
+
+## Credits
+
+- The [AGENTS.md](https://agents.md) format carries the rules for every agent (ADR 0001).
+- Dreaming follows Anthropic's agent-memory research, [The components of agent memory](https://www.anthropic.com/engineering/components-of-agent-memory) (ADR 0009).
+- Declared budgets come from Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) and from Claude Code's [dynamic workflows](https://code.claude.com/docs/en/workflows) (ADR 0002).
+- Built for [Claude Code](https://code.claude.com/docs/en/overview) and [Codex](https://github.com/openai/codex).
+- The checks and helper scripts use [git-cliff](https://git-cliff.org), [gitleaks](https://github.com/gitleaks/gitleaks), [ruff](https://docs.astral.sh/ruff/), [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com).

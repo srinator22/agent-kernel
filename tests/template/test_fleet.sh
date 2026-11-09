@@ -88,6 +88,46 @@ run scripts/fleet.sh --list "$FIX/absent.list"
 assert_rc "missing list" 2
 assert_contains "missing list message" "fleet: create fleet.local.list"
 
+
+# ---- behind counts a release whose only synced change is a lessons header or
+# the AGENTS.md kernel block / rules index; lessons data below the header and
+# Project decisions are not synced ----
+cd "$FIX" || exit 1
+lessons12() { # first-line data: a 12-line format header, then one data line
+  mkdir -p docs/lessons
+  printf '%s\n' "$1" l2 l3 l4 l5 l6 l7 l8 l9 l10 l11 l12 "$2" > docs/lessons/INDEX.md
+}
+agents_v() { # kernel-text rules-text decisions-text
+  printf '# Agents\n\n<!-- KERNEL:BEGIN -->\n1. %s\n<!-- KERNEL:END -->\n\n## Rules index (triggered)\n- %s\n\n## Project decisions\n- %s\n' "$1" "$2" "$3" > AGENTS.md
+}
+tpl_commit() { git add -A >/dev/null 2>&1 && git commit -q -m "$1" >/dev/null 2>&1 && git tag "$2"; }
+agents_v k1 r1 d1; lessons12 "# header A" data1
+tpl_commit base-hdr template-v0.3.0
+lessons12 "# header B" data1
+tpl_commit header-only template-v0.4.0
+lessons12 "# header B" data2
+tpl_commit lessons-data-only template-v0.5.0
+agents_v k1 r1 d2
+tpl_commit decisions-only template-v0.6.0
+agents_v k2 r1 d2
+tpl_commit kernel-only template-v0.7.0
+agents_v k2 r2 d2
+tpl_commit rules-index-only template-v0.8.0
+mkproj "$PRJ/hdrproj" "- Template: https://x/t.git template-v0.3.0" template-v0.3.0
+mkproj "$PRJ/dataproj" "- Template: https://x/t.git template-v0.4.0" template-v0.4.0
+mkproj "$PRJ/kernproj" "- Template: https://x/t.git template-v0.6.0" template-v0.6.0
+printf '%s\n%s\n%s\n' "$PRJ/hdrproj" "$PRJ/dataproj" "$PRJ/kernproj" > "$FIX/synced.list"
+run scripts/fleet.sh --list "$FIX/synced.list"
+assert_rc "synced-change fleet runs" 0
+r="$(row hdrproj)"; read -r -a f <<< "$r"
+assert_eq "header, kernel and rules-index changes count; data and decisions do not" 3 "${f[3]}"
+assert_eq "hdrproj status" BEHIND "${f[7]}"
+r="$(row dataproj)"; read -r -a f <<< "$r"
+assert_eq "dataproj behind: kernel and rules-index only" 2 "${f[3]}"
+r="$(row kernproj)"; read -r -a f <<< "$r"
+assert_eq "kernproj behind: kernel then rules index" 2 "${f[3]}"
+
+
 touch .start-done
 run scripts/fleet.sh
 assert_rc "start-done refused" 2
