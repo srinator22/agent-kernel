@@ -35,9 +35,10 @@ the command: for a partly finished chunk the command runs once per contiguous ru
 {first} and {last} set to that run. After the command, the frames are checked again; all present and every
 command exit code 0 marks the chunk done. Missing frames make it failed with the missing list; a non-zero exit
 with every frame present makes it failed too (blender_run reports tracebacks and a version mismatch with the
-lock through its exit code), and a later run never passes those frames: it says to delete them, then renders
-them again. A done chunk whose frames were deleted renders them again. STATE is replaced atomically after
-every step, so a kill at any moment resumes exactly. A chunk left "running" by a kill is run again.
+lock through its exit code), and a later run never passes those frames: it says to delete them, and renders
+the chunk again only once all of them are gone (a partial delete stays failed). A done chunk whose frames
+were deleted renders them again. STATE is replaced atomically after every step, so a kill at any moment
+resumes exactly. A chunk left "running" by a kill is run again.
 Outputs: progress lines and a summary line `render_chunks: PASS ...` or `render_chunks: FAIL n finding(s) ...`.
 Exit codes: 0 all chunks done, 1 any chunk failed or not yet done (for example stopped by --max-chunks),
 2 could not run (bad arguments, bad STATE, the command cannot be started, overlap with another STATE).
@@ -294,14 +295,17 @@ def cmd_run(args) -> int:
         label = f"chunk {chunk['index']}/{total} frames {chunk['first']}-{chunk['last']}"
         missing = missing_frames(out, pattern, chunk["first"], chunk["last"])
         if chunk.get("failed_rc") is not None:
-            if not missing:
-                # Frames written by a command that then failed are suspect (a traceback after writing, a
-                # version mismatch with the lock); never pass them, and never delete them automatically.
+            span = chunk["last"] - chunk["first"] + 1
+            if len(missing) < span:
+                # Frames written by a command that then failed are suspect as a set (a traceback after
+                # writing, a version mismatch with the lock); never pass them, never delete them
+                # automatically, and never accept the kept ones after a partial delete.
                 failed += 1
-                print(f"{TOOL}: finding: {label}: its frames come from a command that returned "
-                      f"{chunk['failed_rc']}; delete them to render again (log {chunk.get('log')})")
+                print(f"{TOOL}: finding: {label}: {span - len(missing)} of {span} frame(s) from the failed run "
+                      f"remain (it returned {chunk['failed_rc']}); delete them to render again, all of them "
+                      f"(log {chunk.get('log')})")
                 continue
-            chunk.pop("failed_rc")  # the suspect frames were deleted; render them again below
+            chunk.pop("failed_rc")  # every suspect frame was deleted; render them again below
         if not missing:
             chunk.update(status="done", seconds=0.0, frames_rendered=0, ended=now_iso(), missing=[])
             save_state(args.state, state)
