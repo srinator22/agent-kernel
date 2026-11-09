@@ -21,6 +21,8 @@ A rules table starts with this header. The `Repeats` column is optional.
 - **Check:** `Review`, optionally followed by a note, or one or more backticked references.
 - **Repeats:** empty or a whole number. It changes only through an approved dream proposal.
 
+A row copied from another project by `scripts/preferences.sh port` has the Source `YYYY-MM-DD: ported from <folder> (<original source>)` and the Check `Review (was <original check> in <folder>)`, or plain `Review` when the original was Review. Its Repeats is empty.
+
 ## Check grammar
 
 A reference is backticked. Its first word is a path, relative to the repository root, or a file name that `git ls-files` finds exactly once. `path::name` also requires `name` to appear in that file. Any further words are arguments and are not checked. Several references may share a cell.

@@ -6,16 +6,14 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
-PY=""
-command -v python3 >/dev/null 2>&1 && PY=python3
-[[ -n "$PY" ]] || { command -v python >/dev/null 2>&1 && PY=python; } || true
+. "$T_ROOT/scripts/find-python.sh"
 if [[ -z "$PY" ]]; then
   t_ok "python not found; dream tests skipped (CI runs them)"
   t_finish
 fi
 
 make_fixture
-cp_script dream.sh dream/dream.py
+cp_script dream.sh find-python.sh dream/dream.py
 NATIVE="$(cygpath -w "$FIX" 2>/dev/null || echo "$FIX")"
 SLUG="$("$PY" -c 'import re,sys;print(re.sub(r"[^A-Za-z0-9]","-",sys.argv[1]))' "$NATIVE")"
 # Project folders live under a short folder of their own: each holds a folder named
@@ -419,7 +417,7 @@ assert_rc "truncated: digest exits 0" 0
 assert_file_has "truncated: re-read from the start" "$ST9/digest.md" "short rewrite"
 
 # --- worktrees, saved roots, --match, subagents, shared state ---
-git add scripts/dream.sh scripts/dream/dream.py >/dev/null 2>&1
+git add scripts/dream.sh scripts/find-python.sh scripts/dream/dream.py >/dev/null 2>&1
 git commit -q -m fixture >/dev/null 2>&1
 WT="$FIX-wt"
 WTN="$(cygpath -w "$WT" 2>/dev/null || echo "$WT")"

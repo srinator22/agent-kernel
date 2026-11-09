@@ -7,10 +7,8 @@ SELF="${BASH_SOURCE[0]}"
 case "$SELF" in */*) DIR="${SELF%/*}" ;; *) DIR="." ;; esac
 ROOT="$(cd "$DIR/.." 2>/dev/null && pwd)" || exit 0
 
-PY=""
-if command -v python3 >/dev/null 2>&1; then PY=python3
-elif command -v python >/dev/null 2>&1; then PY=python
-fi
+# A missing helper means no Python: the hook still exits 0.
+. "$ROOT/scripts/find-python.sh" 2>/dev/null || exit 0
 [[ -n "$PY" ]] || exit 0
 
 "$PY" -I -B "$ROOT/scripts/dream/feedback.py" 2>/dev/null

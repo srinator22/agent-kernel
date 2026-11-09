@@ -135,48 +135,61 @@ The dreamer adds three proposal kinds:
 
 ## Taste pass
 
-The taste pass learns the owner's tastes across every local project into a
-personal profile outside every repository: `~/.claude/taste/<area>.md`,
-imported by a managed block in `~/.claude/CLAUDE.md` so every Claude session
-in every project loads it, and copied into a managed block in
-`~/.codex/AGENTS.md` for Codex. Any project with `scripts/dream/taste.py` can run
-it; all of them share one user-level state in `~/.claude/taste/.dream/`.
+The taste pass learns the owner's tastes from this project's own sessions into
+the project's preference registers (`docs/preferences/<area>.md`, see
+`docs/procedures/preferences.md`). Rows are tracked changes on the current
+checkout, so git carries them to every computer; they follow the recorded git
+workflow, on the live task branch or on `chore/dream-<date>`. Its digest, pool,
+ledger and reports are per computer, in the main checkout's gitignored
+`.work/dream/taste/`. Every Claude session start loads the registers' rules
+(ID and rule, 4000-byte cap). Rules reach another project only when the owner
+asks, with `scripts/preferences.sh port --from <project>`.
 
-T1. Run `scripts/dream.sh taste digest`. It reads every project's
-    transcripts and the feedback and user notes in every project's
-    auto-memory, keeps only the owner's own words (stated preferences,
-    answers to questions, corrections, rejected actions, short reactions,
-    taste topics), and writes `~/.claude/taste/.dream/digest.md`: signals
-    with stable ids, fresh ones first, under a 40 KB cap. Exit 3 means
-    fewer than 5 fresh signals or under 7 days since the last pass: say so
-    and stop; no model runs, and what was read waits in the pool. `--force`
-    skips the day rule; `--projects-dir DIR` adds a transcript folder, such
-    as a copy from another computer.
+T1. Run `scripts/dream.sh taste digest`. It reads this project's transcripts
+    (sessions whose cwd is the root, a worktree, a root the project dream
+    remembers or a `--match` path) and the feedback and user notes in this
+    project's auto-memory, keeps only the owner's own words (stated
+    preferences, answers to questions, corrections, rejected actions, short
+    reactions, taste topics), and writes `.work/dream/taste/digest.md`:
+    signals with stable ids, fresh ones first, under a 40 KB cap. Its
+    `profile:` line gives the registers' session-start print against the
+    4000-byte cap. Exit 3 means fewer than 5 fresh signals or under 7 days
+    since the last pass: say so and stop; no model runs, and what was read
+    waits in the pool. `--force` skips the day rule; `--projects-dir DIR` adds
+    a transcript folder, such as a copy from another computer (only its
+    sessions of this project count).
 T2. Dispatch the `taste-dreamer` agent (standard tier, read-only) with the
-    digest and the profile folder as absolute paths. It returns at most 12
-    numbered proposals (add, revise or remove a profile line), each with
-    evidence.
+    digest and the project's `docs/preferences/` folder as absolute paths. It
+    returns at most 12 numbered proposals (add, revise or remove a register
+    row), each with evidence.
 T3. Save its report where the digest output says
-    (`~/.claude/taste/.dream/reports/<date>-report.md`) and show the owner
-    the numbered list. The owner answers with numbers.
+    (`.work/dream/taste/reports/<date>-report.md`) and show the owner the
+    numbered list. The owner answers with numbers.
 T4. Run `scripts/dream.sh taste apply --report <report> <numbers>` with
     exactly the approved numbers. It refuses everything when any approved
-    proposal breaks the evidence rule (one stated preference, or signals
-    from two or more sessions) or a cap (160 characters a line, 6000 bytes
-    in all); otherwise it writes the area files and both managed blocks,
-    never touching text outside the blocks. Show the owner what changed.
+    proposal breaks the evidence rule (one stated preference, or signals from
+    two or more sessions) or the cap (160 characters a rule), and in template
+    mode. Otherwise it writes each add as a row (ID, the rule, a Source with
+    the signal's date and the owner's quoted words or "inferred from
+    sessions", Check `Review`), applies revises and removes by register ID,
+    and skips an add whose rule text a register already holds. Show the owner
+    what changed, then follow the project's git workflow for the rows.
 T5. Run `scripts/dream.sh taste done --report <report>`, also when nothing
     was approved: it appends an Outcome section (applied and declined
-    numbers, changes, files, profile lines and bytes before and after) to
-    the report. Then run `scripts/dream.sh taste check`. The next digest
-    opens with "Impact since the last pass": profile changes, lines whose
-    evidence was seen again, lines that share words with new signals, and
-    a trend of signal kinds per pass.
+    numbers, changes, files, rules and bytes before and after) to the report.
+    Then run `scripts/dream.sh taste check` (the state and the register
+    check). The next digest opens with "Impact since the last pass": register
+    changes, rules whose evidence was seen again, rules that share words with
+    new signals, and a trend of signal kinds per pass.
 
-The profile belongs to the owner: hand edits to the area files are fine,
-`scripts/dream.sh taste sync` rewrites both blocks after them, and `check`
-reports caps, duplicate ids and stale blocks. Apply and sync refuse a taste
-folder inside a git work tree.
+The user-level profile of an older release (`~/.claude/taste/`, a managed
+block in `~/.claude/CLAUDE.md`, one in `~/.codex/AGENTS.md`) is no longer
+written by any command. Its files stay as the owner left them and still load
+wherever the import block remains. To stop loading it, delete the block from
+`~/.claude/CLAUDE.md` (the lines from `<!-- taste:begin` to
+`<!-- taste:end -->`) by hand; the Codex block goes the same way after
+Codex loads registers (BACKLOG). A taste report written by an older release
+is not applied: run a fresh project taste pass.
 
 ## Privacy and cost
 
@@ -191,8 +204,9 @@ folder inside a git work tree.
   agent reads at most 40 KB of signals plus the memory files, once. A first
   dream over all history measured about 105k tokens on this template; later
   dreams read only the signals added since.
-- The taste digest, pool and reports live in `~/.claude/taste/.dream/` and
-  never enter a repository; only approved lines reach the profile. A full
-  taste digest over 1.46 GB of transcripts took about 4 s (2026-11-08); the
-  agent reads at most 40 KB of signals plus the profile; the profile costs
-  every session at most 6000 bytes, about 1.5k tokens.
+- The taste digest, pool and reports live in `.work/dream/taste/` of the main
+  checkout, ignore themselves and never leave the computer; only approved
+  rules reach tracked register files. The taste digest reads only this
+  project's sessions and is a script with no model; the agent reads at most
+  40 KB of signals plus the registers; the registers cost every Claude
+  session at most 4000 bytes, about 1k tokens.
