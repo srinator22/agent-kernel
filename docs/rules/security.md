@@ -11,6 +11,9 @@
 - Widening exposure requires explicit human authorization first: making a
   repo public, removing auth, widening network access, opening a public
   endpoint.
+- A public repository holds no private personal identifier (real name,
+  personal email, home path), in files or in history; scan before
+  widening exposure.
 - Validate imports and uploads: file type, size, recursion depth, and
   decompression limits before processing.
 - Normalize paths; reject traversal; never write outside the intended

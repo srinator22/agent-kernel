@@ -1,6 +1,6 @@
 # Orchestration - roles, task graph, delegation
 
-Detail for kernel rule 16. Speed comes from parallel rigor, not less rigor.
+Detail for kernel rule 16. Speed comes from parallel rigor, not less rigor: at most 8 background tasks at once; count them before a wave and queue the rest.
 
 Roles:
 - Advisor: the main session. Decomposes, designs schemas, reviews,
