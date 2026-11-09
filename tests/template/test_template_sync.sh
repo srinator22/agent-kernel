@@ -5,9 +5,10 @@
 # set, header-only lessons files, adopted profiles and ci.yml as DIFF only, the
 # KERNEL and Rules index diffs from AGENTS.md, conflicts reported on every run
 # until merged and never recorded as synced, and the exit codes (0 clean or
-# applied, 1 conflicts or kernel change pending, 2 usage or guard failure).
+# applied, 1 conflicts, kernel change pending, skills cap exceeded or not
+# counted, 2 usage or guard failure), and the skills cap reported after a sync.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 TPL="$FIX/template"
@@ -419,6 +420,64 @@ assert_rc "no recorded sync fails" 1
 assert_contains "the missing record is explained" "no sync recorded"
 rm -f .start-done
 cp "$FIX/agents.profiles" AGENTS.md
+
+# ---- (p) skills cap after a sync (kernel rule 10, scripts/lessons.sh skills) ----
+# The template-v0.4.0 case: v2 adds the dream core skill to a project whose
+# two project slots are full. The sync applies it, the core skill takes no
+# project slot, and the cap result is reported; a third project skill is a
+# breach and an action item.
+TPL3="$FIX/template3"
+PRJ3="$FIX/project3"
+put_skill() { local d; for d in .claude/skills .agents/skills; do put "$d/$1/SKILL.md" "# $1"; done; }
+mkdir -p "$TPL3" && cd "$TPL3" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
+mkdir -p scripts
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" scripts/
+put_agents "Kernel v1." "rule index v1"
+sed -i.bak "s|^- Template:.*|- Template: $TPL3 v1|" AGENTS.md && rm -f AGENTS.md.bak
+for s in adr maintain retro ship start template-update; do put_skill "$s"; done
+commit_all v1 && git tag v1
+put_skill dream
+commit_all v2 && git tag v2
+mkdir -p "$PRJ3" && cd "$PRJ3" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email p@example.invalid; git config user.name p; git config core.autocrlf false
+git -C "$TPL3" archive --format=tar v1 | tar -x -C "$PRJ3"
+put_skill own1
+put_skill own2
+put docs/lessons/MAINTENANCE.log "template-sync: v1 2026-09-01"
+chmod +x scripts/*.sh
+./scripts/kernel-hash.sh --update >/dev/null
+proj_commit "project at v1"
+git checkout -q -b sync-skills
+run ./scripts/lessons.sh skills
+assert_rc "before the sync the project is at its skills cap" 0
+run ./scripts/template-sync.sh --template "$TPL3" --ref v2
+assert_contains "the new core skill is applied" "ADD       .claude/skills/dream/SKILL.md"
+assert_contains "the skills count is reported after the sync" "template-sync: skills: 9 (cap 9 = 7 core + 2 project"
+assert_not_contains "a new core skill is no action item" "ACTION: skills cap"
+assert_rc "a sync that adds a core skill to a full project exits 0" 0
+proj_commit "sync to v2"
+put_skill own3
+proj_commit "a third project skill"
+run ./scripts/template-sync.sh --template "$TPL3" --ref v2
+assert_contains "a project over its cap gets an action item" "ACTION: skills cap: .claude/skills has 10 skills; the cap is 9"
+assert_rc "a sync that leaves the project over its skills cap exits 1" 1
+# A lessons.sh without the skills command (an older release) exits 2 with its
+# usage; that is an unchecked cap, not a breach with no reason.
+cd "$TPL3" || exit 1
+put scripts/lessons.sh '#!/usr/bin/env bash
+echo "usage: lessons.sh check" >&2
+exit 2'
+commit_all v3 && git tag v3
+cd "$PRJ3" || exit 1
+proj_commit "the over-cap sync"
+run ./scripts/template-sync.sh --template "$TPL3" --ref v3
+assert_not_contains "a lessons.sh without the skills command is no cap breach" "ACTION: skills cap"
+assert_contains "a cap that could not be counted is reported" "template-sync: skills cap not checked: scripts/lessons.sh skills exited 2"
+assert_rc "a sync whose cap could not be counted exits 1" 1
+cd "$PRJ" || exit 1
 
 # ---- usage ----
 run ./scripts/template-sync.sh --bogus

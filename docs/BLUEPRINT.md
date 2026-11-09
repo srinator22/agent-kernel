@@ -119,7 +119,7 @@ docs/
     README.md                 # one-project-evidence rule, adoption, graduation, item table
     ruff.toml                 # ruff contract for the library's Python: default rules, no format
     agents/                   # agents with Codex twins
-    skills/                   # skills a project may adopt into free core slots
+    skills/                   # skills a project may adopt into its 2 project skill slots
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
     hooks/                    # harness hooks with tests/
@@ -190,6 +190,7 @@ tests/
     test_taste.sh             # owner filter, signal kinds, pool, stop rules, apply, caps, guards
     test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
     test_preferences.sh       # register cells, baselines, template-mode guard, unwired-hook warning
+    test_test_files.sh        # guarded lib.sh load in every test, exec bits
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network
@@ -251,7 +252,7 @@ These rules govern process. Project truth lives in the Project decisions section
 7. Session protocol. At session start and after any compaction: re-read AGENTS.md, .work/TASK.md, and BACKLOG.md before acting. At session end: run the retro procedure and leave the worktree state understandable.
 8. Memory tiers. Resident: this file (<= 180 lines). Triggered: scan docs/lessons/INDEX.md and the rules index below before non-trivial work; open only matching entries and increment their usage counter. Queryable: docs/decisions/, CHANGELOG.md, git log - grep on demand. Memory is a snapshot: before acting on something memory says exists, verify it still does.
 9. Learning is gated. Proposed lessons go to docs/lessons/PENDING.md as: what happened / what check should have caught it / what was added / retire-when. Confirmed-good calls count as lessons too, not only corrections. Never record what is derivable from the repo itself. Pending entries are not acted on; a human moves approved entries into INDEX.md.
-10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, 8 core skills plus the skills the adopted profiles declare. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
+10. Forgetting is mandatory. Hard caps: 20 approved lessons, 180 lines for this file, the template's core skills (at most 8) plus 2 project skills plus the skills the adopted profiles declare. The maintain procedure archives on evidence (unused > 45 days, or retire-when met), never on vibes.
 11. Archive, never delete. Removing a repo artifact means moving it to .archive/ with a one-line reason, only during a maintenance pass, never mid-task. Anything else destructive follows docs/rules/destructive-actions.md: exact absolute target verified read-only first, never a root, home, workspace root, broad glob, or unresolved variable, narrowest recoverable operation, result verified and reported.
 12. Security defaults. Proprietary code and data are private by default. Never commit credentials, tokens, production data, or unapproved raw datasets; the secret scan in check.sh is not optional. Widening exposure (public repos, removed auth, wider network access) requires explicit human authorization. See docs/rules/security.md.
 13. Dependencies are justified. Check existing capability first; the commit body states why. Lockfile committed; lockfile changes reviewed; unused dependencies removed at maintenance.
@@ -332,7 +333,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
 - Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, and the preference register check (`scripts/preferences.sh check`) whenever the script exists. `--quick` never skips this step.
-- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
+- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`, `.claude/skills` equal to the `CORE_SKILLS` list in `scripts/lessons.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
@@ -408,7 +409,7 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 
 **maintain.md** (monthly or on request; never mid-task):
 
-1. Verify caps with `scripts/lessons.sh check`: AGENTS.md <= 180 lines; <= 20 lessons; 8 core skills plus the skills the adopted profiles declare. Over cap: merge or archive until under.
+1. Verify caps with `scripts/lessons.sh check`: AGENTS.md <= 180 lines; <= 20 lessons; the template's core skills (at most 8) plus 2 project skills plus the skills the adopted profiles declare. Over cap: merge or archive until under.
 2. Archive lessons unused > 45 days or with retire-when met; merge near-duplicates into one generalized entry. Archival is a move to `.archive/` with a one-line reason.
 3. Run `./scripts/check.sh --full-mutation`; quarantine anything flaky as its own task.
 4. Audit surviving external/live data calls against the local-first rule (each must carry its written reason); convert stragglers. Remove unused dependencies; review lockfile drift.
@@ -671,3 +672,12 @@ tests, and `docs/library/examples/product-render-sample/`. `scripts/lessons.sh
 check` now enforces roster twin parity and hand-off names. No profile yet
 (one-project evidence); the outline is the BACKLOG graduation target. Kernel
 untouched.
+
+## Amendment 6 (2026-11-08): core skills counted apart
+
+Kernel rule 10 edited with the owner's approval (ADR 0012, `.kernel.hash`
+updated in the same commit): the skills cap is the template's core skills (at
+most 8) plus 2 project skills plus the skills the adopted profiles declare.
+`scripts/lessons.sh` holds the core list, check.sh step 5m pins it to the
+template's `.claude/skills`, and `scripts/template-sync.sh` reports a cap
+breach after a sync as an action item.

@@ -237,8 +237,9 @@ contract: `docs/procedures/upstream.md`.
   start: format, typecheck, lint with boundary rules, tests, secret scan,
   build, mutation on changed files, CHANGELOG freshness, plus each selected
   profile's gates.
-- Caps: 20 approved lessons, 180 lines in AGENTS.md, 8 core skills plus the
-  skills the adopted profiles declare, 40 lines per rules file. Forgetting is
+- Caps: 20 approved lessons, 180 lines in AGENTS.md, the template's core
+  skills (at most 8) plus 2 project skills plus the skills the adopted
+  profiles declare, 40 lines per rules file. Forgetting is
   archived on evidence, never deleted.
 - Self-tests: `scripts/selftest.sh` runs every fixture in `tests/template/`,
   one test file per script. `scripts/quickgate.sh` (it runs

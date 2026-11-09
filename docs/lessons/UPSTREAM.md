@@ -58,6 +58,20 @@ Entry format (all five fields required):
   function that places them outside the fixture.
 - applies to: core
 
+### The destructive-action hook reads heredoc text as a command
+
+- what happened: a shell command that wrote a test block into a file through
+  a heredoc was blocked, because the block's text named rm -rf with a
+  variable target; the hook reads the whole command line, heredoc body
+  included (2026-11-08, sync-defects). The block was written with the Edit
+  tool instead.
+- what check should have caught it: none, this note is the guard. Write file
+  content that names a destructive command with the Edit or Write tool, not
+  a shell heredoc.
+- what was added: none.
+- retire-when: the hook skips heredoc bodies that only feed a file write.
+- applies to: core
+
 ### Each parallel agent gets its own scratch file names
 
 - what happened: several agents ran at once with the same scratchpad log and

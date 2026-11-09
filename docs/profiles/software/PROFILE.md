@@ -86,8 +86,9 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
   fresh context), `explore` (read-only search), `monitor` (tracks a push to
   terminal state).
 - Skills: none (the core set of `start`, `ship`, `retro`, `maintain` and the
-  other core skills covers this profile; the cap is 8 core skills plus the
-  skills the adopted profiles declare on their `Skills:` lines).
+  other core skills covers this profile; the cap is the template's core skills
+  plus 2 project skills plus the skills the adopted profiles declare on
+  their `Skills:` lines).
 
 ## Parameters and records
 

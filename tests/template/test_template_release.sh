@@ -6,7 +6,7 @@
 # "tag already exists" guard is defensive: the proposed version is always above
 # the newest tag, so no fixture can reach it.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 put_agents() { # kernel-text
   printf '# Agents\n\n<!-- KERNEL:BEGIN -->\n1. %s\n<!-- KERNEL:END -->\n\n## Project decisions\n' "$1" > AGENTS.md

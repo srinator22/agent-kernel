@@ -9,7 +9,7 @@
 # Rule text is invented: this repo is public.
 # Without python the test is skipped (CI has python3).
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 PY=""
 command -v python3 >/dev/null 2>&1 && PY=python3

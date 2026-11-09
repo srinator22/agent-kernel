@@ -71,10 +71,13 @@
 # AGENTS.rules-index.diff, a kernel difference prints "KERNEL CHANGE: needs owner
 # approval and scripts/kernel-hash.sh --update", and the project's .kernel.hash
 # is never touched. After applying, the script re-runs
-# scripts/kernel-hash.sh --verify.
+# scripts/kernel-hash.sh --verify, then scripts/lessons.sh skills: a project
+# over its kernel rule 10 skills cap gets an "ACTION: skills cap" line, and a
+# cap that could not be counted is reported as not checked.
 #
 # Exit: 0 clean or applied, 1 conflicts or a kernel change pending (or a failed
-# clone, ref or kernel verification), 2 usage or guard failure.
+# clone, ref or kernel verification, or the skills cap exceeded or not counted
+# after the sync), 2 usage or guard failure.
 #
 # Test hook: TEMPLATE_SYNC_TODAY=YYYY-MM-DD overrides today's date.
 set -euo pipefail
@@ -122,7 +125,7 @@ usage_text() {
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
-  echo "  exit: 0 clean or applied, 1 conflicts or kernel change pending, 2 usage or guard failure"
+  echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage or guard failure"
 }
 usage() { usage_text >&2; exit 2; }
 
@@ -590,7 +593,9 @@ main() {
     echo "template-sync: new scripts; keep them executable in git: git update-index --add --chmod=+x ${newsh[*]}"
   fi
 
+  local recorded="the sync is recorded"
   if (( ${#conflicts[@]} && ! resolved )); then
+    recorded="the sync is NOT recorded"
     echo "template-sync: sync NOT recorded: ${#conflicts[@]} conflict(s) remain and are reported on every run until merged by hand and attested with --resolved"
   else
     mkdir -p "$(dirname "$LOG")"
@@ -605,6 +610,25 @@ main() {
   else
     echo "template-sync: scripts/kernel-hash.sh is not present or not executable; kernel not verified" >&2
     rc=1
+  fi
+
+  # A synced core skill can take the project over its kernel rule 10 skills
+  # cap; the synced lessons.sh counts it, and a breach is the owner's call.
+  # Exit 1 is a breach; any other failure (a lessons.sh without the skills
+  # command, a crash) means the cap was not counted, which is no breach.
+  if [[ -x scripts/lessons.sh ]]; then
+    local cap_out cap_rc=0
+    cap_out="$(./scripts/lessons.sh skills 2>&1)" || cap_rc=$?
+    if (( cap_rc == 0 || cap_rc == 1 )); then
+      printf '%s\n' "$cap_out" | sed -n '1s/^/template-sync: /p'
+    fi
+    if (( cap_rc == 1 )); then
+      echo "ACTION: skills cap: $(printf '%s\n' "$cap_out" | sed -n 's/^lessons: //p'). Merge or archive a project skill (docs/procedures/maintain.md); $recorded."
+      rc=1
+    elif (( cap_rc )); then
+      echo "template-sync: skills cap not checked: scripts/lessons.sh skills exited $cap_rc: $(printf '%s\n' "$cap_out" | sed -n 1p)" >&2
+      rc=1
+    fi
   fi
   return $rc
 }

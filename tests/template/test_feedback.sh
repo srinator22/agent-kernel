@@ -3,7 +3,7 @@
 # with its situation to the main checkout's .work/feedback/log.jsonl, guesses its
 # kind by word lists, prints one context line, never rotates, and always exits 0.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 # winpath P: the native form of a path where git bash can give one (python is a
 # native program on Windows and cannot open an msys /tmp path).

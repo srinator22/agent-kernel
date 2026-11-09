@@ -6,6 +6,9 @@
 #   expire         list lessons whose last: is older than 45 days or whose
 #                  retire-when contains [met]; --apply archives them
 #   stats          print counts
+#   skills         print the skills count and cap; exit 1 when over the cap
+#                  (scripts/template-sync.sh runs it after a sync)
+#   core-skills    print the template core skill names, one per line
 #
 # INDEX.md line format (exactly as documented in docs/lessons/INDEX.md):
 #   - [L001] <description> - <lesson> (used: 0, last: -, retire-when: <condition>)
@@ -17,10 +20,12 @@
 # check enforces: <= 20 approved lessons; every one carries all three fields
 # and a unique id; every PENDING.md entry carries its four fields; no
 # QUARANTINE.md entry older than 30 days without an owner task; .claude/skills
-# and .agents/skills identical; skill directories <= 8 + profile skill sets
+# and .agents/skills identical; skill directories <= the template core skills
+# present (CORE_SKILLS, at most 8) + 2 project skills + profile skill sets
 # (the number of skills listed on the "Skills:" or "- Skills:" line of each
 # docs/profiles/*/PROFILE.md, comma-separated; when AGENTS.md has a
-# "- Profiles:" line naming profiles, only those count);
+# "- Profiles:" line naming profiles, only those count), so a core skill the
+# template adds never takes a project's slot (ADR 0012);
 # every .claude/agents/<name>.md has a .codex/agents/<name>.toml or a line in
 # docs/rules/models.md naming it with "no Codex counterpart"; the agent and
 # skill sets under docs/profiles/*/, docs/library/ and docs/roster/ are well formed, and each
@@ -44,11 +49,16 @@ MAX_LESSONS=20
 MAX_RULE_LINES=40
 EXPIRE_DAYS=45
 QUARANTINE_DAYS=30
-BASE_SKILLS=8
+# Kernel rule 10. CORE_SKILLS is the template's core set; this file syncs to
+# every project, so the list travels with each release. In template mode,
+# check.sh step 5m requires .claude/skills to hold exactly these names.
+CORE_SKILLS=(adr dream maintain retro ship start template-update)
+MAX_CORE_SKILLS=8
+PROJECT_SKILLS=2
 US=$'\037'
 
 usage() {
-  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats" >&2
+  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats | skills | core-skills" >&2
   exit 2
 }
 
@@ -400,6 +410,30 @@ skill_dir_count() {
   echo $((n + 0))
 }
 
+# Template core skills present in .claude/skills. A core skill the project
+# removed frees no project slot.
+core_dir_count() {
+  local n=0 s
+  for s in "${CORE_SKILLS[@]}"; do
+    if [[ -d ".claude/skills/$s" ]]; then n=$((n + 1)); fi
+  done
+  echo "$n"
+}
+
+# skills_cap: the kernel rule 10 figures, the one place check, stats and skills
+# take them from. Sets SK_COUNT (skill folders), SK_CAP and SK_FORMULA (the
+# terms of the cap, for messages).
+skills_cap() {
+  local sets core
+  sets="$(profile_skill_sets)"
+  core="$(core_dir_count)"
+  SK_COUNT="$(skill_dir_count)"
+  SK_CAP=$((core + PROJECT_SKILLS + sets))
+  SK_FORMULA="$core core + $PROJECT_SKILLS project + $sets skills listed by the adopted profiles"
+}
+skills_over_msg() { echo ".claude/skills has $SK_COUNT skills; the cap is $SK_CAP ($SK_FORMULA = $SK_CAP; kernel rule 10)"; }
+skills_stats_line() { echo "skills: $SK_COUNT (cap $SK_CAP = $SK_FORMULA)"; }
+
 file_lines() { awk 'END { print NR }' "$1"; }
 
 # An entry is the documented placeholder when every label is present and every
@@ -497,6 +531,9 @@ cmd_check() {
   fi
 
   # Skills mirror and cap.
+  if (( ${#CORE_SKILLS[@]} > MAX_CORE_SKILLS )); then
+    errs+=("the template core set lists ${#CORE_SKILLS[@]} skills; the cap is $MAX_CORE_SKILLS (kernel rule 10)")
+  fi
   if [[ -d .claude/skills || -d .agents/skills ]]; then
     if [[ ! -d .claude/skills || ! -d .agents/skills ]]; then
       errs+=(".claude/skills and .agents/skills must both exist")
@@ -508,13 +545,8 @@ cmd_check() {
         errs+=(".claude/skills and .agents/skills differ: $drift")
       fi
     fi
-    local skills cap sets
-    skills="$(skill_dir_count)"
-    sets="$(profile_skill_sets)"
-    cap=$((BASE_SKILLS + sets))
-    if (( skills > cap )); then
-      errs+=(".claude/skills has $skills skills; the cap is $cap ($BASE_SKILLS core + $sets skills listed by the adopted profiles = $cap; kernel rule 10)")
-    fi
+    skills_cap
+    if (( SK_COUNT > SK_CAP )); then errs+=("$(skills_over_msg)"); fi
   fi
 
   # Every Claude agent has a Codex twin, or models.md names the exception on a
@@ -684,8 +716,8 @@ cmd_stats() {
     if is_placeholder "$p1" "$v1" "$p2" "$v2" "$p3" "$v3" "$p4" "$v4"; then continue; fi
     quarantine=$((quarantine + 1))
   done < <(entries "$QUARANTINE" "$QUARANTINE_LABELS")
-  local sets rules=0 maxlines=0 f n
-  sets="$(profile_skill_sets)"
+  local rules=0 maxlines=0 f n
+  skills_cap
   for f in docs/rules/*.md; do
     [[ -f "$f" ]] || continue
     rules=$((rules + 1))
@@ -695,12 +727,23 @@ cmd_stats() {
   echo "approved lessons: $approved/$MAX_LESSONS (never used: $unused)"
   echo "pending entries: $pending"
   echo "quarantined tests: $quarantine"
-  echo "skills: $(skill_dir_count) (cap $((BASE_SKILLS + sets)) = $BASE_SKILLS core + $sets skills listed by the adopted profiles)"
+  skills_stats_line
   echo "rules files: $rules (longest $maxlines/$MAX_RULE_LINES lines)"
+}
+
+cmd_skills() {
+  skills_cap
+  skills_stats_line
+  if (( SK_COUNT > SK_CAP )); then
+    echo "lessons: $(skills_over_msg)" >&2
+    exit 1
+  fi
 }
 
 case "${1:-}" in
   check) cmd_check ;;
+  skills) cmd_skills ;;
+  core-skills) printf '%s\n' "${CORE_SKILLS[@]}" ;;
   use) shift; cmd_use "$@" ;;
   expire) shift; cmd_expire "$@" ;;
   stats) cmd_stats ;;

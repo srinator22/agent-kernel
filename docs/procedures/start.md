@@ -94,8 +94,8 @@ point in this procedure.
    already exists is merged by hand, never overwritten. Library items and
    roster agents chosen in Q7 install the same way (a roster agent's
    specialist folder is created when its first artifact is written); a library procedure is copied to
-   `docs/procedures/`, and a library skill takes one of the core skill slots
-   (8 minus the core skills shipped). `scripts/lessons.sh check` must pass
+   `docs/procedures/`, and a library skill takes one of the 2 project skill
+   slots (kernel rule 10). `scripts/lessons.sh check` must pass
    after the copy (skills cap and mirror).
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
    and, if deploying, `docs/operations.md` (deploy, rollback, monitoring).

@@ -4,7 +4,7 @@
 # open assumptions at ship, the autopilot plan verdict, Mode parsing, comment
 # stripping and CRLF files.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 cp_script tasklint.sh

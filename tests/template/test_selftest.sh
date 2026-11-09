@@ -6,7 +6,7 @@
 # line counts passed, failed and quarantined files; the lib.sh fixtures the
 # tests build leave no temp folders behind.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
 cp_script selftest.sh

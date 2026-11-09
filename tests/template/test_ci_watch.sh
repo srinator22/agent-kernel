@@ -8,7 +8,7 @@
 # log tail even while its workflow run is still in progress. The watch
 # loop runs against a fake gh on PATH and a local bare remote; no network.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 put() { mkdir -p "$(dirname "$1")"; printf '%s\n' "${@:2}" > "$1"; }
 W=.github/workflows
