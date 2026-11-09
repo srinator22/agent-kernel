@@ -109,6 +109,23 @@ class ImportRawTests(unittest.TestCase):
         self.assertFalse((self.session / "README.md").exists())
         self.assertEqual(src.read_bytes(), b"payload")
 
+    def test_failed_write_removes_the_partial_copy_and_a_retry_succeeds(self):
+        src = self.source("a.csv", b"payload")
+        with mock.patch.object(ir.os, "fsync", side_effect=OSError("disk full")):
+            code, out = self.run_tool(src)
+        self.assertEqual(code, 1, out)
+        self.assertFalse((self.session / "raw" / "a.csv").exists())
+        self.assertFalse((self.session / "README.md").exists())
+        code, out = self.run_tool(src)
+        self.assertEqual(code, 0, out)
+
+    def test_existing_destination_is_not_unlinked_by_the_failed_open(self):
+        self.assertEqual(self.run_tool(self.source("a.csv", b"one"))[0], 0)
+        dest = self.session / "raw" / "a.csv"
+        with self.assertRaises(FileExistsError):
+            ir.copy_exclusive(self.src / "a.csv", dest)
+        self.assertEqual(dest.read_bytes(), b"one")
+
     def test_rows_are_added_under_an_existing_table_and_notes_are_kept(self):
         self.session.mkdir()
         (self.session / "README.md").write_text(

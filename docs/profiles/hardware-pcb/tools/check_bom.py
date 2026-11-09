@@ -50,7 +50,9 @@ Rules
       part number and no stored datasheet FAILs; other prefixes WARN. A
       datasheet counts as stored when the part's own `datasheet` column or
       the matching [[parts]] row names a file that has its own manifest
-      row (a directory row covers nothing below it). Test points, mounting holes,
+      row (a directory row covers nothing below it; a bare per-file name
+      matches the one file of that name below the folder, as check_manifest).
+      Test points, mounting holes,
       net ties and fiducials are exempt. Plain passives with generic values
       are summarised, not required to have a part number.
     - Grade: matching parts below the minimum FAIL unless the [[parts]] row

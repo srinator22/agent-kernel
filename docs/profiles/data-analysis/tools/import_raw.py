@@ -51,10 +51,17 @@ def copy_exclusive(source: Path, dest: Path) -> None:
     """Copy bytes to a new file; 'xb' makes an existing destination an error instead of an overwrite."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(source, "rb") as src, open(dest, "xb") as out:
-        for block in iter(lambda: src.read(CHUNK), b""):
-            out.write(block)
-        out.flush()
-        os.fsync(out.fileno())
+        # Past this point dest is our own file; remove it if the copy dies so a retry is not blocked. The
+        # open above is outside the try: its FileExistsError must never unlink someone else's file.
+        try:
+            for block in iter(lambda: src.read(CHUNK), b""):
+                out.write(block)
+            out.flush()
+            os.fsync(out.fileno())
+        except BaseException:
+            out.close()
+            dest.unlink(missing_ok=True)
+            raise
 
 
 def plan(session: Path, subdir: str, sources: list[Path]) -> list[tuple[Path, Path]]:

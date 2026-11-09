@@ -33,8 +33,9 @@ parameters.toml tables read
       declared_classes. Any other class (a misspelling such as "24v" for
       "24V") is a FAIL naming the class and the closest known classes,
       wherever it appears, because it would match no pin and so read as no
-      hazard. Two known classes that differ only in case, spacing or
-      punctuation ("24V" and "24v" on a port pin) are a FAIL too.
+      hazard. Two known classes that differ only in case, spaces or
+      underscores ("24V" and "24v" on a port pin) are a FAIL too; signs
+      such as "+12V" and "-12V" stay distinct.
     [[ports]]
       id = "P1"                         required, unique label
       name = "Main input"
@@ -67,7 +68,7 @@ Rules
       is present, both class lists are non-empty lists of class names,
       damaging_pairs (if given) is a list of two-class pairs, declared_classes
       (if given) is a list of class names, no key is unknown, no class is
-      unknown and no two classes differ only in case or spacing. When any pairing mates and the table is missing (including a
+      unknown and no two classes differ only in case, spaces or underscores. When any pairing mates and the table is missing (including a
       misspelt table name), empty or malformed, one connectors.hazard FAIL
       names the problem and each pairing with no damaging pin is a
       cross_plug FAIL reading UNKNOWN; an unknown key or an unknown class
@@ -107,6 +108,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import re
 import sys
 import tomllib
 from dataclasses import asdict, dataclass
@@ -214,14 +216,15 @@ def _unknown_classes(usable: dict, known: set[str]) -> list[str]:
 
 
 def _near_duplicates(known: set[str]) -> list[str]:
-    """One message per group of known classes that differ only in case, spacing or punctuation.
+    """One message per group of known classes that differ only in case, spaces or underscores.
 
+    Signs and other symbols stay significant ("+12V" and "-12V", "D+" and "D-" are different classes).
     A misspelt port pin class ("24v" for "24V") is itself a known class, so the unknown-class check cannot
     see it; the listed spelling next to it is the evidence."""
     groups: dict[str, list[str]] = {}
     for name in sorted(known):
-        groups.setdefault("".join(ch for ch in name.lower() if ch.isalnum()), []).append(name)
-    return [f"pin classes {', '.join(repr(n) for n in names)} differ only in case, spacing or punctuation; "
+        groups.setdefault(re.sub(r"[\s_]+", "", name.lower()), []).append(name)
+    return [f"pin classes {', '.join(repr(n) for n in names)} differ only in case, spaces or underscores; "
             "one is a misspelling and is read as no hazard" for names in groups.values() if len(names) > 1]
 
 
