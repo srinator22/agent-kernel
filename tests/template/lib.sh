@@ -80,15 +80,115 @@ cp_script() {
   done
 }
 
+# t_check_exec NAME [EXEMPT...]: every *.sh the fixture holds under scripts/ and
+# tests/template/ is executable on disk (a path relative to the fixture may be
+# exempted when a case needs it without). Linux refuses to run a script that
+# lacks the bit; Git Bash on Windows runs it anyway because it honours the
+# shebang, so this assertion bites on Linux and macOS and a Windows-only gate
+# cannot see the miss.
+# t_exec_bits_work: true where chmod really sets the bit. On Windows (NTFS)
+# chmod is a no-op and Git Bash calls a file executable exactly when it starts
+# with #!, so a fixture script without one would be reported falsely. Probed
+# once per shell.
+T_EXEC_BITS=""
+t_exec_bits_work() {
+  local d
+  if [[ -z "$T_EXEC_BITS" ]]; then
+    T_EXEC_BITS=0
+    if d="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.xb.XXXXXX")"; then
+      printf 'echo x\n' > "$d/p.sh"; chmod +x "$d/p.sh"
+      printf '#!/bin/sh\n' > "$d/s.sh"; chmod -x "$d/s.sh"
+      if [[ -x "$d/p.sh" && ! -x "$d/s.sh" ]]; then T_EXEC_BITS=1; fi
+      case "$d" in */template-selftest.xb.*) rm -rf "$d" ;; esac
+    fi
+  fi
+  [[ "$T_EXEC_BITS" == 1 ]]
+}
+
+t_check_exec() {
+  local name="$1" f rel x bad="" exempt=0
+  shift
+  [[ -n "$FIX" && -d "$FIX" ]] || return 0
+  if ! t_exec_bits_work; then
+    if [[ -z "${T_EXEC_NA:-}" ]]; then
+      t_na "$name: executable bits: chmod cannot set them on this platform; covered by Linux CI"
+      T_EXEC_NA=1
+    fi
+    return 0
+  fi
+  while IFS= read -r f; do
+    rel="${f#"$FIX"/}"
+    exempt=0
+    for x in "$@"; do [[ "$x" == "$rel" ]] && exempt=1; done
+    (( exempt )) || [[ -x "$f" ]] || bad="$bad $rel"
+  # tests/template/fixtures/ holds data copies (fixtures/check.sh is 100644 in
+  # git on purpose), not scripts a test runs.
+  done < <(find "$FIX/scripts" "$FIX/tests/template" -path "$FIX/tests/template/fixtures" -prune -o -name '*.sh' -type f -print 2>/dev/null | sort)
+  assert_eq "$name: every script the fixture writes is executable on disk" "" "${bad# }"
+}
+
 t_cleanup() {
+  # T_EXEC_CHECK=1 runs t_check_exec on every fixture just before it goes.
+  if [[ "${T_EXEC_CHECK:-}" == 1 && -n "$FIX" ]]; then t_check_exec "$T_NAME fixture"; fi
   cd / || true
   case "$FIX" in
     */template-selftest.*) rm -rf "$FIX" ;;
   esac
   FIX=""
 }
-# A test that exits before t_finish still removes its fixture.
-trap t_cleanup EXIT
+
+# t_parallel NAME FUNC: run FUNC (a section of the test that builds its own
+# fixtures) in a background subshell, so independent sections of a slow test
+# overlap. t_parallel_wait then prints each section's lines in call order and
+# adds its pass and fail counts. A section must not rely on state from
+# another; its assertions count exactly as if it had run inline.
+T_PAR_DIR=""
+T_PAR_COUNT=0
+T_PAR_PIDS=()
+T_PAR_NAMES=()
+t_parallel() {
+  local n dir
+  if [[ -z "$T_PAR_DIR" ]]; then
+    T_PAR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest-par.XXXXXX")" || exit 1
+  fi
+  T_PAR_COUNT=$((T_PAR_COUNT + 1))
+  n=$T_PAR_COUNT; dir="$T_PAR_DIR"
+  (
+    # The section owns its own fixtures; the shared folder is the parent's.
+    T_PAR_DIR=""; T_PASS=0; T_FAIL=0; FIX=""
+    "$2"
+    t_cleanup
+    echo "$T_PASS $T_FAIL" > "$dir/$n.counts"
+  ) > "$dir/$n.out" 2>&1 &
+  T_PAR_PIDS[$n]=$!
+  T_PAR_NAMES[$n]="$1"
+}
+t_parallel_wait() {
+  local n p f
+  for (( n = 1; n <= T_PAR_COUNT; n++ )); do
+    wait "${T_PAR_PIDS[$n]}" || true
+    cat "$T_PAR_DIR/$n.out"
+    if [[ -f "$T_PAR_DIR/$n.counts" ]]; then
+      read -r p f < "$T_PAR_DIR/$n.counts"
+      T_PASS=$((T_PASS + p))
+      T_FAIL=$((T_FAIL + f))
+    else
+      t_bad "section ${T_PAR_NAMES[$n]} ended before it finished"
+    fi
+  done
+  t_par_cleanup
+}
+t_par_cleanup() {
+  case "$T_PAR_DIR" in
+    */template-selftest-par.*) rm -rf "$T_PAR_DIR" ;;
+  esac
+  T_PAR_DIR=""
+  T_PAR_COUNT=0
+}
+
+# A test that exits before t_finish still removes its fixture and sections.
+t_exit() { t_cleanup; t_par_cleanup; }
+trap t_exit EXIT
 
 t_finish() {
   t_cleanup

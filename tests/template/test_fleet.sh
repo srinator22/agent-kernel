@@ -10,9 +10,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh
 make_fixture
 cp_script fleet.sh template-sync.sh
 printf '# Agents\n' > AGENTS.md
-printf 'echo a\n' > scripts/a.sh
+printf 'echo a\n' > scripts/a.sh; chmod +x scripts/a.sh
 git add -A >/dev/null 2>&1 && git commit -q -m one && git tag template-v0.1.0
-printf 'echo b\n' > scripts/b.sh
+printf 'echo b\n' > scripts/b.sh; chmod +x scripts/b.sh
 git add -A >/dev/null 2>&1 && git commit -q -m two && git tag template-v0.2.0
 printf 'x\n' > notes.txt
 git add -A >/dev/null 2>&1 && git commit -q -m notes

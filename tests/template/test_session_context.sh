@@ -124,7 +124,7 @@ assert_contains "no python: the Setup line names python and doctor" "[session-co
 assert_eq "no python: exactly one Setup line" "1" "$(printf '%s\n' "$OUT" | grep -c '^\[session-context\] Setup:')"
 case "$NOPY_ROOT" in */template-selftest.nopy.*) rm -rf "$NOPY_ROOT" ;; esac
 # The unwired hook warning.
-echo '#!/usr/bin/env bash' > scripts/feedback-log.sh
+echo '#!/usr/bin/env bash' > scripts/feedback-log.sh; chmod +x scripts/feedback-log.sh
 mkdir -p .claude
 echo '{}' > .claude/settings.json
 run bash scripts/session-context.sh
@@ -342,7 +342,7 @@ assert_not_contains "a header-only change has no kernel sentence" "The kernel or
 # print the kernel sentence: the kind order puts agents first, so the core path
 # does not hide the AGENTS.md change.
 git tag template-v0.4.0
-echo "# x" > scripts/extra_core.sh
+echo "# x" > scripts/extra_core.sh; chmod +x scripts/extra_core.sh
 sed -i 's/^- index two/- index three/' AGENTS.md
 git add -A; git commit -q -m "feat: core file and rules index together"
 run bash scripts/session-context.sh

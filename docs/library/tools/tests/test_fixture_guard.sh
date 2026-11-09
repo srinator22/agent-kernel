@@ -5,7 +5,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="$HERE/../fixture-guard.sh"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+# A sibling folder, not inside $work: the not-a-repository case needs a path
+# outside the throwaway repository. Both go on exit.
+notrepo="$work.notrepo"
+trap 'rm -rf "$work" "$notrepo"' EXIT
 
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
@@ -62,7 +65,11 @@ expect 0 "explicit commit" -- bash "$GUARD" "${ARGS[@]}" HEAD~2
 expect 2 "missing arguments" -- bash "$GUARD"
 expect 2 "unknown commit" -- bash "$GUARD" "${ARGS[@]}" deadbeefdeadbeef
 expect 2 "unknown option" -- bash "$GUARD" "${ARGS[@]}" --nope
-expect 2 "not a repository" -- bash "$GUARD" "${ARGS[@]}" --root "$(mktemp -d)"
+mkdir "$notrepo"
+expect 2 "not a repository" -- bash "$GUARD" "${ARGS[@]}" --root "$notrepo"
+# Exit 2 alone also comes from "HEAD is not a commit" when $notrepo sits inside
+# a repository, so the message pins the branch that was meant.
+grep -q "is not a git repository" "$work/out.txt" || fail "not a repository: output does not say it is not a git repository"
 expect 0 "help" -- bash "$GUARD" --help
 
 echo "fixture-guard-test: OK"

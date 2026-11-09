@@ -90,7 +90,7 @@ EXPR='. scripts/find-python.sh 2>/dev/null; printf %s "${PY:-}"'
 OUT="$(bash -e -c 'PY="$(bash -c "$1")"; echo "[$PY]"' _ "$EXPR" 2>&1)"; RC=$?
 assert_rc "check.sh 5f expression survives a missing helper" 0
 assert_eq "check.sh 5f expression is empty without the helper" "[]" "$OUT"
-printf 'exit 0\n' > scripts/find-python.sh
+printf 'exit 0\n' > scripts/find-python.sh; chmod +x scripts/find-python.sh
 OUT="$(bash -e -c 'PY="$(bash -c "$1")"; echo "[$PY]"' _ "$EXPR" 2>&1)"; RC=$?
 assert_rc "check.sh 5f expression survives a helper that exits" 0
 assert_eq "check.sh 5f expression is empty for a helper that exits" "[]" "$OUT"

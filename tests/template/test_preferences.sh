@@ -210,7 +210,7 @@ assert_contains "the extra-column row is named" "U-001"
 
 # ---- the unwired-hook warning ----
 fresh
-printf '#!/usr/bin/env bash\n' > scripts/feedback-log.sh
+printf '#!/usr/bin/env bash\n' > scripts/feedback-log.sh; chmod +x scripts/feedback-log.sh
 mkdir -p .claude
 printf '{"hooks": {}}\n' > .claude/settings.json
 reg ui "$HDR

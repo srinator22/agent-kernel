@@ -61,14 +61,18 @@ blueprint_parity() {
       if (isd[n]) stack[lv] = full
     }
     END { flush() }' "$bp")"
+  # Whole-line matches on the newline-framed tree, not printf | grep -q: an
+  # early-exit reader can end the writer with SIGPIPE under pipefail once the
+  # tree outgrows the pipe buffer ("printf: write error: Broken pipe").
+  local nl=$'\n'
   for f in "$@"; do
     ok=0
-    if printf '%s\n' "$tree" | grep -qxF -- "F $f"; then ok=1
-    else
+    case "$nl$tree$nl" in *"${nl}F $f${nl}"*) ok=1 ;; esac
+    if (( ! ok )); then
       anc="$f"
       while [[ "$anc" == */* ]]; do
         anc="${anc%/*}"
-        if printf '%s\n' "$tree" | grep -qxF -- "L $anc/"; then ok=1; break; fi
+        case "$nl$tree$nl" in *"${nl}L $anc/${nl}"*) ok=1; break ;; esac
       done
     fi
     (( ok )) || echo "$bp section 2 does not list $f by its full path"

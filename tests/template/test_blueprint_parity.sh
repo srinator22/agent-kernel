@@ -51,7 +51,7 @@ BP
 }
 touch_files() {
   local f
-  for f in "$@"; do mkdir -p "$(dirname "$f")"; echo x > "$f"; done
+  for f in "$@"; do mkdir -p "$(dirname "$f")"; echo x > "$f"; [[ "$f" == *.sh ]] && chmod +x "$f"; done
 }
 
 write_blueprint
