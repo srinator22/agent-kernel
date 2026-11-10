@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/session-context.sh\"",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" session-context"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/feedback-log.sh\"",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" feedback-log",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/destructive-guard.sh\" || exit 2",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 2) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" destructive-guard"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/stop-gate.sh\"",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" stop-gate",
+            "timeout": 1200
+          }
+        ]
+      }
+    ]
+  }
+}

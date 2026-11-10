@@ -54,7 +54,7 @@ t_cleanup
 # Preference registers: one summary line, a warning while the feedback hook is
 # unwired, and exit 0 whatever the registers hold or whether Python exists.
 make_fixture
-cp_script session-context.sh doctor.sh find-python.sh
+cp_script session-context.sh doctor.sh find-python.sh preferences.sh
 git add scripts && git commit -q -m "chore: scripts"
 run bash scripts/session-context.sh
 assert_rc "no registers: exits 0" 0
@@ -131,12 +131,25 @@ run bash scripts/session-context.sh
 assert_rc "an unwired hook: exits 0" 0
 assert_contains "an unwired hook is warned about" "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json"
 assert_contains "the warning names the hand merge" "UserPromptSubmit"
+assert_contains "the warning names the Codex hooks file too" ".codex/hooks.json"
 echo '{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"bash scripts/feedback-log.sh","timeout":5}]}]}}' > .claude/settings.json
 run bash scripts/session-context.sh
 assert_not_contains "a wired hook is not warned about" "is not wired"
 rm -rf .claude
 run bash scripts/session-context.sh
 assert_contains "a missing settings.json counts as unwired" "is not wired in .claude/settings.json"
+mkdir -p .codex
+echo '{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"bash scripts/feedback-log.sh"}]}]}}' > .codex/hooks.json
+run bash scripts/session-context.sh
+assert_not_contains "a hook wired only in .codex/hooks.json is not warned about" "is not wired"
+echo '{}' > .codex/hooks.json
+run bash scripts/session-context.sh
+assert_contains "a .codex/hooks.json without the hook is still unwired" "is not wired in .claude/settings.json"
+rm -rf .codex
+mv scripts/preferences.sh scripts/preferences.sh.off
+run bash scripts/session-context.sh
+assert_not_contains "without scripts/preferences.sh the warning is skipped" "is not wired"
+mv scripts/preferences.sh.off scripts/preferences.sh
 rm -rf docs/preferences
 run bash scripts/session-context.sh
 assert_not_contains "no registers: the summary disappears again" "Preferences:"

@@ -316,7 +316,7 @@ run ./scripts/check.sh --quick
 assert_rc "template mode with --quick exits 0" 0
 
 # ---- 4i in template mode, and the register files in the required list ----
-for f in scripts/feedback-log.sh scripts/preferences.sh scripts/dream/feedback.py scripts/dream/preferences.py          docs/preferences/README.md docs/procedures/preferences.md tests/template/test_feedback.sh tests/template/test_preferences.sh; do
+for f in scripts/feedback-log.sh scripts/preferences.sh scripts/dream/feedback.py scripts/dream/preferences.py          docs/preferences/README.md docs/procedures/preferences.md tests/template/test_feedback.sh tests/template/test_preferences.sh .codex/hooks.json scripts/codex-hook.cmd tests/template/test_codex_hooks.sh; do
   req=0
   for r in "${REQUIRED[@]}"; do [[ "$r" == "$f" ]] && req=1; done
   assert_eq "$f is in the required list" "1" "$req"
