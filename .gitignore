@@ -8,6 +8,8 @@ CLAUDE.local.md
 # Background-job state and logs are not.
 .work/jobs/*
 !.work/jobs/.gitkeep
+# The owner's private-terms list (docs/rules/security.md) never enters git.
+.work/private-terms.txt
 
 # OS and editor junk
 .DS_Store
