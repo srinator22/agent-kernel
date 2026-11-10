@@ -12,8 +12,13 @@
   repo public, removing auth, widening network access, opening a public
   endpoint.
 - A public repository holds no private personal identifier (real name,
-  personal email, home path), in files or in history; scan before
-  widening exposure.
+  personal email, home path), in files or in history. List such terms in
+  the gitignored .work/private-terms.txt; check.sh runs
+  `scripts/private-terms.sh check` (staged content, paths, local branch
+  names, unpushed commits); run `scripts/private-terms.sh history` (every
+  ref, diff and annotated tag) before widening exposure. Pushed history,
+  submodules and non-ASCII case folding are not covered by check; a
+  pushed branch named with a term fails check until renamed locally.
 - Validate imports and uploads: file type, size, recursion depth, and
   decompression limits before processing.
 - Normalize paths; reject traversal; never write outside the intended

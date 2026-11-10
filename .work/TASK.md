@@ -1,55 +1,73 @@
-# Task: {{title}}
-Mode: standard | quick | autopilot
-Branch: {{branch}}
-Date: {{date}}
+# Task: private-terms-guard
+Mode: autopilot
+Branch: feat/private-terms-guard
+Date: 2026-11-10
 
 ## Goal
-{{one paragraph}}
+A local leak guard for private words. The owner lists terms that must never appear in the repository (real names, personal emails, home paths, private project names) in a gitignored `.work/private-terms.txt`. `scripts/private-terms.sh check` fails when the index (staged content, text and binary) or a tracked path contains one, or when a commit not yet on any remote-tracking ref has one in its message, author, committer or diff, or a local branch name holds one; check.sh runs it in the always section. `scripts/private-terms.sh history` scans every ref name, every commit on every ref with its full diff (merges as combined diffs, binaries as text) and every annotated tag, and is the step to run before any visibility change. Output names files, commits and tags with every term masked as `***` and the term's line number in the terms file, never the term itself, so a log can be pasted anywhere.
 
 ## Non-goals
-<!-- explicitly out of scope; scope creep gets caught here -->
-- {{out of scope}}
+- Rewriting history or removing a match (the owner decides; docs/rules/destructive-actions.md).
+- A shared or committed terms list; CI has no terms file and skips.
+- Regular expressions, fuzzy matching, or non-ASCII case folding: terms are fixed strings, ASCII case-insensitive; a non-ASCII byte matches exactly.
+- Submodule contents, untracked files, unstaged working-tree edits.
+- The README and hero naming (separate change).
 
 ## Budget
-<!-- declare before work starts; on exhaustion: stop, keep the best verified
-     artifact, and report unresolved items with reasons - never hide a partial
-     result behind a fluent answer -->
-- Wall-clock: {{max}}
-- Subagents / workflow runs: {{max}}
-- Retries per failing step: {{max, default 2}}
-- Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
+- Wall-clock: 2 h
+- Subagents / workflow runs: 5 (plan reviewer, change reviewer, monitor, spare)
+- Retries per failing step: 2
+- Escalate to human when: criteria unreachable or scope exceeds Non-goals
 
 ## Assumptions
-<!-- one line per assumption the work rests on: [confirmed] the human said so,
-     [verified] -> evidence (a command or file), [open] not yet settled.
-     scripts/tasklint.sh ship (the full gate) fails while any line is [open],
-     except in quick mode -->
-- [open] {{assumption}}
+- [confirmed] the owner wants personal identifiers out of the tree and history and delegated decisions for this work (2026-11-09 and 2026-11-10)
+- [verified] the BACKLOG row describes this guard -> BACKLOG.md:50
+- [verified] `.work/` holds both tracked memory and ignored state, so the terms file needs its own .gitignore line -> .gitignore:7-36
+- [verified] check.sh's always section runs optional scripts behind `[[ -f scripts/x.sh ]]` so a project without one still passes -> scripts/check.sh:172-186
+- [verified] rules files are capped at 40 lines by lessons.sh -> scripts/lessons.sh check output "rules files <= 40 lines"
+- [verified] projects copy .gitignore additions only at adoption, so a project may lack the ignore line -> docs/procedures/upstream.md:156-160
+- [verified] the template creates annotated tags -> scripts/template-release.sh:210
+- [confirmed] (owner delegated, 2026-11-10; plan review B6) `check` scans only commits not reachable from any remote-tracking ref (`HEAD --not --remotes`; all of HEAD when there is no remote), so pushed history never turns check.sh red; `history` is the full scan and its findings are the owner's to act on
 
 ## Acceptance criteria
-<!-- each maps to an executable test where possible; list test paths. A ticked
-     line needs "-> <existing path>" or "-> judgment: <reason>"
-     (scripts/tasklint.sh check) -->
-- [ ] {{criterion}} -> {{test path or "judgment: reason"}}
+- [ ] A1 with no terms file, `check` and `history` print one line naming the file and exit 0; a terms file with no terms after normalising passes the same way without calling git grep -> tests/template/test_private_terms.sh
+- [ ] A2 terms are read one per line inside awk from the file (never through -v); CR, surrounding blanks, empty lines and `#` comment lines are ignored; a term shorter than 3 bytes is a usage error (exit 2) naming its line; a duplicate term (any case) is reported once under its first line number; backslashes and regex characters are literal -> tests/template/test_private_terms.sh
+- [ ] A3 `check` exits 1 and prints `<path>: <count> line(s) (term N)` for each staged file (text or binary, `git grep --cached -a`) containing a term in any ASCII letter case, `<path> (term N)` for a tracked path containing one, and `commit <sha12> (term N)` for a commit in `HEAD --not --remotes` whose message, author name or email, committer name or email, or diff (added or removed lines, so a term added and removed again before a push is found) contains one, and `<ref> (term N)` for a local branch name holding one; untracked and ignored files are not scanned; pushed commits are not scanned; a repository with no commits scans only the index; a clean run exits 0 printing the count of terms; a filename holding a colon is named whole (not on Windows); a non-ASCII term matches in its exact case -> tests/template/test_private_terms.sh
+- [ ] A4 `history` names the commit for a term that exists only on another branch, only in a diff a later commit removed, only in a merge's conflict resolution, or only in a pushed commit; it names `tag <name> (term N)` for an annotated tag whose message or tagger holds one, and the masked ref name for any branch, tag or remote-tracking ref whose name holds one; exit 1 on any match, 0 when clean -> tests/template/test_private_terms.sh
+- [ ] A5 every printed path, tag name and file name has each term masked as `***` (ASCII case-insensitive); the term text never appears in any output, asserted in the fixture's casing and lowercased for content, path, commit, tag, refusal and usage output -> tests/template/test_private_terms.sh
+- [ ] A6 a terms file inside the repository that git does not ignore (tracked, or lacking a .gitignore line) is refused (exit 1) before any scan with a line saying to untrack and ignore it; a terms file outside the repository (its resolved absolute path not under the root) is accepted, and any other git check-ignore failure refuses; `.work/private-terms.txt` is in .gitignore; `PRIVATE_TERMS_FILE` overrides the path (test hook) -> tests/template/test_private_terms.sh
+- [ ] A7 usage errors (no command, unknown command) exit 2; a git error exits 1, never 0; the script is bash 3.2 safe (no mapfile, no associative arrays), runs under LC_ALL=C, uses awk without GNU extensions or interval expressions, and keeps its temp files under TMPDIR removed by a trap -> tests/template/test_private_terms.sh and judgment: the reviewer reads the script
+- [ ] A8 check.sh's always section runs `scripts/private-terms.sh check` when the script exists and fails on its exit 1; the check.sh summary line names private terms; tests/template/fixtures/check.sh stays identical; the template self-test's required list and the BLUEPRINT tree name the script and its test; docs/rules/security.md says where the terms file lives, what check and history cover and skip (pushed history, submodules, non-ASCII case), and to run `history` before any visibility change -> tests/template/test_check_always.sh and judgment: the reviewer reads the docs
+- [ ] A9 ./scripts/check.sh green on the pushed head (CI run) -> judgment: CI log of the PR head
+
+## Design
+`scripts/private-terms.sh check|history`, `LC_ALL=C` exported, cwd the repository root. Terms path `${PRIVATE_TERMS_FILE:-.work/private-terms.txt}`.
+- Normalise: one awk pass over the terms file writes `N<TAB>lowercased term` (first occurrence only) to a mktemp file under TMPDIR, removed by an EXIT trap. Zero terms: exit 0 before any git call.
+- Refuse: when the terms file's resolved absolute path is under the repository root, `git check-ignore -q -- <terms>` must exit 0 (any other exit refuses: tracked, not ignored, or a git error); a path outside the root is accepted. Both sides are resolved the same way (`cd` plus `pwd -P`, as check.sh does), never mixing `git rev-parse --show-toplevel` with `pwd`.
+- One awk scanner, terms loaded as its first file operand, input on stdin, `-v MODE=` one of `paths`, `stream`, `content` (with `-v TN=`). It masks every term in any printed label by marking all matched byte spans on the lowercased label first and then replacing each marked run with `***`, so overlapping terms leave no fragment. stream mode: a line `SOH commit <40 hex>` (SOH built with sprintf("%c",1), hex checked as 40 or 64 characters of [0-9a-f]) sets the label `commit <sha12>`; `SOH tag <name>` sets `tag <masked name>`; every other line is matched with `index(tolower(line), term)` and reported once per (label, term).
+- check, contents: per term, `git grep -z --no-color --cached -a -c -i -F -e <term> | tr '\0' ':'` (no C-quoting); exit 1 none, above 1 a git error (exit 1); each `path:count` line is split at its last colon and printed masked by the scanner in content mode. One matcher only, so no candidate goes unattributed.
+- check, paths: `git ls-files -z | tr '\0' '\n'` (no C-quoting) into the scanner in paths mode; then `git for-each-ref refs/heads --format='%(refname)'` into paths mode.
+- check, commits: when HEAD exists, `git -c core.quotepath=off log -p --cc --text --no-ext-diff --no-textconv -U0 --no-color --format='%x01commit %H%n%an <%ae>%n%cn <%ce>%n%B' HEAD --not --remotes` into stream mode.
+- history: `git -c core.quotepath=off log --all -p --cc --text --no-ext-diff --no-textconv -U0 --no-color` with the same format, then `git for-each-ref refs/tags --format='%01tag %(refname:short)%0a%(taggername) %(taggeremail)%0a%(contents)'`, both into stream mode, and `git for-each-ref --format='%(refname)'` (every branch, tag and remote-tracking ref) into paths mode.
+- Pipeline failures are read from PIPESTATUS: a git exit other than 0 is a failure (exit 1) with a message naming the step.
+Exit 0 clean, 1 match, refusal or git error, 2 usage.
 
 ## Plan
-<!-- task graph: one node per row; nodes that can run in the same wave must
-     own disjoint files. Tiers: cheap, standard, strong, advisor, reviewer.
-     Status: todo, doing, done, blocked. Validate: scripts/taskgraph.sh check -->
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
-| N1 | - | path/one, path/two | standard | todo |
+| N1 | - | scripts/private-terms.sh, tests/template/test_private_terms.sh, scripts/check.sh, tests/template/fixtures/check.sh, tests/template/test_check_always.sh, .gitignore, docs/rules/security.md, docs/BLUEPRINT.md, BACKLOG.md | advisor | done |
+| N2 | N1 | .work/TASK.md | reviewer | doing |
 
 ## Plan verdict
-<!-- autopilot only: the reviewer's plan review of Goal, Assumptions,
-     Acceptance criteria and Plan, written before any node starts;
-     scripts/tasklint.sh requires PASS once a node is doing or done -->
+PASS (round 4, reviewer, 2026-11-10). All round 1-3 blockers and notes are resolved, and I found no new blocker. Every criterion names a test path or a judgment reason, and the assumptions are evidenced. The Design matches the Goal, and the plan stays within Non-goals. Blockers: none. N1. Put this block at the top of the section exactly as written, so its first line is PASS. N2. In the A3 and A5 tests, include one staged file whose name holds a term, so the git grep -z -c | tr path shows masked output for content matches.
+FAIL (round 3, reviewer, 2026-11-10). The plan itself now holds up: both round-2 blockers and N1-N5 are addressed. One blocker is left, and it is a corrupted line in .work/TASK.md rather than a design flaw. B1. .work/TASK.md now has a NUL byte and a stray line break in the Design (lines 49-50); the ls-files bullet was meant to say tr '\0' '\n'. Fix: rewrite lines 49-50 as one line with the literal text, then confirm the file has no NUL byte. N1 record each round's block word for word, newest first. N2 resolve both sides of the inside-the-repository test the same way (cd plus pwd -P). N3 git grep -z -c then tr '\0' ':' avoids C-quoted paths. N4 say in security.md that check scans local branch names, so a pushed branch whose name holds a term turns check.sh red until renamed locally.
+FAIL (round 2, reviewer, 2026-11-10). Two gaps remain, both with one-line fixes. B1. Ref names are never matched: history sets each tag's label from the tag line but never checks the name itself against the terms; branch and remote-tracking ref names are not read at all. Fix: pipe git for-each-ref --format='%(refname)' through the scanner in paths mode with masked output in history, and local branches in check; add an A4 case. B2. check reads unpushed commits without their diffs: a term committed and removed by a later unpushed commit passes check and the push sends it. Fix: give that git log the same -p --cc --text --no-ext-diff --no-textconv -U0 flags as history; add an A3 case. Notes: N1 accept 40 or 64 hex; N2 decide outside by path, refuse other 128; N3 --no-color on git grep; N4 mask overlapping spans together; N5 ls-files -z; N6 record the block verbatim. All folded into Goal, A3, A4, A6 and Design.
+FAIL (round 1, reviewer, 2026-11-10). B1 masked output; B2 SOH commit marker; B3 one matcher, LC_ALL=C, git errors fail; B4 binaries scanned; B5 merges (--cc) and annotated tags; B6 check scans unpushed commits only; B7 refuse a terms file git does not ignore. Notes N1-N11 folded in (N9: index scanned; N11: submodules a Non-goal).
 
 ## Progress log
-<!-- timestamped one-liners; this is what survives compaction -->
+- 2026-11-10 N1: tests written first (tests/template/test_private_terms.sh); first run 104 passed, 5 failed: a merge-fixture typo, branch and tag names that did not hold the term, and a real defect: gawk's tolower folds Latin-1 bytes under LC_ALL=C, which changed a UTF-8 term's bytes. Fixed with one shared ASCII-only lc() used by both awk programs. Final local run (Windows, Git Bash): "test_private_terms.sh: 109 passed, 0 failed" (the colon file name case is n/a on Windows, runs on Linux CI). test_blueprint_parity.sh 11 passed, 0 failed; test_test_files.sh 11 passed, 0 failed. test_check_always.sh did not finish locally inside 10 minutes (parallel sections, slow on Windows); CI runs it.
+- 2026-11-10 real scan of this repository with a local terms list (12 terms): check OK; history found 45 commits holding terms, every one only on old local branches from before the history rewrite (git branch -r --contains and git tag --contains empty for all 45); published refs are clean.
 
 ## Review verdict
-<!-- written ONLY by the independent reviewer -->
 
 ## Retro
-<!-- filled by docs/procedures/retro.md -->

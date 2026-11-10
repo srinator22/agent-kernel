@@ -185,6 +185,14 @@ if [[ -f scripts/preferences.sh ]]; then
   bash scripts/preferences.sh check || gerr "scripts/preferences.sh check failed (docs/preferences/README.md has the format)"
 fi
 
+# 4j. No private term (a gitignored list the owner keeps, docs/rules/
+# security.md) in staged content, tracked paths, local branch names or
+# unpushed commits. Without the list, as in CI, the script says so and
+# passes. Skipped where the project does not carry the script.
+if [[ -f scripts/private-terms.sh ]]; then
+  bash scripts/private-terms.sh check || gerr "scripts/private-terms.sh check failed (a private term is in the repository; the lines above name where, masked)"
+fi
+
 # Step 5: template-mode gate. Before start runs there is no stack to
 # check, so the gauntlet checks the template itself: a green badge means
 # the template is intact, not merely that nothing executed.
@@ -280,6 +288,7 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_feedback.sh tests/template/test_preferences.sh
     tests/template/test_find_python.sh tests/template/test_taste_project.sh
     scripts/doctor.sh tests/template/test_doctor.sh
+    scripts/private-terms.sh tests/template/test_private_terms.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -423,7 +432,7 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers, private terms)"
   exit 0
 fi
 
