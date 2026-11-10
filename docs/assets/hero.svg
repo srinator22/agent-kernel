@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460" role="img" aria-labelledby="t d">
-  <title id="t">Agentic template</title>
+  <title id="t">agent-kernel</title>
   <desc id="d">A day and night loop. By day the agent plans, builds, checks and ships. By night it reads back the day, finds lessons, asks you to approve them and remembers what you approved.</desc>
   <style>
     text { font-family: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
@@ -49,7 +49,7 @@
     </g>
     <line x1="0" y1="250" x2="1200" y2="250" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="1.5"/>
 
-    <text class="title" x="64" y="128">Agentic template</text>
+    <text class="title" x="64" y="128">agent-kernel</text>
     <text class="lede" x="66" y="174">A starter kit that makes AI coding agents</text>
     <text class="lede" x="66" y="204">careful, and teaches them what you like.</text>
     <text class="night-lede" x="66" y="318">It works by day.</text>
