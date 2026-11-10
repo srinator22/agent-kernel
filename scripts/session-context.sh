@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # session-context.sh - SessionStart hook target: mechanizes kernel rule 7
-# for Claude Code. Fires at startup, resume, clear, and after compaction
-# (SessionStart source "compact"), so the rule-7 re-read happens by
-# mechanism, not memory. stdout is injected into the session context:
-# keep it small and stable. Other harnesses rely on the prose rule.
+# for Claude Code (.claude/settings.json) and Codex (.codex/hooks.json).
+# Fires at startup, resume, clear, and after compaction (SessionStart source
+# "compact"), so the rule-7 re-read happens by mechanism, not memory. stdout
+# is injected into the session context: keep it small and stable. Other
+# harnesses rely on the prose rule.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

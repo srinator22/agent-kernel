@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "bash \"$(git rev-parse --show-toplevel)/scripts/session-context.sh\"",
-            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" session-context"
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" session-context"
           }
         ]
       }
@@ -17,7 +17,7 @@
           {
             "type": "command",
             "command": "bash \"$(git rev-parse --show-toplevel)/scripts/feedback-log.sh\"",
-            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" feedback-log",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" feedback-log",
             "timeout": 5
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "bash \"$(git rev-parse --show-toplevel)/scripts/destructive-guard.sh\" || exit 2",
-            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 2) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" destructive-guard"
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 2) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 2) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" destructive-guard"
           }
         ]
       }
@@ -41,7 +41,7 @@
           {
             "type": "command",
             "command": "bash \"$(git rev-parse --show-toplevel)/scripts/stop-gate.sh\"",
-            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" stop-gate",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" stop-gate",
             "timeout": 1200
           }
         ]

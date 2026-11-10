@@ -44,7 +44,7 @@ exp_unix() { # NAME TAIL
   printf '%s' "bash \"\$(git rev-parse --show-toplevel)/scripts/$1.sh\"$2"
 }
 exp_win() { # NAME N
-  printf '%s' "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit $2) & for /f \"usebackq delims=\" %r in (\`git rev-parse --show-toplevel\`) do @call \"%r\\scripts\\codex-hook.cmd\" $1"
+  printf '%s' "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit $2) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit $2) & for /f \"usebackq delims=\" %r in (\`git rev-parse --show-toplevel\`) do @call \"%r\\scripts\\codex-hook.cmd\" $1"
 }
 
 run "$PY" -I -B -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); print(",".join(sorted(d)), ",".join(sorted(d["hooks"])))' "$HOOKS"
@@ -122,10 +122,12 @@ for where in "" "sub"; do
   unix_hook Stop "$dir" "$STOP"
   assert_rc "$label: stop gate allows with no live task" 0
 done
-# The guard command fails closed when git cannot name a root.
+# The guard command fails closed when git cannot name a root: a folder that
+# git does not see as a repository (GIT_CEILING_DIRECTORIES stops the search
+# at the fixture, as a refused repository would).
 NOGIT="$FIX/nogit"; mkdir -p "$NOGIT"
-unix_hook PreToolUse "$NOGIT" "$PRE_ALLOW"
-assert_rc "Unix: the guard command exits 2 outside a repository" 2
+GIT_CEILING_DIRECTORIES="$FIX" unix_hook PreToolUse "$NOGIT" "$PRE_ALLOW"
+assert_rc "Unix: the guard command exits 2 where git finds no repository" 2
 
 # ---- A4/A13: the launcher file ----
 LAUNCHER="$T_ROOT/scripts/codex-hook.cmd"
@@ -197,6 +199,17 @@ sys.stdout.write("\nRC=%d" % r.returncode)
     win_hook Stop "$dir" "$STOP"
     assert_rc "$label: stop gate allows with no live task" 0
   done
+
+  # git runs but finds no repository (as when it refuses one for dubious
+  # ownership): the guard blocks, the other hooks allow with a line.
+  WNOGIT="$FIX/win nogit"; mkdir -p "$WNOGIT"
+  export GIT_CEILING_DIRECTORIES; GIT_CEILING_DIRECTORIES="$(cygpath -w "$FIX")"
+  win_hook PreToolUse "$WNOGIT" "$PRE_ALLOW"
+  assert_rc "Windows, no repository: the guard blocks" 2
+  assert_contains "Windows, no repository: the guard names the cause" "git cannot read this repository"
+  win_hook SessionStart "$WNOGIT" "$SS"
+  assert_rc "Windows, no repository: session start allows" 0
+  unset GIT_CEILING_DIRECTORIES
 
   # Unknown hook name: one stderr line, exit 0.
   win_run "\"$(cygpath -w "$SP")\\scripts\\codex-hook.cmd\" bogus" "$(cygpath -w "$SP")" "$PRE_ALLOW"

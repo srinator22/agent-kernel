@@ -7,7 +7,7 @@ Status: accepted
 
 ADR 0006 wired four Claude Code hooks (session context, feedback capture, the
 destructive guard, the stop gate) and recorded that Codex had no equivalent.
-Codex now has lifecycle hooks, on by default, with the same JSON shape as
+Codex has lifecycle hooks, on by default, with the same JSON shape as
 Claude Code's (SessionStart, UserPromptSubmit, PreToolUse, Stop and others).
 A live probe on 2026-11-10 (codex-cli 0.167.0-alpha.3.2, Windows) recorded
 the payloads: every event carries session_id, transcript_path, cwd and
@@ -26,10 +26,10 @@ work done in Codex never reached them.
 
 `.codex/hooks.json` wires the four scripts for Codex. On Unix each command is
 `bash "$(git rev-parse --show-toplevel)/scripts/<name>.sh"`; the guard's ends
-with `|| exit 2`. On Windows `commandWindows` first checks that git runs
-(the guard blocks with exit 2 when it does not, the others warn and allow),
-then finds the root with `git rev-parse` and calls `scripts/codex-hook.cmd
-<name>`, which finds Git Bash from `git --exec-path` and runs the script with
+with `|| exit 2`. On Windows `commandWindows` first checks that git runs and
+that it can read the repository (when either fails the guard blocks with exit
+2 and the others warn and allow), then finds the root with `git rev-parse` and
+calls `scripts/codex-hook.cmd <name>`, which finds Git Bash from `git --exec-path` and runs the script with
 stdin passed through. The guard fails closed when Git Bash is missing.
 
 The feedback wiring check (`scripts/preferences.sh wired`) accepts either
@@ -60,7 +60,8 @@ hooks"); the rest of ADR 0006 stands.
   - The hook input carries no `workdir`, so the guard resolves a relative
     target against the session folder.
   - A repository git refuses for dubious ownership makes `git rev-parse`
-    fail: the guard blocks and the other hooks are skipped.
+    fail: the guard blocks every command and the other hooks are skipped,
+    on Unix and Windows, until the owner fixes git's view of the folder.
   - That Codex compresses a rollout to `.zst` after the session is an
     inference from the files on disk, not observed; the reader handles a
     later rename and a `.zst` that is still being written.

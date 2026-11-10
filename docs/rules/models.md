@@ -21,7 +21,7 @@ Harness adapters:
   same four hooks in `.codex/hooks.json` (Windows through
   `scripts/codex-hook.cmd`), run once the owner trusts the project and its
   hooks; no per-agent hooks, so the worker no-commit rule is prose plus the
-  advisor gate (ADR 0014). VERIFY 2026-11-10.
+  advisor gate (template ADR 0014). VERIFY 2026-11-10.
 - Gemini CLI and Cursor: AGENTS.md only; record what loads at adoption in
   the capability map. VERIFY 2026-10-09.
 

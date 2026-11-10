@@ -2,19 +2,20 @@
 rows in the project's preference registers the owner approves line by line.
 
 Purpose: the taste pass of a dream (docs/procedures/dream.md). A model-free
-digest reduces this project's Claude Code transcripts, and the feedback notes
-in this project's auto-memory, to the owner's own preference signals; a
-read-only agent proposes numbered register lines from it; "apply" writes only
-the numbers the owner approved, through the one register writer
-(preferences.write_rows).
+digest reduces this project's Claude Code transcripts and Codex sessions, and
+the feedback notes in this project's auto-memory, to the owner's own
+preference signals; a read-only agent proposes numbered register lines from
+it; "apply" writes only the numbers the owner approved, through the one
+register writer (preferences.write_rows).
 
 Inputs: <projects>/<dir>/<session>.jsonl (top level only) under the default
 projects folder and every --projects-dir, kept only when the session's first
 cwd is this project (the root, its worktrees, the roots the project dream
 remembers, this pass's own remembered roots and every --match path, matched
 as dream.py matches them); <projects>/<main checkout slug>/memory/*.md notes
-whose type is feedback or user (dream.memory_dir). A message counts only when
-dream.is_human says it holds the owner's own words.
+whose type is feedback or user (dream.memory_dir); this project's interactive
+Codex threads through dream.codex_records (CODEX_HOME sessions, ADR 0014). A
+message counts only when dream.is_human says it holds the owner's own words.
 Outputs:
   <main checkout>/.work/dream/taste/   state.json (offsets, notes read, the
       evidence pool, known roots, last pass), state.next.json (pending until
