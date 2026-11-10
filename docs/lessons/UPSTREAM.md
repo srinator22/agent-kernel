@@ -109,3 +109,11 @@ Entry format (all five fields required):
   a request for maximum parallel speed means waves of the cap.
 - retire-when: the harness enforces a concurrency limit itself.
 - applies to: core
+
+### Run the full gate once, at task end
+
+- what happened: an advisor ran the whole verification after each step on a small guard task; the owner questioned the number of checks and the elapsed time (2026-11-10).
+- what check should have caught it: check.sh --fast (BACKLOG row) for the inner loop; the full gate at finish.
+- what was added: none.
+- retire-when: check.sh --fast exists and ship.md names the staging.
+- applies to: core
