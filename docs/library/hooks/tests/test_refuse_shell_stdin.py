@@ -99,5 +99,61 @@ class OptionalPcbnewRule(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
 
 
+ROOT = Path(__file__).resolve().parents[4]
+SETTINGS = ROOT / ".claude" / "settings.json"
+
+
+def settings_hook_commands():
+    """Commands of the PreToolUse entries whose matcher covers both shells."""
+    data = json.loads(SETTINGS.read_text(encoding="utf-8"))
+    found = []
+    for entry in data["hooks"]["PreToolUse"]:
+        if entry.get("matcher") == "Bash|PowerShell":
+            found += [h["command"] for h in entry["hooks"] if h.get("type") == "command"]
+    return found
+
+
+class SettingsWiring(unittest.TestCase):
+    """The hook as .claude/settings.json runs it: the configured command, fed the payload on stdin."""
+
+    def wired_command(self):
+        cmds = [c for c in settings_hook_commands() if "refuse_shell_stdin" in c]
+        self.assertEqual(len(cmds), 1, "settings.json must wire refuse_shell_stdin once under Bash|PowerShell")
+        return cmds[0]
+
+    def run_wired(self, command, cwd=None):
+        bash = os.environ.get("BASH_EXE") or "bash"
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT).replace("\\", "/"))
+        env.pop("HOOK_CHECK_PCBNEW_GETWIDTH", None)
+        return subprocess.run([bash, "-c", self.wired_command()], input=json.dumps(bash_payload(command, cwd)),
+                              text=True, capture_output=True, env=env, check=False)
+
+    def test_existing_guard_stays_wired(self):
+        self.assertTrue(any("scripts/destructive-guard.sh" in c for c in settings_hook_commands()))
+
+    def test_here_document_refused(self):
+        result = self.run_wired("cat > f.py <<'EOF'\nprint(1)\nEOF")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("here-document", result.stderr)
+
+    def test_python_stdin_refused(self):
+        result = self.run_wired("python -")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("stdin", result.stderr)
+
+    def test_git_commit_dash_f_file_passes(self):
+        result = self.run_wired("git commit -F /tmp/msg.txt")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ordinary_commands_pass(self):
+        for command in ("ls -la", "python tools/check_thing.py", 'python -c "print(1)"'):
+            with self.subTest(command=command):
+                self.assertEqual(self.run_wired(command).returncode, 0)
+
+
+def bash_payload(command, cwd=None):
+    return bash(command, cwd or "")
+
+
 if __name__ == "__main__":
     unittest.main()

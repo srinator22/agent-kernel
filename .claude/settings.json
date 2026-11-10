@@ -32,6 +32,10 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/destructive-guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/docs/library/hooks/refuse_shell_stdin.sh\""
           }
         ]
       }

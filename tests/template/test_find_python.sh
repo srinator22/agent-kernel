@@ -106,4 +106,22 @@ left="$(grep -rn 'command -v python3' scripts tests/template 2>/dev/null \
   | grep -v '^tests/template/test_find_python.sh:' | grep -v '^tests/template/test_session_context.sh:' | grep -v '^scripts/find-python.sh:')"
 assert_eq "no other command -v python3 pick remains" "" "$left"
 
+# --- the shell-stdin hook launcher, wired into .claude/settings.json, picks
+# Python through the helper too, so the Store stub first on PATH cannot turn
+# the hook off ---
+LAUNCHER="$T_ROOT/docs/library/hooks/refuse_shell_stdin.sh"
+assert_file_has "the hook launcher sources find-python.sh" "$LAUNCHER" "find-python.sh"
+hook() { # COMMAND: the hook's exit code for a Bash call, the stub first on PATH
+  printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1" \
+    | PATH="$BIN/both:$PATH" CLAUDE_PROJECT_DIR="$T_ROOT" bash "$LAUNCHER" >/dev/null 2>&1
+}
+hook 'echo 1 | python -'; RC=$?
+assert_rc "with the stub first, the hook still refuses python from stdin" 2
+hook 'git commit -F msg.txt'; RC=$?
+assert_rc "with the stub first, git commit -F still runs" 0
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
+  | PATH="$BIN/stubonly" CLAUDE_PROJECT_DIR="$T_ROOT" "$(command -v bash)" "$LAUNCHER" 2>&1)"; RC=$?
+assert_rc "with only the stub, the launcher reports a non-blocking error" 1
+assert_contains "the launcher says the hook did not run" "the shell-stdin hook did not run"
+
 t_finish

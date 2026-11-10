@@ -65,10 +65,13 @@ path. An optional rule, `--check-pcbnew-getwidth` (or
 `.GetWidth()`; enable it only where KiCad is scripted. Check it with
 `python docs/library/hooks/refuse_shell_stdin.py --self-test`.
 
-To adopt, copy the hook to `.claude/hooks/` and add a PreToolUse entry to
+The template wires it through its launcher, `hooks/refuse_shell_stdin.sh`,
+which picks Python with `scripts/find-python.sh` (the Windows Store `python3`
+stub would otherwise turn the hook off). To adopt it elsewhere, copy both
+files to `.claude/hooks/` and add a PreToolUse entry to
 `.claude/settings.json` whose matcher covers every shell the harness offers
 (`Bash|PowerShell`) and whose command is
-`python "$CLAUDE_PROJECT_DIR/.claude/hooks/refuse_shell_stdin.py"`.
+`bash "$CLAUDE_PROJECT_DIR/.claude/hooks/refuse_shell_stdin.sh"`.
 
 ## Tools
 
