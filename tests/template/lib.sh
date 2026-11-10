@@ -15,6 +15,12 @@ T_CHECK="$T_ROOT/tests/template/fixtures/check.sh"
 # No self-test may reach a real ruff runner or the network: a template-mode
 # check.sh run in a fixture uses this fake (check.sh step 5k honours it).
 export TEMPLATE_RUFF="$T_ROOT/tests/template/fixtures/fake-ruff.sh"
+# No self-test may read the owner's real Codex sessions: dream and taste read
+# $DREAM_CODEX_HOME before CODEX_HOME and ~/.codex. A path that does not exist is
+# an empty home; make_fixture swaps in a created empty folder beside each
+# fixture, which t_cleanup removes with it.
+T_NO_CODEX="${TMPDIR:-/tmp}/template-selftest.no-codex-home"
+export DREAM_CODEX_HOME="$T_NO_CODEX"
 T_PASS=0
 T_FAIL=0
 T_NAME="$(basename "$0")"
@@ -61,6 +67,7 @@ assert_file_lacks() { # name path needle
 make_fixture() {
   t_cleanup
   FIX="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.XXXXXX")"
+  mkdir -p "$FIX-codex" && export DREAM_CODEX_HOME="$FIX-codex"
   cd "$FIX" || exit 1
   git init -q . >/dev/null 2>&1
   git config user.email "selftest@example.invalid"
@@ -132,8 +139,9 @@ t_cleanup() {
   if [[ "${T_EXEC_CHECK:-}" == 1 && -n "$FIX" ]]; then t_check_exec "$T_NAME fixture"; fi
   cd / || true
   case "$FIX" in
-    */template-selftest.*) rm -rf "$FIX" ;;
+    */template-selftest.*) rm -rf "$FIX" "$FIX-codex" ;;
   esac
+  [[ -z "$FIX" ]] || export DREAM_CODEX_HOME="$T_NO_CODEX"
   FIX=""
 }
 

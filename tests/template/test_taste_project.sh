@@ -273,6 +273,56 @@ assert_rc "done exits 0" 0
 assert_eq "digest, apply and done leave the home profile and blocks byte-identical" "$HOME_BEFORE" "$(home_sum)"
 assert_file_has "the user-level profile line is untouched" "$H/.claude/taste/communication.md" "[T001] Existing user-level line."
 
+# --- A9: this project's interactive Codex threads feed the same signals ---
+CXH="$H/cxhome"
+CXD="$CXH/sessions/2026/11/08"
+mkdir -p "$CXD"
+cat > "$FIX/cx.py" <<'PYEOF'
+import json, sys
+f, kind, ts, text = sys.argv[1:5]
+extra = json.loads(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else {}
+if kind == "meta":
+    pl = {"cwd": text, "originator": "Codex Desktop", "source": "vscode", "thread_source": "user"}
+    pl.update(extra)
+    o = {"timestamp": ts, "ordinal": 0, "type": "session_meta", "payload": pl}
+else:
+    role = "user" if kind == "user" else "assistant"
+    typ = "input_text" if kind == "user" else "output_text"
+    o = {"timestamp": ts, "ordinal": 0, "type": "response_item",
+         "payload": {"type": "message", "role": role, "content": [{"type": typ, "text": text}]}}
+with open(f, "a", encoding="utf-8", newline="\n") as fh:
+    fh.write(json.dumps(o) + "\n")
+PYEOF
+cx() { "$PY" "$FIX/cx.py" "$@"; }
+CT1="$CXD/rollout-2026-11-08T08-00-00-019c0000-0000-7000-8000-000000000001.jsonl"
+CT2="$CXD/rollout-2026-11-08T08-00-00-019c0000-0000-7000-8000-000000000002.jsonl"
+CT3="$CXD/rollout-2026-11-08T08-00-00-019c0000-0000-7000-8000-000000000003.jsonl"
+cx "$CT1" meta 2026-11-08T08:00:00.000Z "$NATIVE"
+cx "$CT1" user 2026-11-08T08:01:00.000Z "summarise the open work"
+cx "$CT1" asst 2026-11-08T08:02:00.000Z "Here is a long summary of the open work, starting with background."
+cx "$CT1" user 2026-11-08T08:03:00.000Z "I always lead with the result, please do that."
+cx "$CT1" asst 2026-11-08T08:04:00.000Z "Result first: the work is done."
+cx "$CT1" user 2026-11-08T08:05:00.000Z "perfect"
+cx "$CT1" user 2026-11-08T08:06:00.000Z "# AGENTS.md instructions for the repo: I prefer machine text must not appear"
+cx "$CT1" user 2026-11-08T08:07:00.000Z "stop-gate: I prefer gate text must not appear"
+cx "$CT2" meta 2026-11-08T08:00:00.000Z "$NATIVE" '{"thread_source":"subagent"}'
+cx "$CT2" user 2026-11-08T08:01:00.000Z "I prefer subagent words must not appear."
+cx "$CT3" meta 2026-11-08T08:00:00.000Z 'C:\work\other'
+cx "$CT3" user 2026-11-08T08:01:00.000Z "I prefer other project codex words must not appear."
+CXSAVE="$DREAM_CODEX_HOME"
+export DREAM_CODEX_HOME="$CXH"
+ta digest --min-signals 1 --force
+assert_rc "A9: a digest over Codex rollouts exits 0" 0
+assert_file_has "A9: a Codex owner prompt with a stated preference is a signal" "$D" "I always lead with the result, please do that."
+assert_eq "A9: that signal is a P" "P" "$(grep -F 'I always lead with the result' "$D" | head -n 1 | sed -E 's/^- t[0-9a-f]+ \[(.)\].*/\1/')"
+assert_eq "A9: a reaction after a Codex assistant reply is an R" "R" "$(grep -F ': perfect' "$D" | head -n 1 | sed -E 's/^- t[0-9a-f]+ \[(.)\].*/\1/')"
+assert_file_has "A9: the R carries the assistant reply it reacted to" "$D" "re: Result first: the work is done."
+assert_file_lacks "A8/A9: machine-written Codex text is no signal" "$D" "machine text must not appear"
+assert_file_lacks "A8/A9: a stop-gate prompt is no signal" "$D" "gate text must not appear"
+assert_file_lacks "A9: a subagent thread is no signal" "$D" "subagent words"
+assert_file_lacks "A9: another project's Codex thread is no signal" "$D" "other project codex words"
+export DREAM_CODEX_HOME="$CXSAVE"
+
 # --- A8: template mode ---
 mv .start-done "$FIX/start-done.saved"
 rm -f "$PREF/working.md"

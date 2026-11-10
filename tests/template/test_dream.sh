@@ -1119,4 +1119,337 @@ else
   t_na "mixed path: needs cygpath and 8.3 names (the Windows CI job runs it)"
 fi
 
+# --- Codex rollouts (A8 to A12): one reader for the digest and due ---
+# Hand-written rollout fixtures under a fake Codex home. A .zst fixture needs the zstd
+# command or Python's compression.zstd; without either those cases print n/a.
+CX_EMPTY_HOME="$DREAM_CODEX_HOME"
+assert_eq "A12: lib.sh gives every test an empty DREAM_CODEX_HOME beside its fixture" "$FIX-codex" "$CX_EMPTY_HOME"
+assert_eq "A12: that folder is empty" "0" "$(ls -A "$CX_EMPTY_HOME" | wc -l | tr -d ' ')"
+CH="$PB/codex"
+CH_ORIG="$CH"
+CD="$CH/sessions/2026/11/07"
+CPE="$PB/cx-proj-empty"
+CPC="$PB/cx-proj-claude"
+mkdir -p "$CD" "$CPE" "$CPC/any"
+export DREAM_NOW="2026-11-07T12:00:00Z"
+cat > "$FIX/cx.py" <<'PYEOF'
+import hashlib, json, sys
+f, kind, ts, text = sys.argv[1:5]
+extra = json.loads(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else {}
+def msg(role, typ, t):
+    return {"timestamp": ts, "ordinal": 0, "type": "response_item",
+            "payload": {"type": "message", "role": role, "content": [{"type": typ, "text": t}]}}
+lines = []
+if kind == "meta":
+    pl = {"cwd": text, "originator": "Codex Desktop", "source": "vscode", "thread_source": "user"}
+    pl.update(extra)
+    lines.append(json.dumps({"timestamp": ts, "ordinal": 0, "type": "session_meta", "payload": pl}))
+elif kind == "user":
+    lines.append(json.dumps(msg("user", "input_text", text)))
+elif kind == "asst":
+    lines.append(json.dumps(msg("assistant", "output_text", text)))
+elif kind == "dev":
+    lines.append(json.dumps(msg("developer", "input_text", text)))
+elif kind == "abort":
+    lines.append(json.dumps({"timestamp": ts, "ordinal": 0, "type": "event_msg", "payload": {"type": "turn_aborted"}}))
+elif kind == "tok":
+    lines.append(json.dumps({"timestamp": ts, "ordinal": 0, "type": "event_msg", "payload": {"type": "token_count"}}))
+elif kind == "bulk":
+    for i in range(1, int(text) + 1):
+        h = hashlib.sha256(str(i).encode()).hexdigest() * 8
+        lines.append(json.dumps(msg("user", "input_text", "msg-%04d %s" % (i, h))))
+elif kind in ("raw", "rawp", "nl"):
+    pass
+else:
+    raise SystemExit("bad kind " + kind)
+with open(f, "a", encoding="utf-8", newline="\n") as fh:
+    if kind == "raw":
+        fh.write(text + "\n")
+    elif kind == "rawp":
+        fh.write(text)
+    elif kind == "nl":
+        fh.write("\n")
+    else:
+        for ln in lines:
+            fh.write(ln + "\n")
+PYEOF
+cx() { "$PY" "$FIX/cx.py" "$@"; }
+# cdream SUBCOMMAND STATE-DIR [ARGS]: dream.sh against the fake Codex home $CH and the projects folder $CP;
+# CZ forces the zstd reader (DREAM_ZSTD).
+CP="$CPC"
+CZ=""
+cdream() {
+  local sub="$1" st="$2"
+  shift 2
+  run env DREAM_CODEX_HOME="$CH" DREAM_ZSTD="$CZ" bash "$FIX/scripts/dream.sh" "$sub" --projects-dir "$CP" --state-dir "$st" "$@"
+}
+mk "$CPC/any/claudeside1.jsonl" user 2026-11-07T07:00:00.000Z "claude side prompt keeps the digest alive"
+# cst STATE-FILE THREAD FIELD: one field of the state entry codex:<thread>.
+cst() { "$PY" -c 'import json,sys;s=json.load(open(sys.argv[1]));print(s["files"].get("codex:"+sys.argv[2],{}).get(sys.argv[3],"-"))' "$1" "$2" "$3"; }
+# sig_kind FILE TEXT: the kind letter of the digest line holding TEXT.
+sig_kind() { grep -F -- "$2" "$1" | head -n 1 | sed -E 's/^- s[0-9]+ \[(.)\].*/\1/'; }
+ZSTD_TOOL=""
+if command -v zstd >/dev/null 2>&1; then ZSTD_TOOL=cli
+elif "$PY" -c 'from compression import zstd' >/dev/null 2>&1; then ZSTD_TOOL=python; fi
+HAVE_PYZSTD=0
+"$PY" -c 'from compression import zstd' >/dev/null 2>&1 && HAVE_PYZSTD=1
+# make_zst FILE: FILE.zst from FILE, with the zstd command or Python's compression.zstd.
+make_zst() {
+  if [[ "$ZSTD_TOOL" == cli ]]; then zstd -q -f "$1" -o "$1.zst" >/dev/null 2>&1
+  elif [[ "$ZSTD_TOOL" == python ]]; then
+    "$PY" -c 'import sys;from compression import zstd;open(sys.argv[1]+".zst","wb").write(zstd.compress(open(sys.argv[1],"rb").read()))' "$1"
+  else return 1; fi
+}
+rname() { echo "$CD/rollout-2026-11-07T08-00-00-$1.jsonl"; }
+T1=019c0000-0000-7000-8000-000000000001
+T2=019c0000-0000-7000-8000-000000000002
+T3=019c0000-0000-7000-8000-000000000003
+T4=019c0000-0000-7000-8000-000000000004
+F1="$(rname $T1)"
+cx "$F1" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+cx "$F1" user 2026-11-07T08:01:00.000Z "please add codex support"
+cx "$F1" dev 2026-11-07T08:01:10.000Z "developer text must not appear"
+cx "$F1" user 2026-11-07T08:01:20.000Z "<environment_context>env text must not appear</environment_context>"
+cx "$F1" user 2026-11-07T08:01:30.000Z "# AGENTS.md instructions for the repo: instruction body must not appear"
+cx "$F1" user 2026-11-07T08:01:40.000Z "# Files mentioned by the user: file list must not appear"
+cx "$F1" user 2026-11-07T08:01:50.000Z "# Files pasted by the user: pasted text must not appear"
+cx "$F1" user 2026-11-07T08:02:00.000Z "stop-gate: gate text must not appear"
+cx "$F1" user 2026-11-07T08:02:10.000Z ""
+cx "$F1" tok 2026-11-07T08:02:20.000Z ""
+cx "$F1" asst 2026-11-07T08:02:30.000Z "I will add it."
+cx "$F1" user 2026-11-07T08:03:00.000Z "no, that is wrong"
+cx "$F1" abort 2026-11-07T08:04:00.000Z ""
+cx "$(rname $T2)" meta 2026-11-07T08:00:00.000Z "$NATIVE" '{"thread_source":"subagent"}'
+cx "$(rname $T2)" user 2026-11-07T08:01:00.000Z "subagent prompt must not appear"
+cx "$(rname $T3)" meta 2026-11-07T08:00:00.000Z "$NATIVE" '{"originator":"codex_exec","source":"exec"}'
+cx "$(rname $T3)" user 2026-11-07T08:01:00.000Z "exec prompt must not appear"
+cx "$(rname $T4)" meta 2026-11-07T08:00:00.000Z "${NATIVE}-other"
+cx "$(rname $T4)" user 2026-11-07T08:01:00.000Z "other project prompt must not appear"
+CS1="$FIX/cst1"
+cdream digest "$CS1"
+assert_rc "A9: a digest over Codex rollouts exits 0" 0
+assert_file_has "A9: an owner prompt of an interactive thread is a signal" "$CS1/digest.md" "please add codex support"
+assert_eq "A9: a prompt that reads as a correction is C" "C" "$(sig_kind "$CS1/digest.md" "no, that is wrong")"
+assert_eq "A9: a plain prompt is U" "U" "$(sig_kind "$CS1/digest.md" "please add codex support")"
+assert_eq "A9: a turn_aborted event is I" "I" "$(sig_kind "$CS1/digest.md" "[Codex turn aborted]")"
+for w in "developer text" "env text" "instruction body" "file list" "pasted text" "gate text" "subagent prompt" "exec prompt" "other project prompt"; do
+  assert_file_lacks "A8/A9: '$w' is not owner signal" "$CS1/digest.md" "$w"
+done
+assert_file_has "A9: the digest carries the Claude signal too" "$CS1/digest.md" "claude side prompt keeps the digest alive"
+N1="$(wc -l < "$F1" | tr -d ' ')"
+S1B="$(wc -c < "$F1" | tr -d ' ')"
+assert_eq "A10: the entry holds the lines read" "$N1" "$(cst "$CS1/state.next.json" $T1 lines)"
+assert_eq "A10: the entry holds the byte offset of the last complete line" "$S1B" "$(cst "$CS1/state.next.json" $T1 offset)"
+assert_eq "A10: the entry holds the cwd" "$NATIVE" "$(cst "$CS1/state.next.json" $T1 cwd)"
+assert_eq "A10: the entry holds the kind (interactive)" "interactive" "$(cst "$CS1/state.next.json" $T1 kind)"
+assert_eq "A10: a subagent thread is recorded as subagent" "subagent" "$(cst "$CS1/state.next.json" $T2 kind)"
+assert_eq "A10: a codex exec thread is recorded as exec" "exec" "$(cst "$CS1/state.next.json" $T3 kind)"
+assert_eq "A10: a subagent thread is never read" "0" "$(cst "$CS1/state.next.json" $T2 lines)"
+assert_eq "A10: another project's thread is never read" "0" "$(cst "$CS1/state.next.json" $T4 lines)"
+cdream done "$CS1"
+assert_rc "A10: done commits the Codex offsets" 0
+cx "$F1" user 2026-11-07T09:00:00.000Z "second codex prompt"
+cx "$F1" rawp 2026-11-07T09:01:00.000Z '{"timestamp":"2026-11-07T09:01:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"split codex prompt"}]}}'
+cdream digest "$CS1"
+assert_file_has "A10: a plain .jsonl is read from its byte offset: the new prompt" "$CS1/digest.md" "second codex prompt"
+assert_file_lacks "A10: a line read once is not read again" "$CS1/digest.md" "please add codex support"
+assert_file_lacks "A10: a partial last line is left for the next run" "$CS1/digest.md" "split codex prompt"
+cdream done "$CS1"
+cx "$F1" nl 2026-11-07T09:02:00.000Z ""
+cdream digest "$CS1"
+assert_file_has "A10: the completed line is read on the next run" "$CS1/digest.md" "split codex prompt"
+assert_file_lacks "A10: and the earlier prompt is not read twice" "$CS1/digest.md" "second codex prompt"
+cdream done "$CS1"
+
+# A thread that becomes a .jsonl.zst yields no duplicate and no new due count.
+if [[ -n "$ZSTD_TOOL" ]]; then
+  CS2="$FIX/cst2"
+  T5=019c0000-0000-7000-8000-000000000005
+  T6=019c0000-0000-7000-8000-000000000006
+  CHZ="$PB/codex-zst"
+  mkdir -p "$CHZ/sessions/2026/11/07"
+  CD_SAVE="$CD"; CH_SAVE="$CH"; CD="$CHZ/sessions/2026/11/07"; CH="$CHZ"
+  F5="$(rname $T5)"; F6="$(rname $T6)"
+  for f in "$F5" "$F6"; do
+    cx "$f" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+    cx "$f" user 2026-11-07T08:01:00.000Z "alpha one of $(basename "$f" | cut -c1-30)"
+    cx "$f" asst 2026-11-07T08:02:00.000Z "reply"
+    cx "$f" user 2026-11-07T08:03:00.000Z "alpha two of $(basename "$f" | cut -c1-30)"
+  done
+  CP="$CPE"
+  cdream digest "$CS2"
+  assert_rc "A10: first digest of two jsonl threads exits 0" 0
+  cdream done "$CS2"
+  cx "$F6" user 2026-11-07T09:00:00.000Z "beta three after compression"
+  cx "$F6" asst 2026-11-07T09:01:00.000Z "reply"
+  cx "$F6" user 2026-11-07T09:02:00.000Z "beta four after compression"
+  for f in "$F5" "$F6"; do make_zst "$f"; rm -f "$f"; done
+  assert_no_file "A10: the .jsonl is gone, the thread is now a .zst" "$F5"
+  cdream status "$CS2"
+  assert_contains "A10: a thread that moved to .jsonl.zst adds no due count" "sessions with new activity: 0"
+  cdream digest "$CS2"
+  assert_rc "A10: the digest after compression exits 0 (the unread lines of the moved thread)" 0
+  assert_file_has "A10: a compressed thread yields its unread lines (zstd $ZSTD_TOOL)" "$CS2/digest.md" "beta three after compression"
+  assert_file_has "A10: and the last one" "$CS2/digest.md" "beta four after compression"
+  assert_file_lacks "A10: no duplicate of what the .jsonl gave" "$CS2/digest.md" "alpha one"
+  assert_file_lacks "A10: no duplicate of the second earlier prompt" "$CS2/digest.md" "alpha two"
+  assert_eq "A10: the entry now reads src zst" "zst" "$(cst "$CS2/state.next.json" $T6 src)"
+  assert_eq "A10: the lines read count the earlier .jsonl lines too" "7" "$(cst "$CS2/state.next.json" $T6 lines)"
+  cdream done "$CS2"
+  cdream digest "$CS2"
+  assert_rc "A10: a .zst read completely is not read again (nothing to dream)" 3
+  # Both forms for one thread: only the .jsonl is read.
+  T7=019c0000-0000-7000-8000-000000000007
+  F7="$(rname $T7)"
+  cx "$FIX/both.jsonl" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+  cx "$FIX/both.jsonl" user 2026-11-07T08:01:00.000Z "both forms jsonl prompt"
+  cx "$FIX/both.jsonl" user 2026-11-07T08:02:00.000Z "zst only line must not appear"
+  make_zst "$FIX/both.jsonl"
+  mv "$FIX/both.jsonl.zst" "$F7.zst"
+  cx "$F7" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+  cx "$F7" user 2026-11-07T08:01:00.000Z "both forms jsonl prompt"
+  cdream digest "$CS2"
+  assert_file_has "A10: with both forms the .jsonl is read" "$CS2/digest.md" "both forms jsonl prompt"
+  assert_file_lacks "A10: with both forms the .zst is not read" "$CS2/digest.md" "zst only line"
+  cdream done "$CS2"
+  CD="$CD_SAVE"; CH="$CH_SAVE"; CP="$CPC"
+else
+  t_na "A10: .jsonl to .jsonl.zst cases: neither the zstd command nor Python's compression.zstd exists here"
+fi
+
+# The zstd reader choice (DREAM_ZSTD) and a missing reader.
+if [[ -n "$ZSTD_TOOL" ]]; then
+  CHR="$PB/codex-reader"
+  mkdir -p "$CHR/sessions/2026/11/07"
+  T8=019c0000-0000-7000-8000-000000000008
+  F8="$CHR/sessions/2026/11/07/rollout-2026-11-07T08-00-00-$T8.jsonl"
+  cx "$F8" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+  cx "$F8" user 2026-11-07T08:01:00.000Z "compressed only prompt"
+  make_zst "$F8"
+  rm -f "$F8"
+  CH_SAVE="$CH"; CH="$CHR"
+  CS3="$FIX/cst3"
+  CZ=none
+  cdream digest "$CS3"
+  assert_rc "A10: DREAM_ZSTD=none with only a claude signal exits 0" 0
+  assert_file_has "A10: with no reader the digest says how many rollouts it skipped" "$CS3/digest.md" "codex: 1 compressed rollouts skipped"
+  assert_file_lacks "A10: and does not read the .zst" "$CS3/digest.md" "compressed only prompt"
+  assert_eq "A10: a skipped .zst leaves no entry, so it is read later" "-" "$(cst "$CS3/state.next.json" $T8 kind)"
+  CZ=""
+  cdream digest "$CS3"
+  assert_file_has "A10: the same rollout is read once a reader exists (auto: $ZSTD_TOOL)" "$CS3/digest.md" "compressed only prompt"
+  assert_file_lacks "A10: and no skipped line is printed" "$CS3/digest.md" "rollouts skipped"
+  if command -v zstd >/dev/null 2>&1; then
+    CZ=cli; CS4="$FIX/cst4"
+    cdream digest "$CS4"
+    assert_file_has "A10: DREAM_ZSTD=cli reads a .zst with the zstd command" "$CS4/digest.md" "compressed only prompt"
+  else
+    t_na "A10: DREAM_ZSTD=cli: no zstd command on PATH"
+  fi
+  if (( HAVE_PYZSTD )); then
+    CZ=python; CS5="$FIX/cst5"
+    cdream digest "$CS5"
+    assert_file_has "A10: DREAM_ZSTD=python reads a .zst through compression.zstd" "$CS5/digest.md" "compressed only prompt"
+  else
+    CZ=python; CS5="$FIX/cst5"
+    cdream digest "$CS5"
+    assert_file_has "A10: DREAM_ZSTD=python without compression.zstd falls back to no reader and says so" "$CS5/digest.md" "codex: 1 compressed rollouts skipped"
+    t_na "A10: the compression.zstd read path: this Python has no compression.zstd (3.14 and later do)"
+  fi
+  CZ=""; CH="$CH_SAVE"
+  # A .zst that decodes only partly yields its complete lines now and the rest later.
+  if [[ "$ZSTD_TOOL" == cli ]]; then
+    CHP="$PB/codex-partial"
+    mkdir -p "$CHP/sessions/2026/11/07"
+    T9=019c0000-0000-7000-8000-000000000009
+    F9="$CHP/sessions/2026/11/07/rollout-2026-11-07T08-00-00-$T9.jsonl"
+    cx "$F9" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+    cx "$F9" bulk 2026-11-07T08:01:00.000Z 400
+    make_zst "$F9"
+    rm -f "$F9"
+    cp "$F9.zst" "$FIX/full.zst"
+    FULLSZ="$(wc -c < "$FIX/full.zst" | tr -d ' ')"
+    head -c $((FULLSZ * 6 / 10)) "$FIX/full.zst" > "$F9.zst"
+    CH_SAVE="$CH"; CH="$CHP"
+    CS6="$FIX/cst6"
+    cdream digest "$CS6" --max-bytes 3000000
+    assert_rc "A10: a partly decodable .zst still yields a digest" 0
+    PL="$(cst "$CS6/state.next.json" $T9 lines)"
+    if [[ "$PL" =~ ^[0-9]+$ ]] && (( PL > 1 && PL < 401 )); then t_ok "A10: a partly decoded .zst records only the lines it yielded ($PL of 401)"
+    else t_bad "A10: a partly decoded .zst records only the lines it yielded (lines: $PL of 401)"; fi
+    assert_eq "A10: and is marked incomplete" "False" "$(cst "$CS6/state.next.json" $T9 complete)"
+    FIRSTN="$(grep -c 'msg-' "$CS6/digest.md")"
+    cdream done "$CS6"
+    cp "$FIX/full.zst" "$F9.zst"
+    cdream digest "$CS6" --max-bytes 3000000
+    assert_eq "A10: the retry reads the whole file" "401" "$(cst "$CS6/state.next.json" $T9 lines)"
+    assert_eq "A10: and marks it complete" "True" "$(cst "$CS6/state.next.json" $T9 complete)"
+    assert_eq "A10: the two reads together hold each of the 400 prompts once" "400" "$((FIRSTN + $(grep -c 'msg-' "$CS6/digest.md")))"
+    CH="$CH_SAVE"
+  else
+    t_na "A10: partly decodable .zst: needs the zstd command to cut a file at a byte"
+  fi
+else
+  t_na "A10: DREAM_ZSTD and partial .zst cases: neither the zstd command nor Python's compression.zstd exists here"
+fi
+
+# due: first line only, rollouts modified after the last dream, meta cached before the first dream.
+CHD="$PB/codex-due"
+CDD="$CHD/sessions/2026/11/07"
+mkdir -p "$CDD"
+DA=019c0000-0000-7000-8000-0000000000a1
+DB=019c0000-0000-7000-8000-0000000000a2
+DC=019c0000-0000-7000-8000-0000000000a3
+DD=019c0000-0000-7000-8000-0000000000a4
+drn() { echo "$CDD/rollout-2026-11-07T08-00-00-$1.jsonl"; }
+cx "$(drn $DA)" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+cx "$(drn $DA)" user 2026-11-07T08:01:00.000Z "due thread A prompt"
+cx "$(drn $DB)" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+cx "$(drn $DB)" user 2026-11-07T08:01:00.000Z "due thread B prompt"
+cx "$(drn $DC)" meta 2026-11-07T08:00:00.000Z "$NATIVE" '{"thread_source":"subagent"}'
+cx "$(drn $DC)" user 2026-11-07T08:01:00.000Z "due thread C prompt"
+cx "$(drn $DD)" meta 2026-11-07T08:00:00.000Z "${NATIVE}-other"
+cx "$(drn $DD)" user 2026-11-07T08:01:00.000Z "due thread D prompt"
+touch -d 2026-11-10T00:00:00Z "$(drn $DA)" "$(drn $DC)" "$(drn $DD)"
+touch -d 2026-11-01T00:00:00Z "$(drn $DB)"
+export DREAM_NOW="2026-11-12T12:00:00Z"
+CH="$CHD"; CP="$CPE"
+CSD="$FIX/cstd"
+cdream due "$CSD"
+assert_rc "A11: before the first dream an interactive thread of this project makes a dream due" 0
+assert_contains "A11: before the first dream every interactive thread counts once (A and B, not the subagent or other project)" "dream: due (2 sessions"
+assert_eq "A11: before the first dream the first line's meta is cached in the state (kind)" "subagent" "$(cst "$CSD/state.json" $DC kind)"
+assert_eq "A11: and the cwd of another project is cached too" "interactive" "$(cst "$CSD/state.json" $DD kind)"
+CSD2="$FIX/cstd2"
+mkdir -p "$CSD2"
+printf '{"version":1,"files":{},"known_roots":[],"last_dream":"2026-11-09T00:00:00Z","dreams":[]}\n' > "$CSD2/state.json"
+cdream due "$CSD2"
+assert_contains "A11: after a dream only rollouts modified since it count (B, modified before, does not)" "dream: due (1 sessions"
+assert_eq "A11: after a dream a due check does not write the cache" "-" "$(cst "$CSD2/state.json" $DA kind)"
+CP="$CPC"
+cdream digest "$CSD2"
+assert_file_has "A11: the digest reads the thread that was due" "$CSD2/digest.md" "due thread A prompt"
+cdream done "$CSD2"
+cdream status "$CSD2"
+assert_contains "A11: once read the thread no longer counts" "sessions with new activity: 0"
+cx "$(drn $DA)" user 2026-11-12T09:00:00.000Z "due thread A again"
+cdream status "$CSD2"
+assert_contains "A11: new lines on a read thread count again" "sessions with new activity: 1"
+CH="$CH_ORIG"
+
+# --- A12: the owner's real Codex home is never read by a test ---
+REAL="$PB/real-home"
+mkdir -p "$REAL/.codex/sessions/2026/11/07"
+RF="$REAL/.codex/sessions/2026/11/07/rollout-2026-11-07T08-00-00-019c0000-0000-7000-8000-0000000000f1.jsonl"
+cx "$RF" meta 2026-11-07T08:00:00.000Z "$NATIVE"
+cx "$RF" user 2026-11-07T08:01:00.000Z "owner real home prompt"
+run env HOME="$REAL" USERPROFILE="$REAL" CODEX_HOME="$REAL/.codex" bash "$FIX/scripts/dream.sh" digest --projects-dir "$CPC" --state-dir "$FIX/cste1"
+assert_rc "A12: a digest under the test harness exits 0" 0
+assert_file_lacks "A12: with DREAM_CODEX_HOME set by lib.sh the real home (HOME and CODEX_HOME) is not read" "$FIX/cste1/digest.md" "owner real home prompt"
+run env -u DREAM_CODEX_HOME HOME="$REAL" USERPROFILE="$REAL" CODEX_HOME="$REAL/.codex" bash "$FIX/scripts/dream.sh" digest --projects-dir "$CPC" --state-dir "$FIX/cste2"
+assert_file_has "A12: without it CODEX_HOME is the fallback (the case is meaningful)" "$FIX/cste2/digest.md" "owner real home prompt"
+run env -u DREAM_CODEX_HOME -u CODEX_HOME HOME="$REAL" USERPROFILE="$REAL" bash "$FIX/scripts/dream.sh" digest --projects-dir "$CPC" --state-dir "$FIX/cste3"
+assert_file_has "A12: without both the home folder's .codex is the fallback" "$FIX/cste3/digest.md" "owner real home prompt"
+export DREAM_NOW="2026-11-07T12:00:00Z"
+
 t_finish

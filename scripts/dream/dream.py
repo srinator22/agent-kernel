@@ -53,6 +53,17 @@ lines and the rules in docs/preferences/*.md (at most 40 lines). done commits
 the offset, then rotates a log over 5 MB to log.1.jsonl (one kept) and resets
 the offset to 0; the exit-3 digest, which commits offsets itself, rotates the
 same way so a log of plain messages cannot grow without bound.
+Codex: the same digest, due and taste passes read this repository's interactive
+Codex sessions, <codex home>/sessions/**/rollout-*.jsonl and later-compressed
+.jsonl.zst (codex_home: DREAM_CODEX_HOME, else CODEX_HOME, else ~/.codex; one
+reader, codex_records, for dream and taste). A thread is keyed codex:<id> in the
+state file table with lines read, byte offset, cwd, kind, size and mtime; a
+session_meta cwd inside the roots, neither a subagent nor a codex exec thread,
+selects it. Owner prompts become U or C, aborted turns I. A .zst is read with
+compression.zstd when importable, else the zstd command (stdout kept up to its
+last newline); DREAM_ZSTD=none|python|cli forces the reader. With none, the
+digest says how many rollouts it skipped. due reads only the first line of a
+rollout it has not seen and only of rollouts modified after the last dream.
 Exit codes: 0 ok (due: due); 1 not due; 2 usage error or ordering error;
 3 digest found neither a new signal nor a new feedback line to show. Dependencies: Python 3 standard library, git
 (optional, for worktrees). Assumption: a transcript line is complete only when
@@ -65,8 +76,14 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+
+try:  # Python 3.14+; older interpreters fall back to the zstd command
+    from compression import zstd as _pyzstd
+except ImportError:
+    _pyzstd = None
 
 EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 MSG_LIMIT = 400
@@ -85,7 +102,9 @@ MACHINE_PREFIXES = ("Task (from the session that started this one)",
                     "Background (from the session that started this one)",
                     "Another Claude session sent", "Base directory for this skill:",
                     "This session is being continued", "I hit my usage limit while you were working",
-                    "The app was quit while you were working")
+                    "The app was quit while you were working",
+                    "stop-gate:", "# AGENTS.md instructions for",
+                    "# Files mentioned by the user", "# Files pasted by the user")
 KIND_ORDER = "CDHIEUM"
 MECHANIZE_KINDS = "CDHIE"
 RETIRE_DAYS = 45
@@ -449,6 +468,300 @@ def extract(obj):
             p = att.get("prompt")
             if isinstance(p, str) and p.strip() and not p.strip().startswith("<") and is_human(att, p):
                 yield ("C" if is_correction(p) else "M"), clean(p, MSG_LIMIT)
+
+
+# ---------------------------------------------------------------- Codex rollouts
+# One reader for dream's digest and due and taste's digest. A Codex rollout is
+# <codex home>/sessions/**/rollout-<timestamp>-<thread id>.jsonl while the
+# session runs; the app may later compress it to .jsonl.zst (inferred from the
+# files on one machine, not documented), so a thread is keyed by its id and
+# tracked by lines read, not by file.
+
+ROLLOUT_ID = re.compile(r"^rollout-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-(.+)$")
+ZSTD_CHUNK = 1 << 16
+CODEX_KEY = "codex:"
+
+
+def codex_home():
+    return (os.environ.get("DREAM_CODEX_HOME") or os.environ.get("CODEX_HOME")
+            or os.path.join(os.path.expanduser("~"), ".codex"))
+
+
+def codex_rollouts(home):
+    """{thread id: {"path", "zst"}}; the plain .jsonl wins when both forms exist."""
+    found = {}
+    base = glob.escape(os.path.join(home, "sessions"))
+    for ext, zst in ((".jsonl", False), (".jsonl.zst", True)):
+        for p in sorted(glob.glob(os.path.join(base, "**", "rollout-*" + ext), recursive=True)):
+            stem = os.path.basename(p)[:-len(ext)]
+            m = ROLLOUT_ID.match(stem)
+            tid = m.group(1) if m else stem[len("rollout-"):]
+            cur = found.get(tid)
+            if cur is None or (cur["zst"] and not zst):
+                found[tid] = {"path": os.path.abspath(p), "zst": zst}
+    return found
+
+
+def zstd_mode():
+    """"python", "cli" or None. DREAM_ZSTD=none|python|cli forces the choice (tests)."""
+    want = os.environ.get("DREAM_ZSTD", "")
+    if want == "none":
+        return None
+    if want != "cli" and _pyzstd is not None:
+        return "python"
+    if want == "python":
+        return None
+    return "cli" if shutil.which("zstd") else None
+
+
+def zst_decode(path, mode, first_line=False):
+    """(bytes, complete): what the reader produced, however far it got. complete
+    is True only when the stream ended cleanly (the zstd command exits nonzero
+    on a damaged file but its stdout up to that point is kept)."""
+    buf = bytearray()
+    complete = False
+    if mode == "python":
+        try:
+            with open(path, "rb") as f:
+                d = _pyzstd.ZstdDecompressor()
+                pending = b""
+                while True:
+                    chunk = pending or f.read(ZSTD_CHUNK)
+                    pending = b""
+                    if not chunk:
+                        break
+                    buf += d.decompress(chunk)
+                    complete = d.eof
+                    if d.eof:
+                        pending = d.unused_data
+                        d = _pyzstd.ZstdDecompressor()
+                    if first_line and b"\n" in buf:
+                        complete = False
+                        break
+        except (OSError, _pyzstd.ZstdError):
+            complete = False
+        return bytes(buf), complete
+    try:
+        p = subprocess.Popen(["zstd", "-dc", "-q", "--", path], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    except OSError:
+        return b"", False
+    try:
+        while True:
+            chunk = p.stdout.read(ZSTD_CHUNK)
+            if not chunk:
+                break
+            buf += chunk
+            if first_line and b"\n" in buf:
+                p.kill()
+                p.wait()
+                return bytes(buf), False
+        complete = p.wait() == 0
+    finally:
+        p.stdout.close()
+        if p.poll() is None:
+            p.kill()
+            p.wait()
+    return bytes(buf), complete
+
+
+def rollout_lines(path, skip=0, offset=0):
+    """(lines, end offset, complete): the complete lines of a rollout after the
+    first `skip` lines. A .jsonl is read from byte `offset`; the skip counts lines
+    from there. A .jsonl.zst is decoded from its start (offset is returned as
+    given) and cut at its last newline. complete is None when no zstd reader
+    exists, False when a .zst decoded only partly (retry later)."""
+    if path.endswith(".zst"):
+        mode = zstd_mode()
+        if mode is None:
+            return [], offset, None
+        data, ok = zst_decode(path, mode)
+        data = data[:data.rfind(b"\n") + 1]
+        allv = [ln + b"\n" for ln in data[:-1].split(b"\n")] if data else []
+        return allv[skip:], offset, ok
+    out, n, pos = [], 0, offset
+    with open(path, "rb") as f:
+        f.seek(offset)
+        for line in f:
+            if not line.endswith(b"\n"):
+                break
+            pos += len(line)
+            n += 1
+            if n > skip:
+                out.append(line)
+    return out, pos, True
+
+
+def rollout_first_line(path):
+    """The first line of a rollout (bytes, newline kept) or None while it is
+    incomplete, unreadable or its .zst has no reader."""
+    try:
+        if path.endswith(".zst"):
+            mode = zstd_mode()
+            if mode is None:
+                return None
+            data, _ = zst_decode(path, mode, first_line=True)
+            i = data.find(b"\n")
+            return data[:i + 1] if i >= 0 else None
+        with open(path, "rb") as f:
+            line = f.readline()
+    except OSError:
+        return None
+    return line if line.endswith(b"\n") else None
+
+
+def codex_meta(line):
+    """{"cwd", "kind"} from a rollout's first line; kind is interactive, subagent
+    (thread_source subagent) or exec (codex exec), "unknown" without a session_meta."""
+    try:
+        obj = json.loads(line.decode("utf-8", errors="replace"))
+    except ValueError:
+        obj = None
+    pl = obj.get("payload") if isinstance(obj, dict) and obj.get("type") == "session_meta" else None
+    if not isinstance(pl, dict):
+        return {"cwd": None, "kind": "unknown"}
+    src = pl.get("source")
+    if pl.get("thread_source") == "subagent" or isinstance(src, dict):
+        kind = "subagent"
+    elif src == "exec" or pl.get("originator") == "codex_exec":
+        kind = "exec"
+    else:
+        kind = "interactive"
+    cwd = pl.get("cwd")
+    return {"cwd": cwd if isinstance(cwd, str) else None, "kind": kind}
+
+
+def codex_mine(ent, roots):
+    return ent.get("kind") == "interactive" and cwd_match(ent.get("cwd"), roots)
+
+
+def codex_record(obj):
+    """(role, text) for one parsed rollout line, or None when it holds no owner signal."""
+    t = obj.get("type")
+    pl = obj.get("payload")
+    if not isinstance(pl, dict):
+        return None
+    if t == "event_msg" and pl.get("type") == "turn_aborted":
+        return "abort", ""
+    if t != "response_item" or pl.get("type") != "message":
+        return None
+    role = pl.get("role")
+    want = "input_text" if role == "user" else "output_text" if role == "assistant" else None
+    if want is None or not isinstance(pl.get("content"), list):
+        return None
+    parts = [i["text"] for i in pl["content"]
+             if isinstance(i, dict) and i.get("type") == want and isinstance(i.get("text"), str)]
+    text = "\n".join(parts).strip()
+    if not text:
+        return None
+    if role == "user" and (text.startswith("<") or not is_human({}, text)):
+        return None
+    return role, text
+
+
+def codex_records(c, state, roots, stats):
+    """Yield (thread, ts, role, text) for this project's interactive Codex
+    threads, role user, assistant or abort, in file order per thread. `state` is
+    the state's file table (entries "codex:<thread>" hold lines, offset, cwd,
+    kind, src, size, mtime, complete) and is updated; `stats` gets read, lines,
+    bad and skipped (rollouts a missing zstd reader left unread)."""
+    files = state
+    mode = zstd_mode()
+    for tid, r in sorted(codex_rollouts(codex_home()).items()):
+        path, key = r["path"], CODEX_KEY + tid
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        ent = files.get(key)
+        if not ent or "kind" not in ent:
+            line = rollout_first_line(path)
+            if line is None:
+                if r["zst"] and mode is None:
+                    stats["skipped"] += 1
+                continue
+            ent = files.setdefault(key, {"lines": 0, "offset": 0})
+            ent.update(codex_meta(line))
+        if not codex_mine(ent, roots):
+            ent.update(size=st.st_size, mtime=st.st_mtime_ns)
+            continue
+        src = "zst" if r["zst"] else "jsonl"
+        if src == "zst":
+            if ent.get("src") == "zst" and ent.get("complete") and ent.get("size") == st.st_size \
+                    and ent.get("mtime") == st.st_mtime_ns:
+                continue
+            if mode is None:
+                stats["skipped"] += 1
+                continue
+            skip, off = ent.get("lines", 0), ent.get("offset", 0)
+        else:
+            skip, off = 0, ent.get("offset", 0)
+            if ent.get("src") == "zst":
+                skip, off = ent.get("lines", 0), 0
+            elif st.st_size < off:
+                ent["lines"], off = 0, 0
+            elif st.st_size == off:
+                ent.update(src=src, size=st.st_size, mtime=st.st_mtime_ns)
+                continue
+        lines, off, complete = rollout_lines(path, skip, off)
+        stats["read"] += 1
+        out = []
+        for line in lines:
+            stats["lines"] += 1
+            if b'"message"' not in line and b"turn_aborted" not in line:
+                continue
+            try:
+                obj = json.loads(line.decode("utf-8", errors="replace"))
+            except ValueError:
+                stats["bad"] += 1
+                continue
+            rec = codex_record(obj) if isinstance(obj, dict) else None
+            if rec:
+                out.append((tid, str(obj.get("timestamp") or ""), rec[0], rec[1]))
+        ent.update(lines=ent.get("lines", 0) + len(lines), offset=off, src=src,
+                   size=st.st_size, mtime=st.st_mtime_ns, complete=complete)
+        yield from out
+
+
+def codex_due(c, roots):
+    """Interactive threads of this project with lines unread. Reads only the
+    first line of a rollout it has not seen and only of those modified after the
+    last dream; before the first dream each first line is read once and its meta
+    cached in the state."""
+    files = c.state["files"]
+    first = not c.state["last_dream"]
+    after = c.last().timestamp()
+    n, dirty = 0, False
+    for tid, r in codex_rollouts(codex_home()).items():
+        key = CODEX_KEY + tid
+        try:
+            st = os.stat(r["path"])
+        except OSError:
+            continue
+        ent = files.get(key)
+        if not ent or "kind" not in ent:
+            if not first and st.st_mtime <= after:
+                continue
+            line = rollout_first_line(r["path"])
+            if line is None:
+                continue
+            ent = dict(codex_meta(line), lines=0, offset=0)
+            if first:
+                files[key] = ent
+                dirty = True
+        if not codex_mine(ent, roots):
+            continue
+        if r["zst"]:
+            if ent.get("src") == "jsonl":
+                continue  # compressed after it was read; nothing new is known
+            unread = ent.get("src") != "zst" or ent.get("size") != st.st_size or ent.get("mtime") != st.st_mtime_ns
+        else:
+            unread = ent.get("src") == "zst" or st.st_size > ent.get("offset", 0)
+        n += 1 if unread else 0
+    if dirty:
+        ensure_dir(c.state_dir)
+        write_json(c.sp("state.json"), c.state)
+    return n
 
 
 def words(s):
@@ -1114,6 +1427,17 @@ def cmd_digest(c, a):
     newfiles = {k: dict(v) for k, v in c.state["files"].items()}
     read_n = hit_n = lines_n = bad_n = 0
     raw = {}
+
+    def keep(kind, text, ts, sess, br):
+        k = (kind, text[:200].lower())
+        cur = raw.get(k)
+        if cur is None:
+            raw[k] = {"kind": kind, "text": text, "ts": ts, "sess": sess, "branch": br, "n": 1}
+        else:
+            cur["n"] += 1
+            if ts >= cur["ts"]:
+                cur.update(text=text, ts=ts, sess=sess, branch=br)
+
     for path in sorted(glob.glob(os.path.join(c.projects, "*", "*.jsonl"))):
         ent = newfiles.setdefault(os.path.abspath(path), {"offset": 0})
         off = ent.get("offset", 0)
@@ -1151,20 +1475,27 @@ def cmd_digest(c, a):
                     continue
                 for kind, text in extract(obj):
                     matched = True
-                    k = (kind, text[:200].lower())
-                    ts = str(obj.get("timestamp") or "")
-                    br = obj.get("gitBranch") or "-"
-                    cur = raw.get(k)
-                    if cur is None:
-                        raw[k] = {"kind": kind, "text": text, "ts": ts, "sess": stem, "branch": br, "n": 1}
-                    else:
-                        cur["n"] += 1
-                        if ts >= cur["ts"]:
-                            cur.update(text=text, ts=ts, sess=stem, branch=br)
+                    keep(kind, text, str(obj.get("timestamp") or ""), stem, obj.get("gitBranch") or "-")
         ent["offset"] = off
         if matched:
             hit_n += 1
             ent["m"] = True
+
+    cstats = {"read": 0, "lines": 0, "bad": 0, "skipped": 0}
+    cthreads = set()
+    for tid, ts, role, text in codex_records(c, newfiles, roots, cstats):
+        if role == "abort":
+            kind, text = "I", "[Codex turn aborted]"
+        elif role == "user":
+            kind, text = ("C" if is_correction(text) else "U"), clean(text, MSG_LIMIT)
+        else:
+            continue
+        cthreads.add(tid)
+        keep(kind, text, ts, tid[:8], "-")
+    read_n += cstats["read"]
+    lines_n += cstats["lines"]
+    bad_n += cstats["bad"]
+    hit_n += len(cthreads)
 
     def render(s):
         n = " (x%d)" % s["n"] if s["n"] > 1 else ""
@@ -1215,7 +1546,8 @@ def cmd_digest(c, a):
         "since: %s" % since,
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
-    ] + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
+    ] + (["codex: %d compressed rollouts skipped (no zstd reader: install zstd or use Python 3.14)"
+          % cstats["skipped"]] if cstats["skipped"] else []) + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",
@@ -1304,6 +1636,8 @@ def due_numbers(c):
     sessions = 0
     seen = set()
     for path, ent in c.state["files"].items():
+        if path.startswith(CODEX_KEY):
+            continue
         seen.add(path)
         try:
             size = os.path.getsize(path)
@@ -1321,6 +1655,7 @@ def due_numbers(c):
             for p in glob.glob(os.path.join(c.projects, fo, "*.jsonl")):
                 if os.path.abspath(p) not in seen:
                     sessions += 1
+    sessions += codex_due(c, roots)
     retros = 0
     dates = record_dates(c.root, ".work/done")
     for p in glob.glob(os.path.join(c.root, ".work", "done", "*.md")):
