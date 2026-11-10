@@ -1,55 +1,84 @@
-# Task: {{title}}
-Mode: standard | quick | autopilot
-Branch: {{branch}}
-Date: {{date}}
+# Task: codex-parity
+Mode: autopilot
+Branch: feat/codex-parity
+Date: 2026-11-10
 
 ## Goal
-{{one paragraph}}
+A Codex session in a project made from this template gets the same mechanical help a Claude Code session gets. The four hook scripts run under Codex: session-context.sh at SessionStart (its stdout becomes context), feedback-log.sh at UserPromptSubmit, destructive-guard.sh at PreToolUse for the shell tool, stop-gate.sh at Stop. They are wired by a tracked `.codex/hooks.json` that works on Linux, macOS and Windows once the owner trusts the project and its hooks in Codex. The dream and taste digests also read this project's interactive Codex sessions (`$CODEX_HOME/sessions/**/rollout-*.jsonl` and the later-compressed `.jsonl.zst`), so `dream.sh due`, the dream digest and the taste pass count Codex work. The docs describe this current state, and an ADR records it.
 
 ## Non-goals
-<!-- explicitly out of scope; scope creep gets caught here -->
-- {{out of scope}}
+- Per-agent hooks under Codex (Codex has none; the worker no-commit rule stays prose plus the advisor gate).
+- argv-array tool commands (the live PreToolUse payload carries `tool_input.command` as a string).
+- `~/.codex/archived_sessions` (recorded as a limit).
+- Removing the owner's `~/.codex/AGENTS.md` taste block (owner step after the live check).
+- Model keys in the Codex agent files.
+- Shrinking session-context output for Codex's hook-output cap (recorded as a limit).
 
 ## Budget
-<!-- declare before work starts; on exhaustion: stop, keep the best verified
-     artifact, and report unresolved items with reasons - never hide a partial
-     result behind a fluent answer -->
-- Wall-clock: {{max}}
-- Subagents / workflow runs: {{max}}
-- Retries per failing step: {{max, default 2}}
-- Escalate to human when: {{budget exhausted | criteria unreachable | scope exceeds Non-goals}}
+- Wall-clock: 4 h
+- Subagents / workflow runs: 6 (plan reviewer, 2 workers, change reviewer, spare)
+- Retries per failing step: 2
+- Escalate to human when: criteria unreachable or scope exceeds Non-goals
 
 ## Assumptions
-<!-- one line per assumption the work rests on: [confirmed] the human said so,
-     [verified] -> evidence (a command or file), [open] not yet settled.
-     scripts/tasklint.sh ship (the full gate) fails while any line is [open],
-     except in quick mode -->
-- [open] {{assumption}}
+- [confirmed] the owner asked for Codex parity and delegated decisions (2026-11-10), asked that work not wait on heavy local checks, and approved one live `codex exec` probe with hook trust bypassed in a scratch repository (2026-11-10)
+- [verified] live payloads (codex-cli 0.167.0-alpha.3.2, Windows, probe in a scratch repository, saved in the scratchpad codex-payloads folder): every event carries session_id, transcript_path (a string path to the live `.jsonl` rollout), cwd (the session's folder, a subfolder in the probe), hook_event_name, model, permission_mode; PreToolUse adds turn_id, `tool_name: "Bash"`, `tool_input: {"command": "git status --short ."}` (a string, no workdir field), tool_use_id; UserPromptSubmit adds prompt; Stop adds `stop_hook_active: false` and last_assistant_message; SessionStart adds `source: "startup"`
+- [verified] on Windows Codex runs a hook as `%COMSPEC% /C "<command>"` through raw_arg (no backslash escaping), uses the Windows command field when present (the Unix command did not run when both were set), and the hook process runs inside the session's folder (`git rev-parse --show-toplevel` in a hook from a subfolder session printed the repository root) -> research note item 10 (codex-rs/hooks/src/engine/command_runner.rs, commit 75a4146); probe run 5
+- [verified] a Windows hook string of the Design's form, run as `cmd.exe /C "<string>"` with a raw command line from the root and from a subfolder of a repository whose path holds a space, blocks `rm -rf /` with exit 2 through scripts/codex-hook.cmd and Git Bash, and passes `git status` with exit 0 -> scratchpad cmdprobe.py run against "codex probe2"
+- [verified] the JSON hooks file uses `{"hooks":{"Event":[{"matcher":...,"hooks":[{"type":"command","command":...,"commandWindows":...,"timeout":N}]}]}}`; project hooks load only once the owner trusts the project, and each new hook needs trust -> research items 1 and 7; a project `.codex/hooks.json` did not load in the probe (untrusted scratch repository), while hooks given as config overrides did
+- [verified] live rollouts are plain `.jsonl` while a session runs (the probe sessions); older ones on this machine are all `.jsonl.zst`, so the app compresses a rollout later and its path changes; the thread id (the stem after the timestamp) is stable -> ls ~/.codex/sessions/2026/11/10 and the 90 older `.zst` files
+- [verified] rollout records: the first is `session_meta` with payload cwd, originator, source and thread_source (interactive Desktop sessions: originator "Codex Desktop", source "vscode", thread_source "user"; subagent threads: thread_source "subagent"; `codex exec`: originator "codex_exec", source "exec"); owner prompts are `response_item` payload type message, role user, content items of type input_text; injected user-role text starts with `<`, `# AGENTS.md instructions for`, `# Files mentioned by the user` or `# Files pasted by the user`, or is empty; an interruption is `event_msg` payload type `turn_aborted`; assistant text is `response_item` message role assistant (output_text) -> record counts over the 25 newest rollouts in the progress log
+- [verified] the stop gate's block text starts with `stop-gate:` -> scripts/stop-gate.sh:42, :61
+- [verified] Python here is 3.13 (no `compression.zstd`); a `zstd` binary is on PATH here and on ubuntu-latest CI runners it is preinstalled (to confirm in the CI log; the test prints n/a where neither exists) -> `which zstd`
+- [verified] feedback.py accepts a null or missing transcript_path -> scripts/dream/feedback.py:183-185
+- [verified] `.gitattributes` already has `*.cmd text eol=crlf` -> .gitattributes:6
+- [verified] docs/rules/models.md is at the 40-line rules cap -> scripts/lessons.sh check
 
 ## Acceptance criteria
-<!-- each maps to an executable test where possible; list test paths. A ticked
-     line needs "-> <existing path>" or "-> judgment: <reason>"
-     (scripts/tasklint.sh check) -->
-- [ ] {{criterion}} -> {{test path or "judgment: reason"}}
+- [ ] A1 `.codex/hooks.json` is valid JSON with exactly SessionStart, UserPromptSubmit, PreToolUse (matcher `Bash`) and Stop, one command hook each; `command` is `bash "$(git rev-parse --show-toplevel)/scripts/<name>.sh"`; `commandWindows` is `git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit <N>) & for /f "usebackq delims=" %r in (\`git rev-parse --show-toplevel\`) do @call "%r\scripts\codex-hook.cmd" <name>` with N = 2 for destructive-guard (fail closed) and 0 for the other three; timeouts match .claude/settings.json (feedback 5, stop gate 1200) -> tests/template/test_codex_hooks.sh
+- [ ] A2 each Unix command, run as `bash -c '<command>'` with stdin a recorded Codex payload from the root and from a subfolder: the guard exits 2 with its BLOCKED line for `rm -rf /` and 0 for `git status`; SessionStart prints `[session-context]` lines -> tests/template/test_codex_hooks.sh
+- [ ] A3 on Windows, each commandWindows string run through Python as one raw command line `%COMSPEC% /C "<string>"` (the form Codex uses) from the root and from a subfolder of a fixture whose path holds a space does the same as A2; elsewhere the case prints n/a. Evidence before merge: a local run on this machine recorded in the progress log and a workflow_dispatch run of the Windows CI job on this branch -> tests/template/test_codex_hooks.sh
+- [ ] A4 `scripts/codex-hook.cmd <name>` (CRLF in the working tree) accepts only the four names (any other: one stderr line, exit 0); finds the root with `git rev-parse --show-toplevel`; finds Git Bash from `git --exec-path`, then `%ProgramFiles%\Git\bin\bash.exe`, never System32; passes stdin through and returns the script's exit code. With no Git Bash: `destructive-guard` exits 2 with a stderr line naming scripts/doctor.sh (the guard fails closed, as its own contract says); the other three print the stderr line and exit 0. With git not on cmd's PATH the commandWindows prefix does the same before the launcher runs -> tests/template/test_codex_hooks.sh (Windows cases: no Git Bash through a `git.cmd` shim first on PATH whose `--exec-path` names a folder without bash and ProgramFiles pointing at an empty folder; no git through a PATH without git)
+- [ ] A5 a recorded Codex Stop payload drives stop-gate.sh exactly as the Claude payload does (continue once, then allow when stop_hook_active is true) -> tests/template/test_stop_gate.sh
+- [ ] A6 a recorded Codex UserPromptSubmit payload writes one feedback line; with transcript_path pointing to a Codex `.jsonl` rollout fixture, or to a missing path, files and said are empty and nothing raises -> tests/template/test_feedback.sh
+- [ ] A7 the "feedback hook not wired" warning accepts wiring in .claude/settings.json or .codex/hooks.json and names both files when neither has it, through one shared bash check, `bash scripts/preferences.sh wired` (bash builtins only, no Python), that session-context.sh calls and preferences.sh check uses; the existing assertion substring "is not wired in .claude/settings.json" stays in the message -> tests/template/test_session_context.sh and tests/template/test_preferences.sh
+- [ ] A8 machine-written prompts are not owner signal anywhere: `MACHINE_PREFIXES` in dream.py gains `stop-gate:`, `# AGENTS.md instructions for`, `# Files mentioned by the user`, `# Files pasted by the user`, so dream, taste and feedback all skip them -> tests/template/test_dream.sh and tests/template/test_feedback.sh
+- [ ] A9 one reader in dream.py, `codex_records(c, state)`, yields normalised records `(thread, ts, role, text)` for this project's interactive Codex rollouts: a thread counts only when its session_meta cwd matches the project roots and it is neither a subagent thread nor a `codex exec` session; role is `user` (owner prompt text, after the injected-text and MACHINE_PREFIXES rules), `assistant` (output text), or `abort` (turn_aborted). The dream digest maps user to U or C and abort to I; taste maps user and the preceding assistant text through its own message_signals (P, O, C, R as for Claude). A fixture with "always lead with the result" after an assistant reply gives taste a P and an R -> tests/template/test_dream.sh and tests/template/test_taste_project.sh
+- [ ] A10 reading is incremental and keyed by thread id: the state entry (`codex:<thread id>`) holds lines read, the byte offset of the end of the last complete line (for `.jsonl`), cwd, kind (interactive, subagent or exec) and the size and mtime last seen; a `.jsonl` is read from its byte offset; when a `.jsonl` and a `.jsonl.zst` exist for one thread only the `.jsonl` is read; a `.jsonl.zst` is decompressed (`compression.zstd` through the streaming ZstdDecompressor when importable, else `zstd -dc` on PATH, whose stdout is kept up to its last newline even when it exits nonzero) and its first `lines` lines skipped; a thread that moves from `.jsonl` to `.jsonl.zst` yields no duplicate signal and no new due count; a `.zst` that decodes only partly yields its complete lines and is retried later; with no reader the digest prints one line with the count skipped; `DREAM_ZSTD=none|python|cli` forces the reader for tests -> tests/template/test_dream.sh
+- [ ] A11 `dream.sh due` counts an interactive thread of this project with lines unread since the last dream; it reads only the first line of a rollout it has not seen, and only of rollouts modified after the last dream (before the first dream every rollout's first line is read once and its meta cached in the state) -> tests/template/test_dream.sh
+- [ ] A12 every test that can reach dream or taste runs with `DREAM_CODEX_HOME` (the reader's override of CODEX_HOME) set to an empty folder by tests/template/lib.sh -> tests/template/test_dream.sh (a case asserts the owner's real home is not read)
+- [ ] A13 check.sh's required list and the BLUEPRINT tree name `.codex/hooks.json`, `scripts/codex-hook.cmd` and `tests/template/test_codex_hooks.sh`; fixtures/check.sh stays identical; a test asserts codex-hook.cmd has CRLF line endings in the working tree -> tests/template/test_check_always.sh and tests/template/test_codex_hooks.sh
+- [ ] A14 docs describe the current state: models.md (Codex adapter lines replaced, within the 40-line cap, VERIFY 2026-11-10), README Codex lines, docs/procedures/preferences.md, worker.toml comment, BUILD_NOTES Codex line, docs/procedures/upstream.md (after a sync, open the project in Codex and trust it and its hooks once), and ADR 0014 records Codex hooks, the trust steps, the Windows launcher, the payloads, the rollout reader and the limits (hook output cap, archived sessions, login-shell output on Unix, a workdir the hook input does not carry, no project hooks before trust, a repository git refuses for dubious ownership skips the hooks, and that later compression of rollouts is inferred, not observed), naming the ADR 0006 line it replaces -> judgment: the reviewer reads them; scripts/adr.sh check
+- [ ] A15 an owner checklist for the live check in the owner's trusted project (after trust, `/hooks` lists the four project hooks; then session-context lines quoted back, a destructive command blocked, a preference logged, the stop gate, with a look at how the rollout records the continuation and that the digest shows no signal for it, a digest showing the session) is in ADR 0014 -> judgment: the reviewer reads it
+- [ ] A16 ./scripts/check.sh green on the pushed head (CI run, Ubuntu) and the Windows job green on a workflow_dispatch run of the head -> judgment: CI logs
+
+## Design
+**Hook strings** as in A1, proven in the probe. **codex-hook.cmd**: `@echo off`, setlocal, name check, `for /f ... %%r` for the root, `git --exec-path` for Git Bash, `"%BASH_EXE%" "%ROOT%/scripts/%NAME%.sh"` then `exit /b %ERRORLEVEL%`.
+**Shared wiring check.** `preferences.sh wired` in bash builtins only (the existing `$(<file)` pattern match of preferences.sh, over .claude/settings.json and .codex/hooks.json); session-context.sh calls it when scripts/preferences.sh exists, and `preferences.sh check` calls the same function. The Unix guard command ends with `|| exit 2` so a failed `git rev-parse` blocks instead of allowing.
+**Codex reader (dream.py).** `codex_home()`, `codex_rollouts(home)` (glob both forms, thread id from the stem), `rollout_lines(path, skip, offset)` (plain or zstd, complete lines only), `codex_records(c, state)` as in A9 and A10. dream's digest and due and taste's digest call it; neither copies the parsing.
+**Fixtures** are recorded payloads from the probe with the scratch paths replaced, and small hand-written rollouts.
 
 ## Plan
-<!-- task graph: one node per row; nodes that can run in the same wave must
-     own disjoint files. Tiers: cheap, standard, strong, advisor, reviewer.
-     Status: todo, doing, done, blocked. Validate: scripts/taskgraph.sh check -->
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
-| N1 | - | path/one, path/two | standard | todo |
+| N1 | - | .codex/hooks.json, scripts/codex-hook.cmd, tests/template/test_codex_hooks.sh, tests/template/fixtures/codex/*.json, scripts/session-context.sh, tests/template/test_session_context.sh, scripts/stop-gate.sh, tests/template/test_stop_gate.sh, scripts/preferences.sh, tests/template/test_preferences.sh, scripts/check.sh, tests/template/fixtures/check.sh, tests/template/test_check_always.sh, docs/BLUEPRINT.md | standard | doing |
+| N2 | - | scripts/dream/dream.py, scripts/dream/taste.py, scripts/dream/feedback.py, tests/template/test_dream.sh, tests/template/test_taste_project.sh, tests/template/test_feedback.sh, tests/template/lib.sh | strong | doing |
+| N3 | N1, N2 | docs/rules/models.md, README.md, docs/procedures/preferences.md, docs/procedures/upstream.md, .codex/agents/worker.toml, BUILD_NOTES.md, docs/decisions/0014-codex-hooks.md | advisor | todo |
+| N4 | N3 | .work/TASK.md | reviewer | todo |
+
+N1 and N2 share no file and no code dependency.
 
 ## Plan verdict
-<!-- autopilot only: the reviewer's plan review of Goal, Assumptions,
-     Acceptance criteria and Plan, written before any node starts;
-     scripts/tasklint.sh requires PASS once a node is doing or done -->
+PASS (round 3, reviewer, 2026-11-10). Round 3 settles round 2's B1. A1's commandWindows now checks for git first; cmd's operator precedence makes the exit inside the parentheses end cmd before the for /f runs; cmdprobe2.py tests the exact raw form. A4 now gives the behaviour per name, a feasible no-bash test and a no-git case. All nine round 2 notes are now in criteria. Blockers: none. Notes: N1 Design and A7 disagree on how the wiring check reads the files: use the existing $(<file) pattern match, and have session-context.sh skip the warning when scripts/preferences.sh is absent. N2 the Unix guard command still fails open if git rev-parse fails; append || exit 2. N3 a dubious-ownership repository fails open on both platforms; record it in ADR 0014's limits. N4 the compression assumption is still an inference; word it so in ADR 0014. N5 record the probe output in the progress log.
+FAIL (round 2, reviewer, 2026-11-10). Round 2 settles B2 to B8 of round 1, and B1's quoting question, with real evidence. One new blocker remains, in the Windows launcher's fail-closed claim. B1. The guard still fails open on Windows in the common no-Git case, and A4's no-bash test cannot be built as described: if git is not on cmd's PATH the for /f body never runs, codex-hook.cmd never runs, and Codex treats the exit as no block; with git on PATH, git --exec-path finds bash regardless of PATH and ProgramFiles; the draft launcher exits 0 for every name. Fix: make the guard's commandWindows fail closed when git is missing (a git --version prefix with exit 2), use a git.cmd shim whose --exec-path names a folder with no bash, add a "git not on PATH" case, make the launcher exit 2 for destructive-guard. Notes: N1 keep the wiring check in bash (preferences.sh wired); N2 workdir is not exercised, record it as a limit; N3 compression is an inference: keep zstd stdout to the last newline, use the streaming decompressor, read only the .jsonl when both exist; N4 the state entry needs a byte offset; N5 add the Stop continuation to the checklist; N6 start the checklist with /hooks listing the four hooks; N7 the first-dream meta cost; N8 bash -c versus $SHELL -lc is fine; N9 keep the existing assertion substring.
+FAIL (round 1, reviewer, 2026-11-10). The plan rests on unverified mechanics in four places: how Codex quotes the Windows command, what the shell tool's name and payload look like, what happens to a rollout's file between a live session and the closed one, and what text in a rollout is machine-written. As written, the Windows tests and the rollout tests can pass while the real behaviour is wrong. B1 Windows quoting is unverified, and the A3 test cannot settle it. B2 No Windows run before merge. B3 Rollout identity and per-file state are underspecified. B4 Owner-signal filtering is incomplete (A8). B5 The shared reader does not fit taste. B6 The guard fails open, contrary to its own contract. B7 The guard's activation and input under Codex are unverified. B8 An [open] assumption makes A14 unreachable. Notes N1 to N12: one shared wiring check; feedback with a string transcript_path; hermetic DREAM_CODEX_HOME; due bounded by mtime and first line; a forcing knob for the zstd reader; models.md at its cap; .gitattributes already has *.cmd; %%r in the .cmd file; bash -lc and login profiles; the hook output cap; archived sessions; upstream wording.
 
 ## Progress log
-<!-- timestamped one-liners; this is what survives compaction -->
+- 2026-11-10 rollout record types counted over the four newest local rollouts (1007 lines): event_msg item_completed 220, token_count 127, token_usage_record 126, response_item reasoning 97, custom_tool_call 90 and its output 90, function_call 49 and output 47, message developer 33, assistant 19, user 18, session_meta 6, turn_context 11.
+- 2026-11-10 25 newest rollouts: user-role message starts include `<environment_context>` 26, `# AGENTS.md instructions for` 19, `<external_codex_apps_open_pa` 14, `# Files mentioned by the use` 11, empty 11, `</image>` 11, `# Files pasted by the user` 4, owner prompts otherwise; 5 `turn_aborted` events; session_meta: Codex Desktop/vscode/user 21, subagent 11. The desktop shell tool is a code-mode `exec` calling `tools.exec_command({cmd, workdir})`, yet the PreToolUse hook receives `tool_name: "Bash"` and `tool_input.command` (probe run 4).
+- 2026-11-10 cmdprobe2.py (raw COMSPEC /C form, subfolder of "codex probe2"): git on PATH: the root-removal payload exits 2 with the guard's BLOCKED line, `git status` exits 0; PATH=C:\Windows\System32;C:\Windows: both exit 2 with "codex-hook: git is not on PATH; run bash scripts/doctor.sh".
+- 2026-11-10 probe: the first attempt without the owner's OK was refused by the session's safety classifier; the owner approved a probe. A project `.codex/hooks.json` did not load in the untrusted scratch repository (runs 1 to 3, also with a `-c projects...trust_level` override); hooks passed as `-c hooks.<Event>=[...]` overrides fired (runs 4 and 5).
 
 ## Review verdict
-<!-- written ONLY by the independent reviewer -->
 
 ## Retro
-<!-- filled by docs/procedures/retro.md -->
