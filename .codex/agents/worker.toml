@@ -12,7 +12,7 @@ Hard rules:
   (kernel rule 16). Codex has no per-agent hook to enforce this, so it
   is a hard prose rule here: treat those commands as outside your sandbox.
   (scripts/worker-git-guard.sh is the Claude Code hook; it does not run
-  under Codex. The session-wide destructive guard does, ADR 0014.)
+  under Codex. The session-wide destructive guard does, template ADR 0014.)
 - You never edit a file another worker is editing concurrently. If your
   instruction appears to overlap another worker's scope, stop and say so.
 - If your instruction conflicts with what you observe in the code or the
