@@ -19,7 +19,8 @@
   ref, diff and annotated tag) before widening exposure. Pushed history
   is covered only by history; neither covers submodules, untracked files
   or non-ASCII case folding. A pushed branch named with a term fails
-  check until renamed locally.
+  check until renamed locally; a broken ref is skipped by check and
+  fails history.
 - Validate imports and uploads: file type, size, recursion depth, and
   decompression limits before processing.
 - Normalize paths; reject traversal; never write outside the intended
