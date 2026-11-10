@@ -14,7 +14,8 @@ cwd is this project (the root, its worktrees, the roots the project dream
 remembers, this pass's own remembered roots and every --match path, matched
 as dream.py matches them); <projects>/<main checkout slug>/memory/*.md notes
 whose type is feedback or user (dream.memory_dir); this project's interactive
-Codex threads through dream.codex_records (CODEX_HOME sessions, ADR 0014). A
+Codex threads through dream.codex_records (CODEX_HOME sessions, template ADR
+0014). A
 message counts only when dream.is_human says it holds the owner's own words.
 Outputs:
   <main checkout>/.work/dream/taste/   state.json (offsets, notes read, the
