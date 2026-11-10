@@ -1,4 +1,4 @@
-<h1 align="center"><img src="docs/assets/hero.svg" width="100%" alt="Agentic template. A starter kit that makes AI coding agents careful, and teaches them what you like. It works by day and learns while it sleeps."></h1>
+<h1 align="center"><img src="docs/assets/hero.svg" width="100%" alt="agent-kernel. A starter kit that makes AI coding agents careful, and teaches them what you like. It works by day and learns while it sleeps."></h1>
 
 **This is a starting point for any project you build with an AI coding agent**
 (Claude Code, Codex, or any agent that reads `AGENTS.md`). It has no app code
