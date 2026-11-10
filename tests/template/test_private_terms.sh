@@ -29,6 +29,12 @@ new_repo
 printf 'Zelda Quixote\n' > .work/private-terms.txt
 run ./scripts/private-terms.sh check
 assert_rc "a repository with no commits passes check" 0
+printf 'Zelda Quixote\n' > docs/first.md
+git add docs/first.md
+run ./scripts/private-terms.sh check
+assert_rc "a repository with no commits scans the index" 1
+assert_contains "the staged file is named before the first commit" "docs/first.md: 1 line(s) (term 1)"
+git rm -q --cached docs/first.md && rm docs/first.md
 rm .work/private-terms.txt
 
 echo "Plain text." > docs/a.md
@@ -126,7 +132,27 @@ else
   run ./scripts/private-terms.sh check
   assert_contains "a file name with a colon is named whole" "docs/a:b.md: 1 line(s) (term 2)"
   git rm -q --cached "docs/a:b.md" && rm "docs/a:b.md"
+  # A line break inside a staged file name keeps every part masked.
+  NLNAME="docs/Zelda Quixote
+x.md"
+  printf 'by zelda quixote\n' > "$NLNAME"
+  git add "$NLNAME"
+  run ./scripts/private-terms.sh check
+  assert_rc "a file name with a line break holding a term fails" 1
+  assert_contains "a file name with a line break is named masked" "docs/*** x.md: 1 line(s) (term 2)"
+  no_term "a file name with a line break"
+  git rm -q --cached "$NLNAME" && rm "$NLNAME"
 fi
+
+# A5 a broken ref whose name holds a term: git's own error text is not shown.
+mkdir -p .git/refs/heads
+echo "1111111111111111111111111111111111111111" > ".git/refs/heads/Zelda-Quixote-x"
+run ./scripts/private-terms.sh check
+no_term "check with a broken ref"
+run ./scripts/private-terms.sh history
+assert_rc "history fails when git cannot read a broken ref" 1
+no_term "history with a broken ref"
+rm -f ".git/refs/heads/Zelda-Quixote-x"
 
 # A3 commits: message, author email, committer name; a forged marker line.
 echo "m" > docs/m.md && git add docs/m.md

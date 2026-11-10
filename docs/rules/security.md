@@ -16,9 +16,10 @@
   the gitignored .work/private-terms.txt; check.sh runs
   `scripts/private-terms.sh check` (staged content, paths, local branch
   names, unpushed commits); run `scripts/private-terms.sh history` (every
-  ref, diff and annotated tag) before widening exposure. Pushed history,
-  submodules and non-ASCII case folding are not covered by check; a
-  pushed branch named with a term fails check until renamed locally.
+  ref, diff and annotated tag) before widening exposure. Pushed history
+  is covered only by history; neither covers submodules, untracked files
+  or non-ASCII case folding. A pushed branch named with a term fails
+  check until renamed locally.
 - Validate imports and uploads: file type, size, recursion depth, and
   decompression limits before processing.
 - Normalize paths; reject traversal; never write outside the intended

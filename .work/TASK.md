@@ -42,7 +42,7 @@ A local leak guard for private words. The owner lists terms that must never appe
 
 ## Design
 `scripts/private-terms.sh check|history`, `LC_ALL=C` exported, cwd the repository root. Terms path `${PRIVATE_TERMS_FILE:-.work/private-terms.txt}`.
-- Normalise: one awk pass over the terms file writes `N<TAB>lowercased term` (first occurrence only) to a mktemp file under TMPDIR, removed by an EXIT trap. Zero terms: exit 0 before any git call.
+- Normalise: one awk pass over the terms file writes `N<TAB>lowercased term` (first occurrence only) to a mktemp file under TMPDIR, removed by an EXIT trap. Zero terms: exit 0 after the refusal check below and before any scan (A1: no git grep).
 - Refuse: when the terms file's resolved absolute path is under the repository root, `git check-ignore -q -- <terms>` must exit 0 (any other exit refuses: tracked, not ignored, or a git error); a path outside the root is accepted. Both sides are resolved the same way (`cd` plus `pwd -P`, as check.sh does), never mixing `git rev-parse --show-toplevel` with `pwd`.
 - One awk scanner, terms loaded as its first file operand, input on stdin, `-v MODE=` one of `paths`, `stream`, `content` (with `-v TN=`). It masks every term in any printed label by marking all matched byte spans on the lowercased label first and then replacing each marked run with `***`, so overlapping terms leave no fragment. stream mode: a line `SOH commit <40 hex>` (SOH built with sprintf("%c",1), hex checked as 40 or 64 characters of [0-9a-f]) sets the label `commit <sha12>`; `SOH tag <name>` sets `tag <masked name>`; every other line is matched with `index(tolower(line), term)` and reported once per (label, term).
 - check, contents: per term, `git grep -z --no-color --cached -a -c -i -F -e <term> | tr '\0' ':'` (no C-quoting); exit 1 none, above 1 a git error (exit 1); each `path:count` line is split at its last colon and printed masked by the scanner in content mode. One matcher only, so no candidate goes unattributed.
@@ -69,5 +69,6 @@ FAIL (round 1, reviewer, 2026-11-10). B1 masked output; B2 SOH commit marker; B3
 - 2026-11-10 real scan of this repository with a local terms list (12 terms): check OK; history found 45 commits holding terms, every one only on old local branches from before the history rewrite (git branch -r --contains and git tag --contains empty for all 45); published refs are clean.
 
 ## Review verdict
+FAIL (round 1, reviewer, 2026-11-10, head 185609d). B1 a staged file name with a line break printed a raw piece; B2 git stderr could name a broken ref unmasked; B3 security.md did not say what history skips. Notes N1 Design wording, N2 tests for a staged term before the first commit and remote-tracking ref masking. Fixed in the next commit; local run 120 passed, 0 failed.
 
 ## Retro

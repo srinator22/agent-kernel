@@ -117,7 +117,8 @@ BEGIN { SOH = sprintf("%c", 1); label = "" }
 FNR == NR { tab = index($0, "\t"); nt++; num[nt] = substr($0, 1, tab - 1); term[nt] = substr($0, tab + 1); next }
 MODE == "content" {
   for (j = length($0); j > 0 && substr($0, j, 1) != ":"; j--) ;
-  print mask(substr($0, 1, j - 1)) ": " substr($0, j + 1) " line(s) (term " TN ")"; found = 1; next
+  if (j == 0) { print mask($0) " (term " TN ")"; found = 1; next }
+  print mask(substr($0, 1, j - 1)) ": " mask(substr($0, j + 1)) " line(s) (term " TN ")"; found = 1; next
 }
 MODE == "paths" { report(mask($0), $0); next }
 substr($0, 1, 8) == SOH "commit " {
@@ -132,10 +133,11 @@ scan() { awk -v MODE="$1" -v TN="${2:-0}" "$LC_AWK$SCAN" "$NORM" -; }
 
 fail=0
 # stream_git WHAT MODE GIT-ARGS...: git output through the scanner; a git
-# failure is a failure, never a clean result.
+# failure is a failure, never a clean result. git's stderr is dropped: it can
+# name a broken ref, unmasked; the exit code still fails the run.
 stream_git() {
   local what="$1" mode="$2"; shift 2
-  git "$@" | scan "$mode"
+  git "$@" 2>/dev/null | scan "$mode"
   local st=("${PIPESTATUS[@]}")
   if (( st[0] != 0 )); then echo "private-terms: git failed while reading $what (exit ${st[0]})" >&2; fail=1; fi
   if (( st[1] == 1 )); then fail=1; elif (( st[1] != 0 )); then echo "private-terms: the scanner failed on $what (exit ${st[1]})" >&2; fail=1; fi
@@ -148,11 +150,16 @@ git rev-parse -q --verify HEAD >/dev/null 2>&1 && HAVE_HEAD=1
 if [[ "$MODE" == check ]]; then
   # Staged content: one git grep per term, so every match has its term.
   TAB="$(printf '\t')"
+  NL="$(printf '\nx')"; NL="${NL%x}"
   while IFS="$TAB" read -r n t; do
     rc=0
     git grep -z --no-color --cached -a -c -i -F -e "$t" > "$TMP/grep" 2>/dev/null || rc=$?
     if (( rc == 0 )); then
-      tr '\0' ':' < "$TMP/grep" | scan content "$n"
+      # Records are "path NUL count LF"; a line break inside a path becomes a
+      # space so each record stays one line for the scanner.
+      while IFS= read -r -d '' gp && IFS= read -r gc; do
+        printf '%s:%s\n' "${gp//$NL/ }" "$gc"
+      done < "$TMP/grep" | scan content "$n"
       fail=1
     elif (( rc != 1 )); then
       echo "private-terms: git grep failed for term $n (exit $rc)" >&2; fail=1
@@ -169,7 +176,7 @@ if [[ "$MODE" == check ]]; then
   fi
 else
   stream_git "ref names" paths for-each-ref '--format=%(refname)'
-  if (( HAVE_HEAD )) || [[ -n "$(git for-each-ref --count=1)" ]]; then
+  if (( HAVE_HEAD )) || [[ -n "$(git for-each-ref --count=1 2>/dev/null)" ]]; then
     stream_git "history" stream "${DIFF[@]}" "$LOGFMT" --all
   fi
   stream_git "annotated tags" stream for-each-ref '--format=%01tag %(refname:short)%0a%(taggername) %(taggeremail)%0a%(contents)' refs/tags
