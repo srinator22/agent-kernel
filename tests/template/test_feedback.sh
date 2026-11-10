@@ -248,4 +248,38 @@ PYEOF
 )"
 if [[ "$tmo" =~ ^[0-9.]+$ ]] && awk -v t="$tmo" 'BEGIN{exit !(t<=1)}'; then t_ok "branch lookup git timeout is 1 s or less ($tmo)"; else t_bad "branch lookup git timeout is 1 s or less (got: $tmo)"; fi
 
+# --- Codex UserPromptSubmit payloads (A6) and machine-written prompts (A8) ---
+# codex_hook PROMPT TRANSCRIPT-PATH: the payload Codex sends (session_id, turn_id, transcript_path,
+# cwd, hook_event_name, model, permission_mode, prompt).
+codex_hook() {
+  OUT="$(printf '{"session_id":"019c0000-0000-7000-8000-000000000001","turn_id":"019c0000-0000-7000-8000-0000000000aa","transcript_path":"%s","cwd":"%s","hook_event_name":"UserPromptSubmit","model":"gpt-5","permission_mode":"default","prompt":"%s"}'     "$2" "$FIXW" "$1" | bash scripts/feedback-log.sh 2>&1)"
+  RC=$?
+}
+setup
+RO="$FIX/rollout-2026-11-07T08-00-00-019c0000-0000-7000-8000-000000000001.jsonl"
+ROW="$FIXW/rollout-2026-11-07T08-00-00-019c0000-0000-7000-8000-000000000001.jsonl"
+{
+  printf '%s
+' '{"timestamp":"2026-11-07T08:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"cwd":"/work/demo","originator":"Codex Desktop","source":"vscode","thread_source":"user"}}'
+  printf '%s
+' '{"timestamp":"2026-11-07T08:01:00.000Z","ordinal":1,"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I changed the file."}]}}'
+} > "$RO"
+codex_hook "always lead with the result" "$ROW"
+assert_rc "A6: a Codex payload exits 0" 0
+assert_eq "A6: a Codex payload writes one line" 1 "$(lines)"
+assert_last_has "A6: the Codex session id is cut to 8 characters" '"session":"019c0000"'
+assert_last_has "A6: the Codex prompt is the text" '"text":"always lead with the result"'
+assert_last_has "A6: a Codex prompt with a preference word is guessed as a preference" '"kind":"preference"'
+assert_last_has "A6: a Codex .jsonl rollout as transcript_path gives no files" '"files":[]'
+assert_last_has "A6: a Codex .jsonl rollout as transcript_path gives no said" '"said":""'
+codex_hook "please add a readme" "$FIXW/does-not-exist/rollout-x.jsonl"
+assert_rc "A6: a missing transcript_path exits 0" 0
+assert_eq "A6: a missing transcript_path still writes the line" 2 "$(lines)"
+assert_last_has "A6: a missing transcript_path gives no files" '"files":[]'
+assert_last_has "A6: a missing transcript_path gives no said" '"said":""'
+for p in "stop-gate: finish the open items first" "# AGENTS.md instructions for the repo"          "# Files mentioned by the user: a.txt" "# Files pasted by the user: b.txt"; do
+  codex_hook "$p" "$ROW"
+  assert_eq "A8: '${p:0:22}' is not logged" 2 "$(lines)"
+done
+
 t_finish

@@ -165,6 +165,7 @@ scripts/
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
   destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
   stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
+  codex-hook.cmd              # Windows launcher for the Codex hooks: finds Git Bash, runs scripts/<name>.sh; CRLF
   tasklint.sh                 # check | ship: criteria evidence, assumption status, autopilot plan verdict
   doc-eval.sh                 # check | brief: the documentation question table
 tests/
@@ -184,6 +185,7 @@ tests/
     test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
     test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
     test_stop_gate.sh         # Stop hook decisions against a fake quickgate
+    test_codex_hooks.sh       # .codex/hooks.json commands run as Codex runs them, Unix and Windows, launcher fail-closed cases
     test_tasklint.sh
     test_doc_eval.sh
     test_session_context.sh   # mode line, git priming, task state, template update notice
@@ -202,6 +204,7 @@ tests/
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network
+    codex/                  # payloads recorded from a live Codex session, machine values replaced
   docs/
     questions.md              # question set and answer key for docs/procedures/doc-eval.md
 .work/
@@ -228,6 +231,7 @@ tests/
     template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
     dream/SKILL.md            # thin wrapper -> docs/procedures/dream.md
 .codex/
+  hooks.json                  # Codex hooks: SessionStart, UserPromptSubmit, PreToolUse (Bash), Stop; trusted by the owner once in Codex
   agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml, taste-dreamer.toml
 .agents/
   skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)

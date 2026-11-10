@@ -15,8 +15,9 @@ the files being edited and the agent's last words. The log is local and
 gitignored; it holds the owner's words and never enters git. The dream reads
 it. `FEEDBACK_LOG=0` turns the hook off.
 
-Codex has no capture hook. In a Codex session, follow the steps below by hand
-and note owner feedback in the plan or BACKLOG.md.
+Codex runs the same hook from `.codex/hooks.json` once the project and its
+hooks are trusted (template ADR 0014). Until then, follow the steps below by hand and
+note owner feedback in the plan or BACKLOG.md.
 
 The hook may print a line after a message. Treat the kind as a guess and
 check it against what the owner said.

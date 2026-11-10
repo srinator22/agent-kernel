@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # session-context.sh - SessionStart hook target: mechanizes kernel rule 7
-# for Claude Code. Fires at startup, resume, clear, and after compaction
-# (SessionStart source "compact"), so the rule-7 re-read happens by
-# mechanism, not memory. stdout is injected into the session context:
-# keep it small and stable. Other harnesses rely on the prose rule.
+# for Claude Code (.claude/settings.json) and Codex (.codex/hooks.json).
+# Fires at startup, resume, clear, and after compaction (SessionStart source
+# "compact"), so the rule-7 re-read happens by mechanism, not memory. stdout
+# is injected into the session context: keep it small and stable. Other
+# harnesses rely on the prose rule.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -112,11 +113,11 @@ preference_rules() {
 # Owner preferences (docs/procedures/preferences.md): one line with the
 # register areas, the rule count and how many rules are still Review, counted
 # with bash and awk so it works without Python. Prints nothing without
-# registers. Also warns while the feedback hook script exists but
-# .claude/settings.json does not wire it. Every command is guarded: this hook
+# registers. Also warns while the feedback hook script exists but neither
+# .claude/settings.json nor .codex/hooks.json wires it. Every command is guarded: this hook
 # must exit 0 whatever the registers hold.
 preferences_block() {
-  local f area areas="" counts rules=0 review=0 settings=""
+  local f area areas="" counts rules=0 review=0
   for f in docs/preferences/*.md; do
     [[ -f "$f" ]] || continue
     area="$(basename "$f" .md)"
@@ -148,9 +149,10 @@ preferences_block() {
     preference_rules
   fi
   if [[ -f scripts/feedback-log.sh ]]; then
-    if [[ -f .claude/settings.json ]]; then settings="$(cat .claude/settings.json 2>/dev/null || true)"; fi
-    if [[ "$settings" != *feedback-log.sh* ]]; then
-      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 9)."
+    # One shared check (preferences.sh wired); without preferences.sh there is
+    # nothing to compare against, so no warning.
+    if [[ -f scripts/preferences.sh ]] && ! bash scripts/preferences.sh wired >/dev/null 2>&1; then
+      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json or .codex/hooks.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 9)."
     fi
   fi
   return 0

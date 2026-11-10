@@ -226,6 +226,26 @@ assert_not_contains "wired hook does not warn" "warning:"
 rm -f .claude/settings.json
 chk
 assert_contains "a missing settings.json warns" "warning:"
+assert_contains "the warning names both hook files" ".codex/hooks.json"
+run bash scripts/preferences.sh wired
+assert_rc "wired: neither file has the hook" 1
+mkdir -p .codex
+printf '{"hooks": {"UserPromptSubmit": [{"hooks": [{"command": "bash x/scripts/feedback-log.sh"}]}]}}
+' > .codex/hooks.json
+chk
+assert_rc "a hook wired only in .codex/hooks.json exits 0" 0
+assert_not_contains "a hook wired only in .codex/hooks.json does not warn" "warning:"
+run bash scripts/preferences.sh wired
+assert_rc "wired: the Codex hooks file counts" 0
+printf '{"hooks": {}}
+' > .codex/hooks.json
+run env PATH=/nonexistent "$BASH" scripts/preferences.sh wired
+assert_rc "wired: runs with an empty PATH (builtins only), unwired" 1
+printf '{"hooks": {"UserPromptSubmit": [{"hooks": [{"command": "scripts/feedback-log.sh"}]}]}}
+' > .claude/settings.json
+run env PATH=/nonexistent "$BASH" scripts/preferences.sh wired
+assert_rc "wired: runs with an empty PATH (builtins only), wired in settings.json" 0
+rm -rf .codex .claude/settings.json
 
 # ---- no python ----
 fresh

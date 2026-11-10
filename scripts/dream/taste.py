@@ -2,19 +2,21 @@
 rows in the project's preference registers the owner approves line by line.
 
 Purpose: the taste pass of a dream (docs/procedures/dream.md). A model-free
-digest reduces this project's Claude Code transcripts, and the feedback notes
-in this project's auto-memory, to the owner's own preference signals; a
-read-only agent proposes numbered register lines from it; "apply" writes only
-the numbers the owner approved, through the one register writer
-(preferences.write_rows).
+digest reduces this project's Claude Code transcripts and Codex sessions, and
+the feedback notes in this project's auto-memory, to the owner's own
+preference signals; a read-only agent proposes numbered register lines from
+it; "apply" writes only the numbers the owner approved, through the one
+register writer (preferences.write_rows).
 
 Inputs: <projects>/<dir>/<session>.jsonl (top level only) under the default
 projects folder and every --projects-dir, kept only when the session's first
 cwd is this project (the root, its worktrees, the roots the project dream
 remembers, this pass's own remembered roots and every --match path, matched
 as dream.py matches them); <projects>/<main checkout slug>/memory/*.md notes
-whose type is feedback or user (dream.memory_dir). A message counts only when
-dream.is_human says it holds the owner's own words.
+whose type is feedback or user (dream.memory_dir); this project's interactive
+Codex threads through dream.codex_records (CODEX_HOME sessions, template ADR
+0014). A
+message counts only when dream.is_human says it holds the owner's own words.
 Outputs:
   <main checkout>/.work/dream/taste/   state.json (offsets, notes read, the
       evidence pool, known roots, last pass), state.next.json (pending until
@@ -577,6 +579,29 @@ def outcome_text(c, report, ledger, before):
 
 # ---------------------------------------------------------------- commands
 
+def scan_codex(c, files, pool, stats, roots):
+    """Owner prompts of this project's Codex threads, through the same
+    message_signals as a Claude transcript (the reader is dream.codex_records)."""
+    cs = {"read": 0, "lines": 0, "bad": 0, "skipped": 0}
+    last_reply, rejected, cur = "", False, None
+    hits = set()
+    for tid, ts, role, text in D.codex_records(c, files, roots, cs):
+        if tid != cur:
+            last_reply, rejected, cur = "", False, tid
+        if role == "assistant":
+            last_reply = D.clean(text, RE_LIMIT)
+        elif role == "user":
+            got, rejected = message_signals(text, last_reply, rejected)
+            proj = project_name((files.get(D.CODEX_KEY + tid) or {}).get("cwd"), "codex")
+            for kind, t, re_ in got:
+                add_signal(pool, kind, t, re_, tid[:8], proj, ts)
+                hits.add(tid)
+    for k in ("read", "lines", "bad"):
+        stats[k] += cs[k]
+    stats["hits"] += len(hits)
+    stats["skipped"] = stats.get("skipped", 0) + cs["skipped"]
+
+
 def cmd_digest(c, a):
     if a.max_bytes < D.MIN_BYTES:
         die("taste: --max-bytes must be at least %d (got %d)" % (D.MIN_BYTES, a.max_bytes))
@@ -584,8 +609,9 @@ def cmd_digest(c, a):
     ledger = load_ledger(c)
     roots, wts = scope_roots(c, state)
     state["known_roots"] = sorted(set(state["known_roots"]) | set(wts))
-    stats = {"read": 0, "lines": 0, "bad": 0, "hits": 0, "notes": 0}
+    stats = {"read": 0, "lines": 0, "bad": 0, "hits": 0, "notes": 0, "skipped": 0}
     scan_transcripts(c, state["files"], state["pool"], stats, roots)
+    scan_codex(c, state["files"], state["pool"], stats, roots)
     scan_notes(c, state["memory"], state["pool"], stats)
     pool, used = state["pool"], set(ledger["used"])
     cand = [(sid, e) for sid, e in pool.items() if sid not in used]
@@ -631,6 +657,8 @@ def cmd_digest(c, a):
         "since: %s" % (state["last_pass"] or "the first taste pass"),
         "transcripts: %d with signals of %d read; new lines read: %d; malformed: %d; notes read: %d"
         % (stats["hits"], stats["read"], stats["lines"], stats["bad"], stats["notes"]),
+    ] + (["codex: %d compressed rollouts skipped (no zstd reader: install zstd or use Python 3.14)"
+          % stats["skipped"]] if stats["skipped"] else []) + [
         "signals: %d fresh and %d earlier shown of %d unused in the pool; %d dropped by the %d byte cap"
         % (len(kept_new), len(kept_old), len(cand), dropped, a.max_bytes),
         "profile: %d of %d bytes in the session-start print; %d rules in %d areas"

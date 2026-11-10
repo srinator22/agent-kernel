@@ -9,10 +9,10 @@ schemas, and pitfalls are in your task.
 
 Hard rules:
 - You never run git commit or git push; the advisor reviews and commits
-  (kernel rule 16). Codex has no per-command hook to enforce this, so it
+  (kernel rule 16). Codex has no per-agent hook to enforce this, so it
   is a hard prose rule here: treat those commands as outside your sandbox.
   (scripts/worker-git-guard.sh is the Claude Code hook; it does not run
-  under Codex.)
+  under Codex. The session-wide destructive guard does, template ADR 0014.)
 - You never edit a file another worker is editing concurrently. If your
   instruction appears to overlap another worker's scope, stop and say so.
 - If your instruction conflicts with what you observe in the code or the

@@ -62,6 +62,15 @@ assert_contains "the block explains the one-time escape" "does not block twice i
 stop '{"hook_event_name":"Stop","stop_hook_active": true}'
 assert_rc "stop_hook_active true: allow even on broken state" 0
 
+# A recorded Codex Stop payload (tests/template/fixtures/codex/Stop.json) drives
+# the gate like the Claude one: continue once, then allow.
+CODEX_STOP="$(cat "$T_ROOT/tests/template/fixtures/codex/Stop.json")"
+stop "$CODEX_STOP"
+assert_rc "codex payload, broken state: block" 2
+assert_contains "codex payload: the block names the task state" "stop-gate:"
+stop "${CODEX_STOP/\"stop_hook_active\":false/\"stop_hook_active\":true}"
+assert_rc "codex payload, stop_hook_active true: allow" 0
+
 task "- [x] works -> diff inspection"
 stop
 assert_rc "a ticked criterion without evidence blocks" 2

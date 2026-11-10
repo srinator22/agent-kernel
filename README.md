@@ -312,9 +312,9 @@ All in `docs/procedures/`, portable to any agent.
 
 - Claude Code: `CLAUDE.md` imports AGENTS.md; `.claude/` holds agents, skills
   and the SessionStart, UserPromptSubmit, PreToolUse and Stop hooks.
-- Codex: reads AGENTS.md; `.codex/agents/` and `.agents/skills/` carry the
-  same accelerators. Codex has no feedback hook; preferences are noted by hand
-  there.
+- Codex: reads AGENTS.md; `.codex/agents/`, `.agents/skills/` and
+  `.codex/hooks.json` carry the same accelerators and hooks. Trust the
+  project and its hooks once in Codex; the dream reads Codex sessions too.
 - Any other agent: AGENTS.md and `docs/procedures/` are sufficient;
   accelerators are optional.
 - Model choice: `docs/rules/models.md` defines tiers (cheap, standard, strong,
