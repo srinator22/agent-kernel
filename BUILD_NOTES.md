@@ -41,9 +41,9 @@ Post-build review round (2026-08-01), items verified before acting:
   frontmatter; custom agents are .codex/agents/*.toml with required
   name, description, and developer_instructions fields; project agents
   override the built-ins (default, worker, explorer), so worker.toml
-  deliberately overrides Codex's built-in worker. Codex offers no
-  per-command hook, so the Codex-side commit/push denial is prose plus
-  the advisor gate; the Codex reviewer is mechanically read-only via
+  deliberately overrides Codex's built-in worker. Codex offered no
+  per-command hook then (Codex hooks are wired since ADR 0014), so the
+  Codex-side commit/push denial is prose plus the advisor gate; the Codex reviewer is mechanically read-only via
   sandbox_mode = "read-only".
 - Hook shell resolution confirmed in the hooks docs: hook commands run
   under sh on unix and under Git Bash on Windows when Git Bash is

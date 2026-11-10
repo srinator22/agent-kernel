@@ -132,7 +132,10 @@ last), so check.sh itself stays the template's and syncs cleanly.
         folder `ruff.toml` files carry the template's own lint contract;
       - when `.claude/settings.json` conflicts, merge the `UserPromptSubmit`
         entry that runs `scripts/feedback-log.sh` (with `"timeout": 5`) by
-        hand; session-context warns until it is wired.
+        hand; session-context warns until it is wired;
+      - after a sync that brings `.codex/hooks.json`, open the project in
+        Codex once and trust it and its four hooks (`/hooks`); the owner
+        checklist in ADR 0014 confirms they run.
 
    The script never touches the Project decisions section, re-verifies the
    kernel hash after applying, and refuses a real apply on main or on a
