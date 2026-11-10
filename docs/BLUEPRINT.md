@@ -151,6 +151,7 @@ scripts/
   find-python.sh              # sourced helper: PY is the first of python3, python that runs as Python 3
   doctor.sh                   # first-run tool check: runs each required and recommended tool, prints install commands
   preferences.sh              # check: the preference registers in docs/preferences/ are well formed
+  private-terms.sh            # check and history: no term from the gitignored .work/private-terms.txt in the repository, output masked
   dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats and retro commit dates
@@ -199,6 +200,7 @@ tests/
     test_find_python.sh       # stub python3 skipped by running it, no variable left, scripts that source the helper
     test_taste_project.sh     # per-project taste: other projects excluded, home untouched, register rows, duplicates, template mode
     test_test_files.sh        # guarded lib.sh load in every test, exec bits
+    test_private_terms.sh     # masked output, staged and binary content, paths, refs, unpushed and full history, merges, tags, refusals
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network
@@ -342,7 +344,7 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 1, always: kernel hash verify via `scripts/kernel-hash.sh --verify`. On mismatch, print a loud multi-line error explaining kernel drift and the sanctioned edit path (human approval + `--update` in the same commit); exit 1.
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
-- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, and the preference register check (`scripts/preferences.sh check`) whenever the script exists. `--quick` never skips this step.
+- Step 4, always (Amendment 2): the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, the preference register check (`scripts/preferences.sh check`) and the private-terms check (`scripts/private-terms.sh check`) whenever each script exists. `--quick` never skips this step.
 - Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`, `.claude/skills` equal to the `CORE_SKILLS` list in `scripts/lessons.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 

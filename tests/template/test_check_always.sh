@@ -104,6 +104,21 @@ assert_contains "the register failure is named" "scripts/preferences.sh check fa
 assert_not_contains "the stack block is not reached after a register failure" "$STACK_MSG"
 git rm -q -f scripts/preferences.sh && git commit -q -m "remove preferences stub" >/dev/null 2>&1
 
+# ---- 4j: the private-terms check runs in the always section ----
+printf '#!/usr/bin/env bash
+echo "private-terms stub ran: $*"
+exit "${TERMS_RC:-0}"
+' > scripts/private-terms.sh
+commit_fixture
+run ./scripts/check.sh --quick
+assert_contains "the private-terms check runs in the always section, even with --quick" "private-terms stub ran: check"
+assert_contains "a passing private-terms check reaches the stack block" "$STACK_MSG"
+TERMS_RC=1 run ./scripts/check.sh --quick
+assert_rc "a failing private-terms check fails project mode" 1
+assert_contains "the private-terms failure is named" "scripts/private-terms.sh check failed"
+assert_not_contains "the stack block is not reached after a private-terms failure" "$STACK_MSG"
+git rm -q -f scripts/private-terms.sh && git commit -q -m "remove private-terms stub" >/dev/null 2>&1
+
 printf 'bad %s dash\n' "$EM" > notes.txt
 commit_fixture
 run ./scripts/check.sh
@@ -336,6 +351,11 @@ printf '#!/usr/bin/env bash
 exit 0
 ' > scripts/preferences.sh
 commit_fixture
+for f in scripts/private-terms.sh tests/template/test_private_terms.sh; do
+  req=0
+  for r in "${REQUIRED[@]}"; do [[ "$r" == "$f" ]] && req=1; done
+  assert_eq "$f is in the required list" "1" "$req"
+done
 
 # A13: the shipped settings wire the feedback hook for UserPromptSubmit with a
 # 5 second budget. Read from the real tree: a started project customises its
