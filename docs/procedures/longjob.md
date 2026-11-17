@@ -6,14 +6,14 @@
    exactly where it stopped; never write a long job that starts over.
 3. A STATE file in `.work/jobs/` (gitignored) carries: the mandate, a plan
    checklist, running processes with their log and checkpoint paths,
-   decisions made and why, and resume instructions. Update it as you go so
-   a cold session can pick up where this one stopped.
+   decisions and why, and resume instructions. Keep it current so
+   a cold session can resume.
 4. Respect external hosts: honor robots.txt delays, send a descriptive
    User-Agent, pace politely, one process per host.
 5. Stall rule (unattended runs and any long job): a tool call or background
    job silent for more than 20 minutes (no output, no checkpoint change) is
    stopped by PID or task id, never by image name (L016), and restarted once
-   from its checkpoint. Record the stall, the PID and the restart in the
+   from its checkpoint. Record the stall, PID and restart in the
    STATE file and the TASK.md Progress log. A second stall is not retried:
    stop, keep the best verified artifact, and report it in the file named by
    the task's `Unattended:` field.
@@ -24,5 +24,5 @@
    edits. Anything outside the listed actions waits for the owner.
 7. If usage limits may interrupt the session, schedule a wakeup to resume
    plus a cheap periodic pulse that restarts a stalled job and deletes
-   itself when the job completes. This is harness-dependent; degrade to
-   documenting the manual resume steps in the STATE file.
+   itself when the job completes. Where the harness cannot, document the
+   manual resume steps in the STATE file.

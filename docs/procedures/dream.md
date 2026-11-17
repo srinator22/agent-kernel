@@ -1,219 +1,157 @@
 # Dream - consolidate memory against what sessions actually did
 
-A retro records what the agent noticed during one task. A dream reads what
-happened across every session since the last dream and checks the memory
-against it: pending lessons approved, merged or rejected with evidence, new
-lessons that recur, stale notes corrected, lessons turned into checks. It
-proposes; the human approves numbered items; nothing else changes (kernel
-rule 9). Session transcripts are the ground truth; the dream never edits or
-moves them.
+A dream checks memory against sessions since the last dream. It
+proposes; the human approves numbered items; nothing else changes
+(kernel rule 9).
 
 ## When
 
-`scripts/dream.sh due` decides from file stats and, for task retros, from the
-git commit date of each `.work/done` record (an untracked or changed record
-is dated by its file time): a dream is due when sessions have new activity
-since the last dream and either a task retro landed in `.work/done/` since
-then or three days passed. Two places ask the
-human, never more than once a day for the same state:
+`scripts/dream.sh due` decides from file stats and the git commit date of
+each `.work/done` record: a dream is due when sessions have new
+activity since the last dream and either a task retro landed in
+`.work/done/` since then or three days passed.
+Two places ask, never more than once a day for the same state:
 - the Stop hook, when a turn ends with no live task (`scripts/stop-gate.sh`
   runs `scripts/dream.sh due --offer`);
 - the retro, as its last step.
-The human can also start one with `/dream`; `/dream taste` runs only the
-Taste pass below. Prefer the gap between tasks.
+The human can also run `/dream`; `/dream taste` runs only the
+Taste pass below.
 
 ## Steps
 
 1. Ask "Start dreaming?". On no, stop; the offer is not repeated today.
-2. Run `scripts/dream.sh digest`. It reads only the transcript lines added
-   since the last dream (each line is read once ever), keeps the lines whose
-   working directory is this repository or one of its worktrees (a session
-   started elsewhere still counts when it worked here), and writes
-   `.work/dream/digest.md`: numbered signals (corrections, denials, hook
-   blocks, interrupts, failed tool calls, then plain messages; only the
-   owner's own messages count, never another session's message or a
-   background notification, and compaction summaries, which the model
-   wrote, are skipped), capped at 40 KB, plus
-   hygiene numbers (`scripts/dream.sh hygiene`) and the Feedback and Repeats
-   sections below. Exit 3 means neither a new signal nor a new feedback line
-   of kind deferral, correction, preference or approval: say so and stop; no
-   model runs. The state lives in the main
-   checkout's `.work/dream/`, shared by every worktree, and the folder
-   carries its own `.gitignore`. A worktree root seen by any digest is
-   remembered; for a worktree created and removed between two digests, pass
-   `--match <its path>` to the next digest, since lines read without it are
-   not read again.
+2. Run `scripts/dream.sh digest`. It reads only transcript lines added since
+   the last dream from this repository or a worktree, and
+   writes `.work/dream/digest.md`: numbered signals (corrections, denials,
+   hook blocks, interrupts, failed tool calls, plain messages; owner
+   messages only), capped at 40 KB, plus hygiene numbers
+   (`scripts/dream.sh hygiene`) and the Feedback and Repeats sections.
+   Exit 3 means neither a new signal nor a new feedback line of kind
+   deferral, correction, preference or approval: say so and stop; no model
+   runs. State lives in the main checkout's `.work/dream/`. For a
+   worktree created and removed between two digests, pass
+   `--match <its path>` to the next digest.
 3. Dispatch the `dreamer` agent (standard tier, read-only) with the digest
-   path, the memory file list in its definition, and this repository's
-   Claude auto-memory folder (`~/.claude/projects/<folder named after the
-   main checkout's path>/memory`, also from a linked worktree). It returns
+   path and this repository's Claude auto-memory folder. It returns
    at most 12 numbered proposals,
    each with evidence (digest signal ids or file:line).
 4. Save the report as `.work/dream/<date>-report.md` and show the human the
    numbered list. The human answers with numbers ("apply 1, 3, 5", or none).
 5. Apply only the approved numbers, each exactly as its Change line says:
    PENDING.md and INDEX.md edits (an approved number is the human's
-   approval), auto-memory notes, BACKLOG rows, UPSTREAM.md entries, and
-   `scripts/lessons.sh use <Lnnn>` for counters. Tracked files follow the
+   approval), auto-memory notes, BACKLOG rows, UPSTREAM.md entries,
+   `scripts/lessons.sh use <Lnnn>` counters. Tracked files follow the
    git workflow: on the live task branch, or on `chore/dream-<date>`
    shipped per `docs/procedures/ship.md`.
-6. Run `scripts/dream.sh done --report <report> --applied <numbers>` (leave
-   out `--applied` when nothing was approved), so the same lines are not
-   read again. It records the offsets, the dream date and the signal counts
-   in the gitignored state only, so a dream with nothing approved leaves no
-   tracked change, and appends "## Outcome <date>" to the report: the
-   applied and declined numbers, the files named in the applied Change
-   lines that changed since the digest (git against the commit the digest
-   saw, and the auto-memory folder), and the hygiene numbers at the digest
-   against now. Run it in the checkout that holds the applied changes, on a
-   history that contains the digest's commit; elsewhere the Files line says
-   the files were not checked. The next digest's "Impact since the last
-   dream" section starts from this record.
+6. Run `scripts/dream.sh done --report <report> --applied <numbers>` (omit
+   `--applied` when nothing was approved), so the same lines are not
+   read again; it appends "## Outcome <date>" to the report.
 7. Run the Taste pass below.
 
 ## Scorecard
 
-Every digest has a "## Scorecard" section between Impact and Signals.
-`scripts/dream.sh scorecard` prints the same section read-only, which is
-how to see it when a digest exits 3. A script builds it from the saved
-reports (`.work/dream/YYYY-MM-DD-report.md`) and the checkout's current
-files; no model writes it, so the dreamer cannot grade itself. It shows:
-- one row per report, oldest first (the last 10; older ones fold into one
-  row), with the proposals, the numbers the owner approved and declined in
-  the report's last Outcome, or "no Outcome recorded";
+Every digest has a "## Scorecard" section;
+`scripts/dream.sh scorecard` prints the same section read-only. A script
+builds it from reports and files;
+no model writes it, so the dreamer cannot grade itself. It shows:
+- one row per report (last 10): proposals, numbers approved and
+  declined, or "no Outcome recorded";
 - the approval rate per proposal kind (the bracket tag);
-- each lesson id and each quoted BACKLOG row that an approved Change line
-  names, newest report first, at most 20 of each: its INDEX.md used and
-  last values, or the row's last cell, as they are now in the checkout and
-  branch the first line names;
+- lesson ids and BACKLOG rows approved Change lines name (at most 20 each);
 - the decided count against 30 (a self-review pass) and 50 (a replay check).
 
-"Approved" is the owner's approval number, not proof the change landed:
-"not in INDEX.md" or "not found" on a branch the change has not reached yet
-is expected. Candidates are signals that share two or more words with a
-lesson, the same matcher as Impact, not proof of recurrence. A report that
-cannot be read or has a malformed Outcome is listed as skipped. Kind rows
-and skipped lines are capped at 20 as well, and long values are cut. A lesson id is L with three or
-more digits, as INDEX.md writes them, read as written: a range such as
-"L011-L013" counts L011 and L013 only.
+"Approved" is the owner's approval number, not proof the change landed.
+A lesson id is L with three or
+more digits, as INDEX.md writes them.
 
 ## Feedback and Repeats
 
-Two more sections follow the Scorecard. They read the owner's feedback log,
-`.work/feedback/log.jsonl` in the main checkout (written by the
-UserPromptSubmit hook, gitignored, never committed).
-- "## Feedback": the log lines added since the last dream, of kind deferral,
-  correction, preference or approval (plain messages already appear in
-  Signals). Order is that kind order, then newest first; ids are f1, f2, and
-  so on. Each line shows date, session, branch, task and edited files, with
-  the text clipped to 400 characters. The section holds at most 12000 bytes
-  and shows how many lines the cap dropped. The kind is the hook's guess by
-  word lists, not a verdict.
-- "## Repeats": for each shown correction or preference, the rules in
-  `docs/preferences/*.md` (rules tables only, fenced examples skipped) that
-  share two or more words with it, as `<rule ID> <- f<N> (words)`, at most 40
-  lines and a count of the rest. These are word-overlap candidates, not
-  proof; the dreamer judges each. Repeats counts change only through an
-  approved proposal.
+Two more digest sections read
+`.work/feedback/log.jsonl` in the main checkout (UserPromptSubmit hook,
+gitignored).
+- "## Feedback": lines of kind deferral, correction, preference or
+  approval, newest first (ids f1, f2), with
+  text clipped to 400 characters, at most 12000 bytes. The
+  kind is a guess, not a verdict.
+- "## Repeats": rules in `docs/preferences/*.md` sharing two or more words
+  with a correction or preference, as `<rule ID> <- f<N> (words)`, at most 40
+  lines; the dreamer judges each. Repeats counts change only
+  through an approved proposal.
 
-The log offset is read at digest time into `state.next.json` (key
-"feedback"); `done` commits it, then renames a log over 5 MB to
-`log.1.jsonl` (one kept) and resets the offset to 0, keeping the committed
-offset as a carry: lines logged between the digest and `done` stay in
-`log.1.jsonl` past it, and the next digest reads them first. A digest that exits 3
-commits offsets itself and rotates the same way. A line without its
-newline waits for the next run, a malformed line is counted, and a log
+`done` commits the log offset, then renames a log over 5 MB to
+`log.1.jsonl` (one kept) and resets the offset to 0, keeping a carry.
+A line without its
+newline waits for the next run, and a log
 shorter than the saved offset is read again from 0. A missing log is not an
 error.
 
-The dreamer adds three proposal kinds:
+Extra proposal kinds:
 - `[preference]`: a new register row whose Source quotes the owner's words
   and the date;
-- `[escalate]`: a rule with repeats moves from Review to a named check,
-  through a BACKLOG row or a test;
+- `[escalate]`: a rule with repeats moves from Review to a named check
+  (a BACKLOG row or a test);
 - `[baseline]`: an approved deliverable becomes a baselines row.
 
 ## Taste pass
 
-The taste pass learns the owner's tastes from this project's own sessions into
-the project's preference registers (`docs/preferences/<area>.md`, see
-`docs/procedures/preferences.md`). Rows are tracked changes on the current
-checkout, so git carries them to every computer; they follow the recorded git
-workflow, on the live task branch or on `chore/dream-<date>`. Its digest, pool,
-ledger and reports are per computer, in the main checkout's gitignored
-`.work/dream/taste/`. Every Claude session start loads the registers' rules
-(ID and rule, 4000-byte cap). Rules reach another project only when the owner
-asks, with `scripts/preferences.sh port --from <project>`.
+Learns the owner's tastes from this project's sessions into
+the registers (`docs/preferences/<area>.md`, see
+`docs/procedures/preferences.md`); rows follow the git workflow, on the live
+task branch or on `chore/dream-<date>`. Files are per computer, in the
+gitignored `.work/dream/taste/`. Rules reach another
+project only when the
+owner asks, with `scripts/preferences.sh port --from <project>`.
 
 T1. Run `scripts/dream.sh taste digest`. It reads this project's transcripts
-    (sessions whose cwd is the root, a worktree, a root the project dream
-    remembers or a `--match` path) and the feedback and user notes in this
-    project's auto-memory, keeps only the owner's own words (stated
-    preferences, answers to questions, corrections, rejected actions, short
-    reactions, taste topics), and writes `.work/dream/taste/digest.md`:
-    signals with stable ids, fresh ones first, under a 40 KB cap. Its
-    `profile:` line gives the registers' session-start print against the
-    4000-byte cap. Exit 3 means fewer than 5 fresh signals or under 7 days
-    since the last pass: say so and stop; no model runs, and what was read
-    waits in the pool. `--force` skips the day rule; `--projects-dir DIR` adds
-    a transcript folder, such as a copy from another computer (only its
-    sessions of this project count).
+    and auto-memory feedback notes, keeps only the
+    owner's own words, and writes `.work/dream/taste/digest.md`:
+    signals with stable ids, under a 40 KB cap, and a
+    `profile:` line (registers' print against the 4000-byte cap).
+    Exit 3 means fewer than 5 fresh signals or under 7 days
+    since the last pass: say so and stop; no model runs.
+    `--force` skips the day rule; `--projects-dir DIR` adds
+    a transcript folder (a copy from another computer).
 T2. Dispatch the `taste-dreamer` agent (standard tier, read-only) with the
     digest and the project's `docs/preferences/` folder as absolute paths. It
-    returns at most 12 numbered proposals (add, revise or remove a register
-    row), each with evidence.
+    returns at most 12 numbered proposals (add, revise or remove a row),
+    each with evidence.
 T3. Save its report where the digest output says
     (`.work/dream/taste/reports/<date>-report.md`) and show the owner the
-    numbered list. The owner answers with numbers.
+    numbered list.
 T4. Run `scripts/dream.sh taste apply --report <report> <numbers>` with
     exactly the approved numbers. It refuses everything when any approved
     proposal breaks the evidence rule (one stated preference, or signals from
     two or more sessions) or the cap (160 characters a rule), and in template
-    mode. Otherwise it writes each add as a row (ID, the rule, a Source with
-    the signal's date and the owner's quoted words or "inferred from
-    sessions", Check `Review`), applies revises and removes by register ID,
+    mode. Otherwise it writes each add as a row (Source: date and the
+    owner's quoted words or "inferred from
+    sessions"; Check `Review`), applies revises and removes by register ID,
     and skips an add whose rule text a register already holds. Show the owner
-    what changed, then follow the project's git workflow for the rows.
+    what changed; rows follow the git workflow.
 T5. Run `scripts/dream.sh taste done --report <report>`, also when nothing
-    was approved: it appends an Outcome section (applied and declined
-    numbers, changes, files, rules and bytes before and after) to the report.
-    Then run `scripts/dream.sh taste check` (the state and the register
-    check). The next digest opens with "Impact since the last pass": register
-    changes, rules whose evidence was seen again, rules that share words with
-    new signals, and a trend of signal kinds per pass.
+    was approved. Then run
+    `scripts/dream.sh taste check`.
 
-The user-level profile of an older release (`~/.claude/taste/`, a managed
-block in `~/.claude/CLAUDE.md`, one in `~/.codex/AGENTS.md`) is no longer
-written by any command. Its files stay as the owner left them and still load
-wherever the import block remains. To stop loading it, delete the block from
-`~/.claude/CLAUDE.md` (the lines from `<!-- taste:begin` to
-`<!-- taste:end -->`) by hand; the Codex block can go the same way once
-the project's Codex hooks are trusted (template ADR 0014). A taste report written by an older release
+To stop loading an older release's user-level profile, delete the lines from
+`<!-- taste:begin` to `<!-- taste:end -->` in `~/.claude/CLAUDE.md` and
+`~/.codex/AGENTS.md`. A taste report written by an older release
 is not applied: run a fresh project taste pass.
 
 ## Fleet dream (template only)
 
-In the template repository a dream can also read what the local projects
-started from it send back up, and propose template changes. It uses the
-list `scripts/fleet.sh` reads (`fleet.local.list`, gitignored) and refuses
+Reads what projects started from the template send back, from the list
+`scripts/fleet.sh` reads (`fleet.local.list`, gitignored); it refuses
 once start has run. Run it when projects have new UPSTREAM.md entries or
-dream reports (the fleet.sh upstream column), or on the owner's request.
+dream reports.
 
-F1. Run `scripts/dream.sh fleet`. For each listed project it reads, never
-    writes: the Template line and last sync, the open entries of
-    `docs/lessons/UPSTREAM.md` (each with a filled "what happened"; sent
-    entries are cleared there) and the newest two dream reports in the
-    project's main checkout `.work/dream/`. It writes
-    `.work/dream/fleet/digest.md` (gitignored, like every dream file) and
-    prints the path and counts. Ids: p<N> per project, p<N>.u<M> entries,
-    p<N>.r<M> reports, p<N>.s<M> signals. `--max-bytes` (default 40000) is
-    shared evenly by the projects; an entry is cut at 1500 bytes, and every
-    cut says what it left out. A missing folder or a relative line is listed
-    as such and nothing is read for it.
+F1. Run `scripts/dream.sh fleet`. It reads, never writes, each listed
+    project's Template line, open `docs/lessons/UPSTREAM.md` entries and
+    newest two dream reports, and writes
+    `.work/dream/fleet/digest.md` (gitignored).
+    `--max-bytes` (default 40000) is shared by the projects;
+    an entry is cut at 1500 bytes. A
+    missing folder or a relative line is listed, not read.
 F2. Transcripts only with the owner's permission: `--transcripts` adds each
-    project's transcript signals, reduced by the same code as a project's
-    own digest, from offsets the fleet keeps in
-    `.work/dream/fleet/transcripts/`. Without it no transcript is opened.
+    project's transcript signals. Without it no transcript is opened.
 F3. Dispatch the `dreamer` agent in fleet mode with the fleet digest path
     and this repository's BACKLOG.md, `docs/lessons/` and AGENTS.md. It
     returns at most 12 numbered template-change proposals, each citing the
@@ -222,31 +160,20 @@ F4. Save the report as `.work/dream/fleet/<date>-report.md` and show the
     owner the numbered list. Approved numbers become BACKLOG rows or
     `docs/lessons/PENDING.md` entries in the template, worded generically:
     no project name, path or quote enters a tracked file.
-F5. Run `scripts/dream.sh fleet done`. It commits the transcript offsets of
-    the last `--transcripts` digest and records the date the next digest
-    prints as "last fleet dream". UPSTREAM entries stay in the projects
-    until each project sends and clears them (`docs/procedures/upstream.md`).
+F5. Run `scripts/dream.sh fleet done`. It commits the transcript offsets and
+    records the "last fleet dream" date. UPSTREAM entries stay in the projects
+    until each sends and clears them (`docs/procedures/upstream.md`).
 
 ## Privacy and cost
 
-- The digest, its state and the reports live in `.work/dream/`, which
-  ignores itself through its own `.gitignore` (projects that sync the
-  template do not get the template's .gitignore); they never leave the
-  machine. Only the text of approved proposals
+- `.work/dream/` ignores itself, and
+  they never leave the machine. Only the text of approved proposals
   enters tracked files, as short generic lesson wording. In a public
   repository, no private project names or quotes.
-- Cost: the digest is a script with no model and reads each transcript line
-  once ever; an empty digest stops before any model call; one standard-tier
-  agent reads at most 40 KB of signals plus the memory files, once. A first
-  dream over all history measured about 105k tokens on this template; later
-  dreams read only the signals added since.
-- The taste digest, pool and reports live in `.work/dream/taste/` of the main
-  checkout, ignore themselves and never leave the computer; only approved
-  rules reach tracked register files. The taste digest reads only this
-  project's sessions and is a script with no model; the agent reads at most
-  40 KB of signals plus the registers; the registers cost every Claude
-  session at most 4000 bytes, about 1k tokens.
-- The fleet digest and its reports live in the template's `.work/dream/fleet/`
-  and never leave the computer; it writes nothing in any project. It reads
-  transcripts only with `--transcripts`. One agent reads at most
-  `--max-bytes` of digest once.
+- Cost: digests are scripts with no model;
+  an empty digest stops before any model call; one standard-tier agent reads
+  at most 40 KB of signals plus the memory files, once (a first dream over
+  all history: about 105k tokens on this template). The registers cost
+  every session at most 4000 bytes, about 1k tokens. The fleet digest
+  writes nothing in any project and reads
+  transcripts only with `--transcripts`.
