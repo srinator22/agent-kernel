@@ -1418,14 +1418,13 @@ def cmd_hygiene(c, a):
     return 0
 
 
-def cmd_digest(c, a):
-    if a.max_bytes < MIN_BYTES:
-        die("dream: --max-bytes must be at least %d (got %d)" % (MIN_BYTES, a.max_bytes))
-    wts = c.worktrees()
-    roots = {norm(c.root)} | set(wts) | set(c.state["known_roots"]) | {norm(os.path.abspath(m)) for m in a.match}
-    roots = sorted(r for r in with_short_names(roots) if r)
+def collect_signals(c, roots, newfiles):
+    """Reduce the transcript lines and interactive Codex records past the offsets
+    in newfiles (a state file table, updated in place) whose cwd is inside roots
+    to signals: ({(kind, text key): signal}, stats read, hit, lines, bad and
+    skipped). The project digest and the fleet digest (fleet.py) share it, so a
+    transcript is read the same way for both."""
     marks = markers(roots)
-    newfiles = {k: dict(v) for k, v in c.state["files"].items()}
     read_n = hit_n = lines_n = bad_n = 0
     raw = {}
 
@@ -1493,27 +1492,44 @@ def cmd_digest(c, a):
             continue
         cthreads.add(tid)
         keep(kind, text, ts, tid[:8], "-")
-    read_n += cstats["read"]
-    lines_n += cstats["lines"]
-    bad_n += cstats["bad"]
-    hit_n += len(cthreads)
+    return raw, {"read": read_n + cstats["read"], "hit": hit_n + len(cthreads),
+                 "lines": lines_n + cstats["lines"], "bad": bad_n + cstats["bad"],
+                 "skipped": cstats["skipped"]}
 
-    def render(s):
-        n = " (x%d)" % s["n"] if s["n"] > 1 else ""
-        d = s["ts"]
-        return "[%s] %s %s %s %s: %s%s" % (s["kind"], d[:10], d[11:16], s["sess"], s["branch"], s["text"], n)
 
+def render_signal(s):
+    n = " (x%d)" % s["n"] if s["n"] > 1 else ""
+    d = s["ts"]
+    return "[%s] %s %s %s %s: %s%s" % (s["kind"], d[:10], d[11:16], s["sess"], s["branch"], s["text"], n)
+
+
+def cap_signals(raw, max_bytes):
+    """(kept oldest first, dropped count): corrections, denials, blocks and
+    interrupts first, then failed calls, then messages, newest first inside a
+    group, until the next line would pass max_bytes; the first always fits."""
     ordered = sorted(raw.values(), key=lambda s: s["ts"], reverse=True)
     ordered.sort(key=lambda s: PRIORITY[s["kind"]])  # stable: newest first inside a group
     kept, used = [], 0
     for s in ordered:
-        cost = len(("- s000 " + render(s)).encode("utf-8")) + 1
-        if used + cost > a.max_bytes and kept:
+        cost = len(("- s000 " + render_signal(s)).encode("utf-8")) + 1
+        if used + cost > max_bytes and kept:
             break
         used += cost
         kept.append(s)
-    dropped = len(ordered) - len(kept)
     kept.sort(key=lambda s: s["ts"])
+    return kept, len(ordered) - len(kept)
+
+
+def cmd_digest(c, a):
+    if a.max_bytes < MIN_BYTES:
+        die("dream: --max-bytes must be at least %d (got %d)" % (MIN_BYTES, a.max_bytes))
+    wts = c.worktrees()
+    roots = {norm(c.root)} | set(wts) | set(c.state["known_roots"]) | {norm(os.path.abspath(m)) for m in a.match}
+    roots = sorted(r for r in with_short_names(roots) if r)
+    newfiles = {k: dict(v) for k, v in c.state["files"].items()}
+    raw, st = collect_signals(c, roots, newfiles)
+    read_n, hit_n, lines_n, bad_n = st["read"], st["hit"], st["lines"], st["bad"]
+    kept, dropped = cap_signals(raw, a.max_bytes)
 
     fb_entries, fb_off, fb_n, fb_bad, fb_exists = read_feedback(c)
     fb_lines, fb_shown = feedback_sections(c, fb_entries, fb_n, fb_bad, fb_exists)
@@ -1539,7 +1555,7 @@ def cmd_digest(c, a):
     nextstate["snapshot"] = hygiene_numbers(hyg)
     nextstate["head"], nextstate["dirty"] = tree_state(c.root)
     nextstate["memory"] = memory_state(c)
-    sigs = ["- s%d %s" % (i + 1, render(s)) for i, s in enumerate(kept)]
+    sigs = ["- s%d %s" % (i + 1, render_signal(s)) for i, s in enumerate(kept)]
     pairs = [("s%d" % (i + 1), s) for i, s in enumerate(kept)]
     body = "\n".join([
         "# Dream digest",
@@ -1548,7 +1564,7 @@ def cmd_digest(c, a):
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
     ] + (["codex: %d compressed rollouts skipped (no zstd reader: install zstd or use Python 3.14)"
-          % cstats["skipped"]] if cstats["skipped"] else []) + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
+          % st["skipped"]] if st["skipped"] else []) + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",

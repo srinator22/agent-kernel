@@ -154,12 +154,13 @@ scripts/
   doctor.sh                   # first-run tool check: runs each required and recommended tool, prints install commands
   preferences.sh              # check: the preference registers in docs/preferences/ are well formed
   private-terms.sh            # check and history: no term from the gitignored .work/private-terms.txt in the repository, output masked
-  dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste (wrapper for dream/dream.py and dream/taste.py)
+  dream.sh                    # dream digest, due, done, status, hygiene, scorecard, taste, fleet (wrapper for dream/dream.py, dream/taste.py, dream/fleet.py)
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats and retro commit dates
     feedback.py               # stdlib: hook body, classifies the owner's prompt and appends it with its situation to the feedback log
     preferences.py            # stdlib: register and baseline checks behind scripts/preferences.sh
     taste.py                  # stdlib: project taste digest (this project's sessions), evidence pool, approved lines into docs/preferences rows
+    fleet.py                  # stdlib: template-only fleet digest: projects' open UPSTREAM entries, newest dream reports, opt-in transcript signals; read-only
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ (or the named test files) against the template scripts, SELFTEST_JOBS files at a time, results in file order
@@ -208,6 +209,7 @@ tests/
     test_tree_id.sh           # tracked, untracked, ignored and deleted files; the real index untouched
     test_profiles.sh          # Profiles line forms adopted and refused; template-sync uses the parser
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
+    test_dream_fleet.sh       # fleet digest over fixture projects: entries, reports, caps, missing and bad lines, opt-in transcripts, read-only
     test_selftest.sh          # quarantine list, n/a lines, summary counts, parallel slots, named files, INT and TERM stop, exec-bit wiring
     test_taste.sh             # owner filter, signal kinds, project scope, pool, stop rules, evidence rule, outcome, guards
     test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
