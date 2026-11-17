@@ -9,9 +9,19 @@
 #   skills         print the skills count and cap; exit 1 when over the cap
 #                  (scripts/template-sync.sh runs it after a sync)
 #   core-skills    print the template core skill names, one per line
+#   match <diff file> | match <git diff revisions>
+#                  print the lessons whose trigger matches a changed path of a
+#                  git diff (a file holding one) or of `git diff --name-status`
+#                  over the given revisions (--staged and --cached allowed)
 #
 # INDEX.md line format (exactly as documented in docs/lessons/INDEX.md):
 #   - [L001] <description> - <lesson> (used: 0, last: -, retire-when: <condition>)
+# with an optional trigger as the last field (ADR 0017):
+#   (used: 0, last: -, retire-when: <condition>, trigger: <token> <token>...)
+# A token is <glob> or A:<glob>, M:<glob>, D:<glob>: a changed path matching the
+# glob, for A only an added path (a rename or copy adds its new path), M only a
+# modified one, D only a deleted one (a rename deletes its old path). The glob
+# is a bash pattern over the whole repo-relative path, so * also crosses "/".
 # last: is YYYY-MM-DD or "-". A lesson with last: "-" has no age and never
 # expires by age; set last: to the approval date when approving a lesson if you
 # want the 45-day clock to run. Lines inside code fences and the documented
@@ -59,7 +69,7 @@ PROJECT_SKILLS=2
 US=$'\037'
 
 usage() {
-  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats | skills | core-skills" >&2
+  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats | skills | core-skills | match <diff file | git revisions>" >&2
   exit 2
 }
 
@@ -97,6 +107,27 @@ approved_lines() {
       if (rest ~ /^</) next
       printf "%d%s%s\n", NR, US, $0
     }' "$INDEX"
+}
+
+# split_retire TEXT: the retire-when capture of FIELD_RE may end with
+# ", trigger: <spec>". Sets RW (retire-when alone), TRIG (the spec, trimmed) and
+# HAS_TRIG (1 when the field is present, even empty).
+split_retire() {
+  RW="$1"; TRIG=""; HAS_TRIG=0
+  if [[ "$1" == *", trigger:"* ]]; then
+    RW="${1%, trigger:*}"
+    TRIG="${1##*, trigger:}"
+    HAS_TRIG=1
+    TRIG="${TRIG#"${TRIG%%[![:space:]]*}"}"
+    TRIG="${TRIG%"${TRIG##*[![:space:]]}"}"
+  fi
+}
+
+# trigger_token_ok TOKEN: a glob with an optional A:, M: or D: prefix.
+trigger_token_ok() {
+  local g="$1"
+  case "$g" in [AMD]:*) g="${g:2}" ;; esac
+  [[ -n "$g" && "$g" != *:* ]]
 }
 
 FIELD_RE='^-[[:space:]]\[(L[0-9]+)\][[:space:]](.*)\(used:[[:space:]]([0-9]+),[[:space:]]last:[[:space:]]([0-9]{4}-[0-9]{2}-[0-9]{2}|-),[[:space:]]retire-when:[[:space:]](.+)\)[[:space:]]*$'
@@ -145,19 +176,11 @@ entries() {
 PENDING_LABELS="what happened|what check should have caught it|what was added|retire-when"
 QUARANTINE_LABELS="test path|observed flake behavior|date quarantined|owner task"
 
+# The "- Profiles:" line is parsed by scripts/profiles.sh, the one parser
+# template-sync.sh shares, so both adopt the same set.
 adopted_profiles() {
   [[ -f AGENTS.md ]] || return 0
-  local line tok
-  line="$(grep -m1 -E '^- Profiles:' AGENTS.md 2>/dev/null || true)"
-  line="${line#- Profiles:}"
-  line="${line//\`/ }"
-  line="${line//,/ }"
-  [[ "$line" == *"{{"* ]] && return 0
-  for tok in $line; do
-    [[ "$tok" =~ ^[a-z0-9][a-z0-9-]*$ ]] || continue
-    case "$tok" in none|and|n) continue ;; esac
-    echo "$tok"
-  done
+  bash "$ROOT/scripts/profiles.sh" adopted AGENTS.md
 }
 
 # The Skills: value of a profile, "Skills:" or "- Skills:" at line start. A value
@@ -246,10 +269,8 @@ shipped_set_errors() {
     [[ -d "$f" ]] || continue
     [[ -f "$f/SKILL.md" ]] || echo "${f%/}: skill folder has no SKILL.md"
   done
-  if [[ "$dir" == docs/roster ]]; then
-    roster_twin_errors "$dir"
-    handoff_errors "$dir"
-  fi
+  twin_errors "$dir/agents"
+  handoff_errors "$dir"
   if [[ -n "$profile" ]]; then
     declared="$(profile_skill_names "$profile" | sort -u)"
     # A missing skills/ folder must not end this function under set -e.
@@ -274,15 +295,17 @@ trim_blank_edges() {
           for (i = s; i <= e; i++) print lines[i] }'
 }
 
-# roster_twin_errors DIR: a roster agent's Codex developer_instructions is its
+# twin_errors MD_DIR [TOML_DIR]: an agent's Codex developer_instructions is its
 # .md body, unchanged except that a hard-rule line "- Read-only." may read
 # "- Your sandbox is read-only." (Codex enforces it with sandbox_mode); both
-# forms ship today. Twins drifted silently before this check existed.
-roster_twin_errors() {
-  local dir="$1" md toml
-  for md in "$dir"/agents/*.md; do
+# forms ship today. TOML_DIR defaults to MD_DIR (library, profiles, roster);
+# the core pair is .claude/agents and .codex/agents. Twins drifted silently
+# before this check existed.
+twin_errors() {
+  local dir="$1" tomldir="${2:-$1}" md toml
+  for md in "$dir"/*.md; do
     [[ -f "$md" ]] || continue
-    toml="${md%.md}.toml"
+    toml="$tomldir/$(basename "$md" .md).toml"
     [[ -f "$toml" ]] || continue
     if ! diff -q \
       <(awk '{ sub(/\r$/, "") } NR == 1 && $0 == "---" { f = 1; next } f == 1 && $0 == "---" { f = 2; next } f == 2' "$md" \
@@ -301,7 +324,10 @@ roster_twin_errors() {
 handoff_errors() {
   local dir="$1" md known name
   known="$(for f in .claude/agents/*.md .codex/agents/*.toml docs/library/agents/*.md docs/library/agents/*.toml docs/profiles/*/agents/*.md docs/roster/agents/*.md; do
-    [[ -f "$f" ]] && basename "$f" | sed 's/\.[a-z]*$//'
+    # "|| continue", not "&&": an unmatched last glob would end the loop with
+    # status 1, and set -e then ends the function silently, losing every problem.
+    [[ -f "$f" ]] || continue
+    basename "$f" | sed 's/\.[a-z]*$//'
   done | sort -u)"
   for md in "$dir"/agents/*.md; do
     [[ -f "$md" ]] || continue
@@ -459,7 +485,17 @@ cmd_check() {
       local last="${BASH_REMATCH[4]}" retire="${BASH_REMATCH[5]}"
       if [[ "$seen" == *" $id "* ]]; then errs+=("INDEX.md line $lineno: duplicate lesson id $id"); fi
       seen="$seen$id "
-      if [[ -z "${retire//[[:space:]]/}" ]]; then errs+=("INDEX.md line $lineno: $id has an empty retire-when"); fi
+      split_retire "$retire"
+      if [[ -z "${RW//[[:space:]]/}" ]]; then errs+=("INDEX.md line $lineno: $id has an empty retire-when"); fi
+      if (( HAS_TRIG )); then
+        if [[ -z "$TRIG" ]]; then errs+=("INDEX.md line $lineno: $id has an empty trigger (drop the field or name a glob)"); fi
+        local tok toks=()
+        # read -a splits without glob expansion; a bare $TRIG would expand *.sh here.
+        read -r -a toks <<< "$TRIG"
+        for tok in ${toks[@]+"${toks[@]}"}; do
+          trigger_token_ok "$tok" || errs+=("INDEX.md line $lineno: $id trigger token '$tok' is malformed (expected <glob>, A:<glob>, M:<glob> or D:<glob>)")
+        done
+      fi
       if [[ "$last" != "-" ]] && ! valid_date "$last"; then errs+=("INDEX.md line $lineno: $id has an invalid last: date '$last'"); fi
     else
       id="$(printf '%s' "$line" | sed -n 's/^- \[\(L[0-9]*\)\].*/\1/p')"
@@ -558,7 +594,7 @@ cmd_check() {
 
   # Every Claude agent has a Codex twin, or models.md names the exception on a
   # line containing "no Codex counterpart".
-  local ag agname
+  local ag agname msg
   if [[ -d .claude/agents ]]; then
     for ag in .claude/agents/*.md; do
       [[ -f "$ag" ]] || continue
@@ -569,6 +605,9 @@ cmd_check() {
       fi
       errs+=(".claude/agents/$agname.md has no .codex/agents/$agname.toml and docs/rules/models.md has no line naming '$agname' with 'no Codex counterpart'")
     done
+    while IFS= read -r msg; do
+      if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+    done < <(twin_errors .claude/agents .codex/agents; handoff_errors .claude)
   fi
 
   # Agent and skill sets shipped by profiles and the library are well formed
@@ -738,6 +777,94 @@ cmd_stats() {
   echo "rules files: $rules (longest $maxlines/$MAX_RULE_LINES lines)"
 }
 
+# changed_paths ARG...: "status<TAB>path" lines, status A, M or D. A rename or
+# copy gives A for the new path (and D for the old one, for a rename).
+changed_paths() {
+  if [[ $# -eq 1 && -f "$1" ]]; then
+    # A git diff: the header of each file block names its paths and status.
+    awk '
+      function emit(st, p) { if (p != "") printf "%s\t%s\n", st, p }
+      function flush() {
+        if (!open) return
+        if (rto != "") { emit("A", rto); if (!copy) emit("D", rfrom) }
+        else if (isnew) emit("A", (newp != "" ? newp : gitp))
+        else if (isdel) emit("D", (oldp != "" ? oldp : gitp))
+        else emit("M", (newp != "" ? newp : gitp))
+        open = 0
+      }
+      { sub(/\r$/, "") }
+      /^diff --git / {
+        flush(); open = 1; isnew = 0; isdel = 0; copy = 0; rfrom = ""; rto = ""; oldp = ""; newp = ""; hunk = 0
+        # "diff --git a/P b/P": both halves are equal unless renamed, so P has (len - 6) / 2 characters.
+        h = substr($0, 12); gitp = substr(h, 3, (length(h) - 6) / 2)
+        seen = 1; next
+      }
+      !open { next }
+      /^@@ / { hunk = 1; next }
+      hunk { next }
+      /^new file mode/ { isnew = 1; next }
+      /^deleted file mode/ { isdel = 1; next }
+      /^rename from / { rfrom = substr($0, 13); next }
+      /^rename to / { rto = substr($0, 11); next }
+      /^copy from / { rfrom = substr($0, 11); copy = 1; next }
+      /^copy to / { rto = substr($0, 9); copy = 1; next }
+      /^--- / { p = substr($0, 5); sub(/\t.*$/, "", p); if (p != "/dev/null") { sub(/^a\//, "", p); oldp = p }; next }
+      /^\+\+\+ / { p = substr($0, 5); sub(/\t.*$/, "", p); if (p != "/dev/null") { sub(/^b\//, "", p); newp = p }; next }
+      END { flush(); if (!seen) exit 3 }
+    ' "$1" || { echo "lessons: $1 holds no \"diff --git\" header; pass a git diff or git revisions" >&2; return 2; }
+    return 0
+  fi
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --staged|--cached) ;;
+      -*) echo "lessons: match takes a diff file or git revisions; option '$a' is not allowed" >&2; return 2 ;;
+    esac
+  done
+  local out
+  out="$(git diff --name-status -M "$@" 2>&1)" || { echo "lessons: git diff failed: $out" >&2; return 2; }
+  [[ -n "$out" ]] || return 0
+  printf '%s\n' "$out" | awk -F '\t' '
+    $1 ~ /^R/ { printf "A\t%s\nD\t%s\n", $3, $2; next }
+    $1 ~ /^C/ { printf "A\t%s\n", $3; next }
+    $1 ~ /^[AMD]/ { printf "%s\t%s\n", substr($1, 1, 1), $2; next }
+    { printf "M\t%s\n", $2 }'
+}
+
+# match: one line per lesson whose trigger matches a changed path, in INDEX
+# order: "<id> <status> <first matching path> (trigger <token>)".
+cmd_match() {
+  [[ $# -ge 1 ]] || { echo "usage: scripts/lessons.sh match <diff file> | match <git diff revisions>" >&2; exit 2; }
+  local paths rc=0
+  paths="$(changed_paths "$@")" || rc=$?
+  (( rc == 0 )) || exit 2
+  local npaths=0 nhit=0 ntrig=0 lineno line id tok st glob want p hit toks=()
+  if [[ -n "$paths" ]]; then npaths="$(printf '%s\n' "$paths" | awk 'END { print NR }')"; fi
+  while IFS="$US" read -r lineno line; do
+    [[ -n "$lineno" ]] || continue
+    [[ "$line" =~ $FIELD_RE ]] || continue
+    id="${BASH_REMATCH[1]}"
+    split_retire "${BASH_REMATCH[5]}"
+    [[ -n "$TRIG" ]] || continue
+    ntrig=$((ntrig + 1))
+    hit=""
+    read -r -a toks <<< "$TRIG"
+    for tok in "${toks[@]}"; do
+      want=""; glob="$tok"
+      case "$tok" in [AMD]:*) want="${tok:0:1}"; glob="${tok:2}" ;; esac
+      while IFS=$'\t' read -r st p; do
+        [[ -n "$p" ]] || continue
+        [[ -z "$want" || "$st" == "$want" ]] || continue
+        # shellcheck disable=SC2053 # the glob is a pattern on purpose
+        if [[ "$p" == $glob ]]; then hit="$id $st $p (trigger $tok)"; break; fi
+      done <<< "$paths"
+      [[ -z "$hit" ]] || break
+    done
+    if [[ -n "$hit" ]]; then echo "$hit"; nhit=$((nhit + 1)); fi
+  done < <(approved_lines)
+  echo "lessons: $nhit of $ntrig lesson triggers match $npaths changed path(s)" >&2
+}
+
 cmd_skills() {
   skills_cap
   skills_stats_line
@@ -754,5 +881,6 @@ case "${1:-}" in
   use) shift; cmd_use "$@" ;;
   expire) shift; cmd_expire "$@" ;;
   stats) cmd_stats ;;
+  match) shift; cmd_match "$@" ;;
   *) usage ;;
 esac

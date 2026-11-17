@@ -345,6 +345,80 @@ task_auto "" todo
 run ./scripts/tasklint.sh ship
 assert_not_contains "no verdict section gets no first-line hint" "must be the current verdict"
 
+# Review verdict bound to the reviewed tree (ADR 0017): ship only, PASS only.
+cp_script tree-id.sh
+git add -A >/dev/null 2>&1 && git commit -qm fixture >/dev/null 2>&1
+# task_review LINE...: a settled standard task whose Review verdict is the given lines.
+task_review() {
+  {
+    printf '# Task: fixture\nMode: standard\n\n## Assumptions\n- [confirmed] fine\n\n'
+    printf '## Acceptance criteria\n- [x] C1 done -> tests/x_test.sh\n\n## Review verdict\n<!-- written ONLY by the independent reviewer -->\n'
+    printf '%s\n' "$@"
+    printf '\n## Retro\n'
+  } > .work/TASK.md
+}
+tree_now="$(./scripts/tree-id.sh)"
+task_review "PASS - criteria met" "Reviewed tree: $tree_now" "Evidence checked:" "- check.sh: verified tree $tree_now"
+run ./scripts/tasklint.sh ship
+assert_rc "a PASS verdict on the current tree passes ship" 0
+assert_eq "writing the verdict into .work/TASK.md does not move the tree" "$tree_now" "$(./scripts/tree-id.sh)"
+task_review "**PASS**" "- **Reviewed tree:** \`$tree_now\`"
+run ./scripts/tasklint.sh ship
+assert_rc "a bulleted, bold, backticked tree line is read" 0
+echo "changed after review" >> docs/a.md
+run ./scripts/tasklint.sh ship
+assert_rc "a change after a PASS verdict fails ship" 1
+assert_contains "names the reviewed tree" "review verdict covers tree $tree_now"
+assert_contains "names the current tree" "the working tree is now $(./scripts/tree-id.sh)"
+assert_contains "says how to re-review" "make \"Pending re-review\" the first line"
+run ./scripts/tasklint.sh check
+assert_rc "check never compares trees" 0
+echo "new file" > docs/c.md
+task_review "PASS" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh ship
+assert_rc "an untracked file after the review fails ship" 1
+rm -f docs/c.md
+git checkout -q -- docs/a.md
+run ./scripts/tasklint.sh ship
+assert_rc "restoring the reviewed content passes again" 0
+task_review "PASS - looks fine" "Evidence checked: none"
+run ./scripts/tasklint.sh ship
+assert_rc "a PASS verdict without a tree line fails ship" 1
+assert_contains "names the missing tree line" "review verdict is PASS but names no reviewed tree"
+assert_contains "names the line format" "\"Reviewed tree: <id>\""
+task_review "Round 2: PASS" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh ship
+assert_rc "a PASS after a round label is still compared" 1
+assert_contains "the stale tree is named" "covers tree 0000000000000000000000000000000000000000"
+task_review "FAIL - criterion C1 unmet" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh ship
+assert_rc "a FAIL verdict is not compared" 0
+task_review "Pending re-review" "PASS - older round" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh ship
+assert_rc "a pending first line is not compared" 0
+task_review ""
+run ./scripts/tasklint.sh ship
+assert_rc "an empty Review verdict (not reviewed yet) passes ship" 0
+task_review "PASSED, probably" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh ship
+assert_rc "PASSED is not a PASS verdict" 0
+task_review "PASS" "Reviewed tree: 0000000000000000000000000000000000000000"
+mkdir -p .work/done
+cp .work/TASK.md .work/done/2026-01-01-old.md
+run env TASKLINT_FILE=.work/done/2026-01-01-old.md ./scripts/tasklint.sh ship
+assert_rc "an archived record under .work/done is not compared" 0
+run ./scripts/tasklint.sh ship
+assert_rc "the same verdict in .work/TASK.md is compared" 1
+mv scripts/tree-id.sh scripts/tree-id.off
+run ./scripts/tasklint.sh ship
+assert_rc "a missing tree-id.sh fails a PASS verdict, never passes it" 1
+assert_contains "names the tree-id failure" "cannot compute the current tree to match the review verdict"
+mv scripts/tree-id.off scripts/tree-id.sh
+task_review "PASS" "Reviewed tree: $tree_now"
+to_crlf .work/TASK.md
+run ./scripts/tasklint.sh ship
+assert_rc "CRLF verdict on the current tree passes ship" 0
+
 # Mode.
 printf '# Task: fixture\nMode: standard | quick | autopilot\n\n## Assumptions\n- [open] x\n' > .work/TASK.md
 run ./scripts/tasklint.sh ship

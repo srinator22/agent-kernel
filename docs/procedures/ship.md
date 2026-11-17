@@ -7,18 +7,27 @@ SHA is terminal-success (kernel rule 5).
 1. Confirm scope: `git status`. Unrelated or untracked work is preserved and
    excluded; resolve every untracked file deliberately (stage it or ignore
    it, never leave it ambiguous).
-2. Run `./scripts/check.sh` and keep its complete output (the verify
-   output). Anything red: stop and fix first.
-3. Reviewer gate: hand the reviewer agent the diff, `.work/TASK.md` and
-   the verify output from step 2, complete and untruncated; never a
-   summary of it. Without that output the reviewer returns FAIL. An
-   independent review verdict, ending with its "Evidence checked" list, is
-   present in `.work/TASK.md` (kernel rule 5). Quick-mode tasks may skip
-   the reviewer only if the diff touches no logic (docs or config
-   comments), and must say so explicitly.
-4. Version: bump the single source-of-truth version file per semver (patch
+2. Version: bump the single source-of-truth version file per semver (patch
    fix, minor feature, major breaking; pre-1.0 behavior per Project
-   decisions).
+   decisions). It comes before verification so the verified tree holds it.
+3. Run `./scripts/check.sh` and keep its complete output (the verify
+   output). Anything red: stop and fix first. A clean run ends with
+   `check.sh: verified tree <id>` (`scripts/tree-id.sh`: the whole working
+   tree, untracked files included, except `.work/` and `CHANGELOG.md`), so
+   step 1 must leave nothing in the tree that the commit will not carry.
+4. Reviewer gate: hand the reviewer agent the diff, `.work/TASK.md`, the
+   verify output from step 3, complete and untruncated (never a summary of
+   it), and the output of `scripts/lessons.sh match <the diff file or git
+   revisions>`, the lessons whose trigger the diff matches. Without the
+   verify output, or without its tree line, the reviewer returns FAIL. An
+   independent review verdict, its first line the current verdict, holding
+   `Reviewed tree: <id>` and ending with its "Evidence checked" list, is
+   present in `.work/TASK.md` (kernel rule 5). `scripts/tasklint.sh ship`
+   fails a PASS verdict whose tree differs from the current one: any change
+   after the review needs a new one (make "Pending re-review" the first
+   line of the section, run step 3 again, record the new verdict first).
+   Quick-mode tasks may skip the reviewer only if the diff touches no logic
+   (docs or config comments), and must say so explicitly.
 5. Regenerate `CHANGELOG.md` via git-cliff. Never hand-edit it; the detail
    lives in commit bodies (kernel rule 18).
 6. Conventional commit. The body carries why, and for fixes the exact
