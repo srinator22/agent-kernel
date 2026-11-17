@@ -9,6 +9,7 @@
 #     [{"createdAt":"2026-11-10T10:13:17Z","mergedAt":"2026-11-10T11:04:18Z"},{"createdAt":"2026-11-10T08:38:55Z","mergedAt":"2026-11-10T09:48:29Z"},{"createdAt":"2026-11-10T05:25:44Z","mergedAt":"2026-11-10T07:46:44Z"}]
 #   (the real output carries no trailing newline; the fake keeps that)
 # Durations of the recorded PRs: 51m01s, 1h09m34s, 2h21m00s; median 1h09m34s.
+# Recorded: gh run list --branch main --limit 1 --json conclusion,headSha -> [{"conclusion":"success","headSha":"6e3e70b1efb0ef968c188c50166cffc195d7d726"}] (real, re-run 2026-11-18, same output)
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

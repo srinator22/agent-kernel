@@ -46,6 +46,50 @@ assert_eq "without lib.sh every test exits non-zero" "" "${passed_rc[*]:-}"
 assert_eq "without lib.sh every test says on stderr it cannot load lib.sh" "" "${silent[*]:-}"
 assert_eq "without lib.sh no test writes into the folder it started from" "" "${leaked[*]:-}"
 
+# L011: every fake external CLI is backed by one recorded real response. A test
+# file that fakes a command (a shim written under a bin/ or shim folder, a
+# mkshim call, a replaced subprocess.run) and every fixtures/fake-*.sh carries
+# a comment line "# Recorded: <command> -> <what the real tool returned or
+# refused, or where that is recorded>", or "# Recorded: none - <reason>" when
+# nothing real can be named. The detection is a text heuristic: it flags a file,
+# and the line named is the first fake found in it.
+FAKE_RE='(^|[^A-Za-z_])mkshim +[a-z]|subprocess\.run = |(>|put +)[ ]*"[^"]*(/bin/|\$SB/|\$SHIMS?/|\$BIN/)[^"]*"'
+REC_RE='^[[:space:]]*#[[:space:]]*Recorded: (none - .+|.+ -> .+)$'
+fake_lint() { # file...: one "file: first fake line" per file that fakes without a Recorded line
+  local f line
+  for f in "$@"; do
+    [[ "$(basename "$f")" == test_test_files.sh ]] && continue
+    if [[ "$(basename "$f")" == fake-*.sh ]]; then
+      line="$(grep -m1 -n '' "$f" 2>/dev/null | sed -n 1p)"
+    else
+      line="$(grep -m1 -nE -- "$FAKE_RE" "$f" 2>/dev/null | sed -n 1p)"
+    fi
+    [[ -n "$line" ]] || continue
+    grep -qE -- "$REC_RE" "$f" || printf '%s: %s\n' "$(basename "$f")" "$(printf '%s' "$line" | cut -c1-90)"
+  done
+}
+FAKE_FILES=("$T_ROOT"/tests/template/test_*.sh "$T_ROOT"/tests/template/fixtures/fake-*.sh)
+unrecorded="$(fake_lint "${FAKE_FILES[@]}")"
+assert_eq "every fake external CLI carries a Recorded: line (L011)" "" "$unrecorded"
+
+make_fixture
+printf '#!/usr/bin/env bash\nmkdir -p bin\ncat > "$BIN/gh" <<G\necho hi\nG\n' > test_nolog.sh
+printf '#!/usr/bin/env bash\n# Recorded: gh --version -> gh version 2.90.0\ncat > "$BIN/gh" <<G\necho hi\nG\n' > test_logged.sh
+printf '#!/usr/bin/env bash\n# Recorded: none - tripwire only, no real response exists\nmkshim gh x\n' > test_none.sh
+printf '#!/usr/bin/env bash\n# Recorded: gh\nmkshim gh x\n' > test_half.sh
+printf '#!/usr/bin/env bash\necho a stand-in\n' > fake-tool.sh
+printf '#!/usr/bin/env bash\n# Recorded: tool --version -> tool 1.0\necho a stand-in\n' > fake-ok.sh
+printf '#!/usr/bin/env bash\necho no fake here\n' > test_plain.sh
+OUT="$(fake_lint test_nolog.sh test_logged.sh test_none.sh test_half.sh fake-tool.sh fake-ok.sh test_plain.sh)"
+assert_contains "a fake without a Recorded line is named with its file" "test_nolog.sh: "
+assert_contains "the fake itself is named" 'cat > "$BIN/gh"'
+assert_contains "a Recorded line without an arrow is refused" "test_half.sh: "
+assert_contains "a fake-*.sh without a Recorded line is named" "fake-tool.sh: "
+assert_not_contains "a fake with a Recorded line passes" "test_logged.sh"
+assert_not_contains "Recorded: none with a reason passes" "test_none.sh"
+assert_not_contains "a fake-*.sh with a Recorded line passes" "fake-ok.sh"
+assert_not_contains "a test without a fake is not flagged" "test_plain.sh"
+
 # Every tracked tests/template/*.sh is 100755 in the git index.
 modes="$(git -C "$T_ROOT" ls-files -s -- tests/template 2>/dev/null)"
 if [[ -z "$modes" ]]; then
