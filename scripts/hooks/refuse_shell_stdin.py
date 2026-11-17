@@ -16,10 +16,20 @@ author's statement that no via reaches the call). A bare call on a via raises a 
 desktop and hangs the run until someone clicks it. A file-level "names PCB_VIA somewhere" rule is too weak: it
 misses a script that compares a class name and still calls the bare form on the via.
 
+Optional warning (Claude Code only): `--warn-long`. A command over 4096 bytes (UTF-8) still runs, and the hook
+prints one PreToolUse JSON object whose hookSpecificOutput.additionalContext tells the model that long literal
+commands break on quoting and to write the text to a file. Plain stderr on exit 0 never reaches the model, and a
+permissionDecision would change the permission flow, so the warning sets neither. Codex's wiring does not pass
+the flag: its handling of that JSON has not been checked.
+VERIFY 2026-11-17: https://code.claude.com/docs/en/hooks, "JSON output > Add context for Claude" (PreToolUse
+additionalContext reaches Claude as a system reminder next to the tool result) and "PreToolUse decision
+control" (additionalContext is a hookSpecificOutput field; plain stdout of PreToolUse is not shown to Claude).
+
 Inputs: the hook JSON on stdin, shaped {"tool_name": ..., "tool_input": {"command": ...}, "cwd": ...}.
 Outputs: exit 0 lets the call run; exit 2 refuses it with the reason on stderr (the harness shows it to the
-agent). Malformed JSON never refuses (exit 0). `--self-test` checks the patterns: 0 pass, 1 fail.
-Dependencies: Python 3 standard library only.
+agent). Malformed JSON never refuses (exit 0). With --warn-long, stdout holds the JSON warning or nothing.
+`--self-test` checks the patterns: 0 pass, 1 fail.
+Dependencies: Python 3 standard library only. Launcher: scripts/refuse-shell-stdin.sh.
 Assumptions: the command text is the whole shell command the harness is about to run; a here-document or a lone
 `-` argument to a python interpreter is never needed because a file can be written first.
 Validation source: ported from a hook that refused these two patterns more than twenty times in practice; the
@@ -33,6 +43,13 @@ import tempfile
 
 ENV_SWITCH = "HOOK_CHECK_PCBNEW_GETWIDTH"
 FLAG_SWITCH = "--check-pcbnew-getwidth"
+WARN_LONG_FLAG = "--warn-long"
+# Long literal commands failed with quote errors in past sessions; 4 KB is the backlog row's figure, not a
+# measured edge, so tune it on evidence.
+LONG_COMMAND_BYTES = 4096
+LONG_CONTEXT = (
+    "Shell-stdin hook note: this command is {n} bytes. Long literal commands break on shell quoting; "
+    "write long text or code to a file with the file-writing tool and pass the path instead.")
 
 # python, python3, python3.12, py, with or without .exe or a path, then optional flags, then a lone "-".
 PY_STDIN = re.compile(
@@ -202,6 +219,11 @@ def main(argv=None) -> int:
         if found:
             print(VIA_REASON.format(path=found[0], line=found[1]), file=sys.stderr)
             return 2
+    if WARN_LONG_FLAG in argv:
+        size = len(command.encode("utf-8", errors="surrogatepass"))
+        if size > LONG_COMMAND_BYTES:
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "additionalContext": LONG_CONTEXT.format(n=size)}}))
     return 0
 
 

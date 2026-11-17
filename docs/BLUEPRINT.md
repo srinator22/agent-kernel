@@ -123,7 +123,6 @@ docs/
     skills/                   # skills a project may adopt into its 2 project skill slots
     procedures/               # procedures the library skills follow
     tools/                    # generic tools with tests/
-    hooks/                    # harness hooks with tests/
     examples/                 # worked examples of library procedures (records only)
   roster/                     # opt-in department agents (ADR 0005; render roles ADR 0007)
     README.md                 # department chart, kind, tier, folder, adoption
@@ -166,6 +165,14 @@ scripts/
   destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
   stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
   codex-hook.cmd              # Windows launcher for the Codex hooks: finds Git Bash, runs scripts/<name>.sh; CRLF
+  refuse-shell-stdin.sh       # PreToolUse hook launcher: picks Python via find-python.sh, runs hooks/refuse_shell_stdin.py; fails open
+  hooks-dispatch.sh           # EVENT: runs the project's own hooks in scripts/hooks.d/<EVENT>/; PreToolUse fails closed (ADR 0015)
+  hooks/                      # template hook bodies in Python, under their own ruff.toml (ADR 0015)
+    refuse_shell_stdin.py     # stdlib: refuses python from stdin and here-documents; --warn-long adds additionalContext over 4096 bytes
+    ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
+    tests/
+      test_refuse_shell_stdin.py # unittest: patterns, refusals, malformed input, the optional KiCad rule, --warn-long
+  hooks.d/                    # project-owned, not shipped: <EVENT>/ executable files for hooks-dispatch.sh
   tasklint.sh                 # check | ship: criteria evidence, assumption status, autopilot plan verdict
   doc-eval.sh                 # check | brief: the documentation question table
 tests/
@@ -186,6 +193,8 @@ tests/
     test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
     test_stop_gate.sh         # Stop hook decisions against a fake quickgate
     test_codex_hooks.sh       # .codex/hooks.json commands run as Codex runs them, Unix and Windows, launcher fail-closed cases
+    test_shell_stdin_hook.sh  # scripts/hooks/tests, the settings.json wiring run as Claude runs it, long-command context, Store stub
+    test_hooks_dispatch.sh    # hooks.d order, skips, exit 2, PreToolUse fail-closed, settings.json wiring for four events
     test_tasklint.sh
     test_doc_eval.sh
     test_session_context.sh   # mode line, git priming, task state, template update notice
@@ -214,7 +223,7 @@ tests/
   jobs/                       # background-job STATE files and logs; GITIGNORED
     .gitkeep
 .claude/
-  settings.json               # attribution off; hooks: SessionStart, UserPromptSubmit feedback log, PreToolUse guard, Stop gate
+  settings.json               # attribution off; hooks: SessionStart, UserPromptSubmit feedback log, PreToolUse guard and shell-stdin hook, Stop gate; hooks-dispatch.sh on each
   agents/
     reviewer.md               # fresh-context adversarial review; model inherit
     explore.md                # read-only codebase search; model haiku
@@ -231,7 +240,7 @@ tests/
     template-update/SKILL.md  # thin wrapper -> docs/procedures/upstream.md step 6
     dream/SKILL.md            # thin wrapper -> docs/procedures/dream.md
 .codex/
-  hooks.json                  # Codex hooks: SessionStart, UserPromptSubmit, PreToolUse (Bash), Stop; trusted by the owner once in Codex
+  hooks.json                  # Codex hooks: SessionStart, UserPromptSubmit, PreToolUse (Bash: guard, shell-stdin hook), Stop; trusted by the owner once in Codex
   agents/                     # Codex equivalents: monitor.toml, reviewer.toml, worker.toml, dreamer.toml, taste-dreamer.toml
 .agents/
   skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)

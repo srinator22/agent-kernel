@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# codex-hooks: .codex/hooks.json wires the four hook scripts for Codex.
+# codex-hooks: .codex/hooks.json wires the four hook scripts for Codex, and the
+# shell-stdin hook (scripts/refuse-shell-stdin.sh) as a second PreToolUse hook
+# that fails open (ADR 0015).
 # Covers: the file's shape and exact command strings (A1); each Unix command run
 # as `bash -c` with recorded Codex payloads on stdin from the root and from a
 # subfolder (A2); on Windows each commandWindows string run through Python as one
@@ -23,8 +25,9 @@ if [[ -z "$PY" ]]; then
 fi
 
 # ---- A1: the hooks file ----
-# hook_field EVENT FIELD: matcher, count (command hooks), command, commandWindows
-# or timeout ("none" when absent) of the one entry for EVENT.
+# hook_field EVENT FIELD [I]: matcher, count (command hooks), command,
+# commandWindows or timeout ("none" when absent) of hook I (default 0) in the
+# one matcher group for EVENT.
 hook_field() {
   "$PY" -I -B -c '
 import json, sys
@@ -34,11 +37,12 @@ assert len(ev) == 1, "one matcher group"
 g = ev[0]
 h = g["hooks"]
 f = sys.argv[3]
+i = int(sys.argv[4])
 if f == "matcher": print(g.get("matcher", "none"), end="")
 elif f == "count": print(len(h), end="")
-elif f == "type": print(h[0]["type"], end="")
-else: print(h[0].get(f, "none"), end="")
-' "$HOOKS" "$1" "$2"
+elif f == "type": print(h[i]["type"], end="")
+else: print(h[i].get(f, "none"), end="")
+' "$HOOKS" "$1" "$2" "${3:-0}"
 }
 exp_unix() { # NAME TAIL
   printf '%s' "bash \"\$(git rev-parse --show-toplevel)/scripts/$1.sh\"$2"
@@ -51,19 +55,22 @@ run "$PY" -I -B -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-
 assert_rc "hooks.json is valid JSON" 0
 assert_eq "hooks.json holds exactly the four events" "hooks PreToolUse,SessionStart,Stop,UserPromptSubmit" "$OUT"
 
-# EVENT NAME TAIL N TIMEOUT MATCHER
+# EVENT NAME TAIL N TIMEOUT MATCHER [I COUNT]
 check_event() {
-  local ev="$1" name="$2" tail="$3" n="$4" to="$5" m="$6"
-  assert_eq "$ev: one command hook" "1" "$(hook_field "$ev" count)"
-  assert_eq "$ev: hook type is command" "command" "$(hook_field "$ev" type)"
+  local ev="$1" name="$2" tail="$3" n="$4" to="$5" m="$6" i="${7:-0}" c="${8:-1}"
+  assert_eq "$ev: $c command hook(s)" "$c" "$(hook_field "$ev" count)"
+  assert_eq "$ev $name: hook type is command" "command" "$(hook_field "$ev" type "$i")"
   assert_eq "$ev: matcher" "$m" "$(hook_field "$ev" matcher)"
-  assert_eq "$ev: Unix command" "$(exp_unix "$name" "$tail")" "$(hook_field "$ev" command)"
-  assert_eq "$ev: Windows command" "$(exp_win "$name" "$n")" "$(hook_field "$ev" commandWindows)"
-  assert_eq "$ev: timeout" "$to" "$(hook_field "$ev" timeout)"
+  assert_eq "$ev $name: Unix command" "$(exp_unix "$name" "$tail")" "$(hook_field "$ev" command "$i")"
+  assert_eq "$ev $name: Windows command" "$(exp_win "$name" "$n")" "$(hook_field "$ev" commandWindows "$i")"
+  assert_eq "$ev $name: timeout" "$to" "$(hook_field "$ev" timeout "$i")"
 }
 check_event SessionStart session-context "" 0 none none
 check_event UserPromptSubmit feedback-log "" 0 5 none
-check_event PreToolUse destructive-guard " || exit 2" 2 none Bash
+check_event PreToolUse destructive-guard " || exit 2" 2 none Bash 0 2
+# The shell-stdin hook fails open (exit 0 when git or Git Bash is missing):
+# it refuses a habit, it does not guard data (ADR 0015).
+check_event PreToolUse refuse-shell-stdin "" 0 none Bash 1 2
 check_event Stop stop-gate "" 0 1200 none
 
 # ---- fixtures: recorded payloads carry no machine values ----
@@ -78,6 +85,8 @@ assert_file_has "the recorded PreToolUse payload names the Bash tool" "$FXD/PreT
 RMRF="rm -rf /"
 PRE_ALLOW="$(cat "$FXD/PreToolUse.json")"
 PRE_BLOCK="${PRE_ALLOW/git status --short ./$RMRF}"
+PRE_STDIN="${PRE_ALLOW/git status --short ./echo 1 | python -}"
+PRE_COMMITF="${PRE_ALLOW/git status --short ./git commit -F .work/jobs/commit-msg.txt}"
 SS="$(cat "$FXD/SessionStart.json")"
 UP="$(cat "$FXD/UserPromptSubmit.json")"
 STOP="$(cat "$FXD/Stop.json")"
@@ -86,7 +95,8 @@ STOP="$(cat "$FXD/Stop.json")"
 mk_repo() {
   local d="$1" s
   mkdir -p "$d/scripts" "$d/.codex" "$d/sub"
-  for s in session-context.sh feedback-log.sh destructive-guard.sh stop-gate.sh find-python.sh codex-hook.cmd; do
+  mkdir -p "$d/scripts/hooks"
+  for s in session-context.sh feedback-log.sh destructive-guard.sh stop-gate.sh find-python.sh codex-hook.cmd refuse-shell-stdin.sh hooks/refuse_shell_stdin.py; do
     cp "$T_ROOT/scripts/$s" "$d/scripts/$s"
   done
   cp "$HOOKS" "$d/.codex/hooks.json"
@@ -101,9 +111,9 @@ REPO="$FIX/repo"
 mk_repo "$REPO"
 
 # ---- A2: Unix commands, bash -c, payload on stdin ----
-unix_hook() { # EVENT DIR PAYLOAD: run the Unix command of EVENT from DIR
+unix_hook() { # EVENT DIR PAYLOAD: run the Unix command of EVENT (hook HOOK_I, default 0) from DIR
   local cmd
-  cmd="$(hook_field "$1" command)"
+  cmd="$(hook_field "$1" command "${HOOK_I:-0}")"
   OUT="$(cd "$2" && printf '%s' "$3" | bash -c "$cmd" 2>&1)"; RC=$?
 }
 for where in "" "sub"; do
@@ -114,6 +124,13 @@ for where in "" "sub"; do
   assert_contains "$label: guard prints its BLOCKED line" "BLOCKED by scripts/destructive-guard.sh"
   unix_hook PreToolUse "$dir" "$PRE_ALLOW"
   assert_rc "$label: guard passes git status" 0
+  HOOK_I=1 unix_hook PreToolUse "$dir" "$PRE_STDIN"
+  assert_rc "$label: shell-stdin hook refuses python from stdin" 2
+  assert_contains "$label: shell-stdin hook names stdin" "stdin"
+  HOOK_I=1 unix_hook PreToolUse "$dir" "$PRE_COMMITF"
+  assert_rc "$label: shell-stdin hook passes git commit -F" 0
+  HOOK_I=1 unix_hook PreToolUse "$dir" "$PRE_ALLOW"
+  assert_rc "$label: shell-stdin hook passes git status" 0
   unix_hook SessionStart "$dir" "$SS"
   assert_rc "$label: session start exits 0" 0
   assert_contains "$label: session start prints context lines" "[session-context]"
@@ -177,8 +194,8 @@ sys.stdout.write("\nRC=%d" % r.returncode)
     RC="${res##*RC=}"
     OUT="${res%RC=*}"
   }
-  win_hook() { # EVENT DIR PAYLOAD [PATH [PROGRAMFILES]]
-    win_run "$(hook_field "$1" commandWindows)" "$(cygpath -w "$2")" "$3" "${4:-}" "${5:-}"
+  win_hook() { # EVENT DIR PAYLOAD [PATH [PROGRAMFILES]]; hook HOOK_I, default 0
+    win_run "$(hook_field "$1" commandWindows "${HOOK_I:-0}")" "$(cygpath -w "$2")" "$3" "${4:-}" "${5:-}"
   }
 
   SP="$FIX/with space"
@@ -191,6 +208,11 @@ sys.stdout.write("\nRC=%d" % r.returncode)
     assert_contains "$label: guard prints its BLOCKED line" "BLOCKED by scripts/destructive-guard.sh"
     win_hook PreToolUse "$dir" "$PRE_ALLOW"
     assert_rc "$label: guard passes git status" 0
+    HOOK_I=1 win_hook PreToolUse "$dir" "$PRE_STDIN"
+    assert_rc "$label: shell-stdin hook refuses python from stdin" 2
+    assert_contains "$label: shell-stdin hook names stdin" "stdin"
+    HOOK_I=1 win_hook PreToolUse "$dir" "$PRE_COMMITF"
+    assert_rc "$label: shell-stdin hook passes git commit -F" 0
     win_hook SessionStart "$dir" "$SS"
     assert_rc "$label: session start exits 0" 0
     assert_contains "$label: session start prints context lines" "[session-context]"
@@ -209,6 +231,8 @@ sys.stdout.write("\nRC=%d" % r.returncode)
   assert_contains "Windows, no repository: the guard names the cause" "git cannot read this repository"
   win_hook SessionStart "$WNOGIT" "$SS"
   assert_rc "Windows, no repository: session start allows" 0
+  HOOK_I=1 win_hook PreToolUse "$WNOGIT" "$PRE_STDIN"
+  assert_rc "Windows, no repository: the shell-stdin hook allows" 0
   unset GIT_CEILING_DIRECTORIES
 
   # Unknown hook name: one stderr line, exit 0.
@@ -224,23 +248,27 @@ sys.stdout.write("\nRC=%d" % r.returncode)
   REALGIT="$(cygpath -w "$(command -v git)")"
   printf '@echo off\r\nif "%%~1"=="--exec-path" (echo %%~dp0%s& exit /b 0)\r\n"%s" %%*\r\n' 'nobash\a\b\c' "$REALGIT" > "$SHIM/git.cmd"
   NOBASH_PATH="$(cygpath -w "$SHIM");C:\\Windows\\System32;C:\\Windows"
-  for ev in SessionStart UserPromptSubmit PreToolUse Stop; do
+  # PreToolUse-stdin: the shell-stdin hook (hook 1 of PreToolUse) fails open.
+  for ev in SessionStart UserPromptSubmit PreToolUse PreToolUse-stdin Stop; do
+    HOOK_I=0
     case "$ev" in
       SessionStart) pl="$SS"; want=0 ;;
       UserPromptSubmit) pl="$UP"; want=0 ;;
       PreToolUse) pl="$PRE_ALLOW"; want=2 ;;
+      PreToolUse-stdin) pl="$PRE_STDIN"; want=0; HOOK_I=1 ;;
       Stop) pl="$STOP"; want=0 ;;
     esac
-    win_hook "$ev" "$SP/sub" "$pl" "$NOBASH_PATH" "$(cygpath -w "$EMPTYPF")"
+    win_hook "${ev%-stdin}" "$SP/sub" "$pl" "$NOBASH_PATH" "$(cygpath -w "$EMPTYPF")"
     assert_rc "no Git Bash, $ev: exit $want" "$want"
     assert_contains "no Git Bash, $ev: the stderr line names doctor.sh" "scripts/doctor.sh"
     assert_contains "no Git Bash, $ev: the line says Git Bash was not found" "Git Bash not found"
     # No git on PATH: the commandWindows prefix answers before the launcher runs.
-    win_hook "$ev" "$SP/sub" "$pl" 'C:\Windows\System32;C:\Windows' ""
+    win_hook "${ev%-stdin}" "$SP/sub" "$pl" 'C:\Windows\System32;C:\Windows' ""
     assert_rc "no git on PATH, $ev: exit $want" "$want"
     assert_contains "no git on PATH, $ev: the line names doctor.sh" "scripts/doctor.sh"
     assert_contains "no git on PATH, $ev: the line says git is missing" "git is not on PATH"
   done
+  HOOK_I=0
 fi
 
 t_finish

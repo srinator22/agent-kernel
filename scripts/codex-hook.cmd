@@ -1,15 +1,17 @@
 @echo off
 rem codex-hook.cmd - Windows launcher for the Codex hooks in .codex/hooks.json.
-rem Usage: codex-hook.cmd NAME, where NAME is session-context, feedback-log, destructive-guard or stop-gate.
+rem Usage: codex-hook.cmd NAME, where NAME is session-context, feedback-log, destructive-guard,
+rem refuse-shell-stdin or stop-gate.
 rem Input: the hook payload on stdin, passed on to the matching script in scripts/ under Git Bash.
 rem Output: that script's stdout, stderr and exit code.
 rem Why: Codex on Windows runs a hook through cmd.exe, which cannot run a .sh file.
 rem Assumptions: cwd is inside the repository (Codex runs a hook in the session's
 rem folder); git is on PATH (the hooks.json prefix checks that before this runs).
-rem Fail-closed: destructive-guard exits 2 when it cannot run; the others exit 0.
+rem Fail-closed: destructive-guard exits 2 when it cannot run; the others exit 0 (the shell-stdin
+rem hook is a convenience refusal, not a safety guard, so a machine without Git Bash keeps a shell).
 setlocal
 set "NAME=%~1"
-if /i not "%NAME%"=="session-context" if /i not "%NAME%"=="feedback-log" if /i not "%NAME%"=="destructive-guard" if /i not "%NAME%"=="stop-gate" (echo codex-hook: unknown hook name %NAME% 1>&2 & exit /b 0)
+if /i not "%NAME%"=="session-context" if /i not "%NAME%"=="feedback-log" if /i not "%NAME%"=="destructive-guard" if /i not "%NAME%"=="refuse-shell-stdin" if /i not "%NAME%"=="stop-gate" (echo codex-hook: unknown hook name %NAME% 1>&2 & exit /b 0)
 set "FAILRC=0"
 if /i "%NAME%"=="destructive-guard" set "FAILRC=2"
 set "ROOT="
