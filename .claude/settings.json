@@ -79,7 +79,7 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/stop-gate.sh\"",
-            "timeout": 1200
+            "timeout": 120
           }
         ]
       }
