@@ -86,6 +86,7 @@ docs/
     0017-verdicts-bind-to-the-reviewed-tree-lessons-carry-triggers.md
     0018-gate-changes-need-a-human-label.md
     0019-reuse-the-template-self-test-result-when-its-declared-inputs.md
+    0020-template-kernel-adoption.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -164,6 +165,8 @@ scripts/
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
   fleet-status.sh             # per-project template ref, last sync date and releases behind (read-only, offline)
+  fleet-sync.sh               # template only: a template-sync branch per fleet project in a sibling worktree; never commits or pushes
+  doc-budget.sh               # procedure line budget, frozen rule anchors, paths AGENTS.md cites (check.sh step 5n)
   rating.sh                   # the numbers behind a template rating
   tree-id.sh                  # working-tree tree id for the verify line and the review verdict (ADR 0017)
   profiles.sh                 # the one parser of the AGENTS.md Profiles line (template-sync, lessons)
@@ -215,6 +218,15 @@ tests/
     test_template_sync.sh
     test_quickgate.sh
     test_check_always.sh
+    check_always_lib.sh       # shared fixtures of the test_check_always*.sh files (sourced, not run)
+    test_check_always_fast.sh
+    test_check_always_selftest.sh
+    test_check_always_reuse.sh
+    test_check_always_template.sh
+    test_check_always_started.sh
+    test_ci_gate_files.sh     # ci.yml gate-file list evaluated, gate-label has no skip path
+    test_doc_budget.sh        # procedure caps, lost and moved anchors, cited paths, the anchors at their freeze commit
+    test_fleet_sync.sh        # sync branches per project, kernel override phrase, nothing pushed, dry run
     test_blueprint_parity.sh  # full-path parity both ways, a tree larger than a pipe buffer
     test_profile_tools.sh     # runs the tests of every shipped tool and hook
     test_adr.sh
@@ -260,6 +272,7 @@ tests/
         UserPromptSubmit.json
   docs/
     questions.md              # question set and answer key for docs/procedures/doc-eval.md
+    procedure-anchors.txt     # one verbatim phrase per procedure rule or step, frozen 2026-11-18 (doc-budget.sh)
 .work/
   TASK.md                     # current-task state (template with placeholders); committed
   done/                       # archived task files; committed
@@ -728,3 +741,11 @@ One line each; the record is the ADR or file named.
 - Fleet and rating: `scripts/fleet-status.sh` (per-project template ref, last sync, releases behind) and `scripts/rating.sh` (the numbers behind a template rating), both read-only and offline-capable.
 - Profiles: `product-render` graduates from the library into `docs/profiles/product-render/PROFILE.md` (rules RND-1 to RND-13); its procedure, skill and tools stay in `docs/library/`.
 - Reconciliation: section 2 lists every ADR, the Codex fixtures and the archive entries; sections 3.1, 3.3, 3.9, 3.12 and 3.13 are present-tense and point at the procedure files that own their text. Kernel untouched.
+
+## Amendment 8 (2026-11-18): faster, enforced gates and kernel-safe fleet sync
+
+- `scripts/lessons.sh` judges each class of shipped agent and skill files with one awk instead of one process per file (83 s to about 11 s of a 109 s `check.sh --fast` on Windows), with identical output.
+- `tests/template/test_check_always.sh` is split into six files sharing `tests/template/check_always_lib.sh`, so the shards can spread it.
+- CI scans every pull request and push range against the `PRIVATE_TERMS` secret (`scripts/private-terms.sh range`); `gate-label` runs on every pull request and cannot skip; main requires `check`, `gate-label` and `private-terms` with admins included (ADR 0018 amendment).
+- ADR 0020: `scripts/template-sync.sh --accept-kernel` and `scripts/fleet-sync.sh`; non-kernel files always sync, and a kernel change is accepted per project by the human or by the standing override phrase the human records.
+- `scripts/doc-budget.sh` (step 5n) holds `docs/procedures` to 1100 lines, 160 per file, with every anchor in `tests/docs/procedure-anchors.txt` still under `docs/`.

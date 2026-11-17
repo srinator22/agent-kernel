@@ -8,10 +8,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh
 
 make_fixture
 cp_script doc-budget.sh
-mkdir -p docs/procedures docs/rules tests/template/fixtures
+mkdir -p docs/procedures docs/rules tests/docs
 printf '# A\nrun scripts/a.sh --now\nline\n' > docs/procedures/a.md
 printf '# B\nkeep the gate\n' > docs/procedures/b.md
-A=tests/template/fixtures/procedure-anchors.txt
+A=tests/docs/procedure-anchors.txt
 printf '# frozen\ndocs/procedures/a.md\tscripts/a.sh --now\ndocs/procedures/b.md\tkeep the gate\n' > "$A"
 printf '# Agents\nSee docs/procedures/a.md.\n## Project decisions\n- Map: docs/MISSING.md\n' > AGENTS.md
 
@@ -61,7 +61,8 @@ if [[ -f "$T_ROOT/$A" ]] && git -C "$T_ROOT" cat-file -e "$FREEZE^{commit}" 2>/d
   done)"
   if [[ -z "$miss" ]]; then t_ok "every frozen anchor is in its procedure at $FREEZE"
   else t_bad "anchors not in their procedure at $FREEZE: $miss"; fi
-  if git -C "$T_ROOT" diff --quiet "$FREEZE" -- "$A"; then t_ok "the anchors file is unchanged since $FREEZE"
+  # Frozen at the old path; moved out of the test-code budget, content kept.
+  if git -C "$T_ROOT" show "$FREEZE:tests/template/fixtures/procedure-anchors.txt" | cmp -s - "$T_ROOT/$A"; then t_ok "the anchors file is unchanged since $FREEZE"
   else t_bad "the anchors file changed since $FREEZE (editing the oracle weakens the gate; kernel rule 2)"; fi
 else
   t_na "the anchor freeze commit $FREEZE is not in this repository (an adopted project)"

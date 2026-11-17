@@ -5,7 +5,7 @@
 #   check   docs/procedures/*.md total at most DOC_BUDGET_TOTAL words (10200, from
 #           12724) and no file over DOC_BUDGET_FILE words (1700); no line
 #           over DOC_BUDGET_WIDTH characters (120); every anchor phrase in
-#           tests/template/fixtures/procedure-anchors.txt (frozen from the uncut
+#           tests/docs/procedure-anchors.txt (frozen from the uncut
 #           procedures, one per rule or step) is still found verbatim under
 #           docs/, so a cut cannot drop a rule; every docs/ or scripts/ path the
 #           AGENTS.md kernel, standards and rules index cite exists (Project
@@ -29,7 +29,7 @@ cd "$ROOT"
 TOTAL_MAX="${DOC_BUDGET_TOTAL:-10200}"
 FILE_MAX="${DOC_BUDGET_FILE:-1700}"
 WIDTH_MAX="${DOC_BUDGET_WIDTH:-120}"
-ANCHORS=tests/template/fixtures/procedure-anchors.txt
+ANCHORS=tests/docs/procedure-anchors.txt
 problems=0
 bad() { echo "doc-budget: $*"; problems=$((problems + 1)); }
 
