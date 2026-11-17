@@ -148,6 +148,7 @@ docs/
     PENDING.md                # proposed lessons awaiting human approval
     QUARANTINE.md             # flaky tests parked here, each as an open task
     UPSTREAM.md               # process lessons to send back to the template
+    MAINTENANCE.log           # dated maintain-pass entries and template-sync lines
 scripts/
   check.sh                    # the single gauntlet: local == CI
   kernel-hash.sh              # --verify | --update (the only sanctioned way to touch .kernel.hash)

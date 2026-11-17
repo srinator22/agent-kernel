@@ -187,8 +187,8 @@ block in `~/.claude/CLAUDE.md`, one in `~/.codex/AGENTS.md`) is no longer
 written by any command. Its files stay as the owner left them and still load
 wherever the import block remains. To stop loading it, delete the block from
 `~/.claude/CLAUDE.md` (the lines from `<!-- taste:begin` to
-`<!-- taste:end -->`) by hand; the Codex block goes the same way after
-Codex loads registers (BACKLOG). A taste report written by an older release
+`<!-- taste:end -->`) by hand; the Codex block can go the same way once
+the project's Codex hooks are trusted (template ADR 0014). A taste report written by an older release
 is not applied: run a fresh project taste pass.
 
 ## Fleet dream (template only)

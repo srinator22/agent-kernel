@@ -53,3 +53,8 @@ register check reports a duplicate ID before merge. Codex sessions do not load
 the registers until Codex has a session-start hook (BACKLOG). The 6000-byte
 profile cap becomes the 4000-byte session-start print cap, so a large register
 prints only part of its rules and names the files holding the rest.
+
+## Amendment 2026-11-18
+
+Codex now runs scripts/session-context.sh at SessionStart (ADR 0014), so
+Codex sessions load the preference registers the same way Claude Code does.

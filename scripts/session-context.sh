@@ -159,7 +159,7 @@ preferences_block() {
     # One shared check (preferences.sh wired); without preferences.sh there is
     # nothing to compare against, so no warning.
     if [[ -f scripts/preferences.sh ]] && ! bash scripts/preferences.sh wired >/dev/null 2>&1; then
-      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json or .codex/hooks.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 9)."
+      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json or .codex/hooks.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 6, item 9)."
     fi
   fi
   return 0
