@@ -15,6 +15,10 @@ SHA is terminal-success (kernel rule 5).
    `check.sh: verified tree <id>` (`scripts/tree-id.sh`: the whole working
    tree, untracked files included, except `.work/` and `CHANGELOG.md`), so
    step 1 must leave nothing in the tree that the commit will not carry.
+   While working, `./scripts/check.sh --fast` runs lint, the secret scan
+   and only the self-tests the changed files map to; it is not the full
+   gate. A pull request that changes a gate file needs the `gate-change`
+   label from the owner (ADR 0018); agents never add it.
 4. Reviewer gate: hand the reviewer agent the diff, `.work/TASK.md`, the
    verify output from step 3, complete and untruncated (never a summary of
    it), and the output of `scripts/lessons.sh match <the diff file or git
