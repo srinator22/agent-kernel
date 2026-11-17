@@ -12,5 +12,6 @@
 # `check` fails when the count exceeds ceiling + allowance. Deleting or consolidating duplicate
 # tests lowers the count; lower ceiling: to the new count when a pass has removed lines.
 paths: tests/template/*.sh tests/template/fixtures/*
-ceiling: 11058
+ceiling: 12252
 allowance: 400
+raise: 11058->12252 2026-11-18 the first ceiling was counted before the 2026-11-18 wave merged its new tests (selftest timing and shards, self-test reuse, fleet-status, rating, lesson age and maintain checks, ADR body check, BLUEPRINT reverse parity, the recorded-response lint); no duplicate removed yet, see the consolidation campaign row
