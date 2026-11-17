@@ -341,6 +341,7 @@ printf 'scripts\ntests/template\nAGENTS.md\n' > tests/template/selftest-inputs.l
 printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
 chmod +x tests/template/test_ok.sh
 printf '#!/usr/bin/env bash\necho "stack ran"\n' > scripts/stack-check.sh
+chmod +x scripts/stack-check.sh
 commit_fixture
 RAN="selftest: 1 passed, 0 failed, 0 quarantined (1 test files)"
 
