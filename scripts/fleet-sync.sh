@@ -94,9 +94,8 @@ while IFS= read -r path || [[ -n "$path" ]]; do
   fi
 
   accept=()
-  if git -C "$path" show HEAD:AGENTS.md 2>/dev/null | tr -d '\r' | grep -F "Standing overrides" | grep -qF "template kernel accepted verbatim"; then
-    accept=(--accept-kernel)
-  fi
+  overrides="$(git -C "$path" show HEAD:AGENTS.md 2>/dev/null | tr -d '\r' | grep -F "Standing overrides" || true)"
+  case "$overrides" in *"template kernel accepted verbatim"*) accept=(--accept-kernel) ;; esac
   if (( DRY )); then
     echo "dry run: $path: git worktree add -b $branch $wt; scripts/template-sync.sh --ref $REF ${accept[*]-}"
     report "$path" "dry run (nothing changed)" "$wt"; continue

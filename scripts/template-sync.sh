@@ -870,7 +870,9 @@ main() {
 
   if (( do_accept )); then
     local cr=""
-    if sed -n '/<!-- KERNEL:BEGIN -->/p' AGENTS.md | grep -q $'\r'; then cr=$'\r'; fi
+    local begin_line
+    begin_line="$(sed -n '/<!-- KERNEL:BEGIN -->/p' AGENTS.md)"
+    case "$begin_line" in *$'\r'*) cr=$'\r' ;; esac
     awk -v nf="$WORK/k.new" -v cr="$cr" '
       /<!-- KERNEL:BEGIN -->/ && !done { while ((getline l < nf) > 0) print l cr; skip = 1; done = 1 }
       skip { if (/<!-- KERNEL:END -->/) skip = 0; next }
