@@ -68,10 +68,13 @@ check_event() {
 }
 check_event SessionStart session-context "" 0 none none
 check_event UserPromptSubmit feedback-log "" 0 5 none
-check_event PreToolUse destructive-guard " || exit 2" 2 none Bash 0 2
+check_event PreToolUse destructive-guard " || exit 2" 2 none Bash 0 3
 # The shell-stdin hook fails open (exit 0 when git or Git Bash is missing):
 # it refuses a habit, it does not guard data (ADR 0015).
-check_event PreToolUse refuse-shell-stdin "" 0 none Bash 1 2
+check_event PreToolUse refuse-shell-stdin "" 0 none Bash 1 3
+# The push-scan hook also fails open: a missing Git Bash must not stop a push
+# the owner can scan with check.sh (it scans, it does not guard data).
+check_event PreToolUse push-scan "" 0 60 Bash 2 3
 check_event Stop stop-gate "" 0 120 none
 
 # ---- fixtures: recorded payloads carry no machine values ----
@@ -97,7 +100,7 @@ mk_repo() {
   local d="$1" s
   mkdir -p "$d/scripts" "$d/.codex" "$d/sub"
   mkdir -p "$d/scripts/hooks"
-  for s in session-context.sh feedback-log.sh destructive-guard.sh stop-gate.sh find-python.sh codex-hook.cmd refuse-shell-stdin.sh hooks/refuse_shell_stdin.py; do
+  for s in session-context.sh feedback-log.sh destructive-guard.sh stop-gate.sh find-python.sh codex-hook.cmd refuse-shell-stdin.sh push-scan.sh private-terms.sh hooks/refuse_shell_stdin.py; do
     cp "$T_ROOT/scripts/$s" "$d/scripts/$s"
   done
   cp "$HOOKS" "$d/.codex/hooks.json"
