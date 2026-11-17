@@ -79,7 +79,7 @@ mkproj "$PRJ/beta" "- Template: https://x.invalid/t.git template-v0.1.0 with pro
 mkproj "$PRJ/gamma" "- Template: https://x.invalid/t.git template-v0.2.0"
 {
   printf '### Long entry\n- what happened: '
-  for i in $(seq 1 120); do printf 'word%03d ' "$i"; done
+  for i in $(seq 1 300); do printf 'word%03d ' "$i"; done
   printf '\n- applies to: core\n'
   for i in $(seq 1 12); do
     printf '\n### Entry %02d\n- what happened: ' "$i"
