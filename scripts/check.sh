@@ -298,6 +298,11 @@ style_exempt_list="tests/style-exempt.list"
 if [[ -f "$style_exempt_list" ]]; then
   while IFS= read -r ent || [[ -n "$ent" ]]; do
     [[ -z "$ent" || "$ent" == \#* ]] && continue
+    norm="${ent#./}"; norm="${norm%/}"
+    if [[ -z "$norm" || "$norm" == . || "$ent" == /* ]]; then
+      gerr "$style_exempt_list: '$ent' names the whole tree (or an absolute path), which would switch the scans off; name a tracked file, or a folder with a trailing /"
+      continue
+    fi
     if [[ "$ent" == *[\*\?\[]* || "$ent" == :* ]]; then
       gerr "$style_exempt_list: '$ent' is a wildcard or pathspec magic; name a tracked file, or a folder with a trailing /"
       continue
@@ -436,7 +441,7 @@ if [[ -d tests/template ]]; then
       if ./scripts/selftest.sh; then
         if [[ -n "$pre_key" ]]; then
           if [[ "$(bash scripts/selftest-reuse.sh key 2>/dev/null)" == "$pre_key" ]]; then
-            bash scripts/selftest-reuse.sh record || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
+            bash scripts/selftest-reuse.sh record "$pre_key" || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
           else
             echo "selftest-reuse: an input changed while the self-tests ran; not recorded, so the next run tests it"
           fi

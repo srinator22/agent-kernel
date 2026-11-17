@@ -45,9 +45,10 @@ it complete. Reuse needs a proof instead.
   verify-inputs fails in CI.
 - A tool outside the key can change without a key change; after such an
   upgrade run `CHECK_SELFTEST=full ./scripts/check.sh`.
-- check.sh takes the key before the suite runs and records it only when the
-  key is unchanged after a pass, so an input edited during the run (the
-  detached stop gate lets the agent keep working) is tested again.
+- check.sh takes the key before the suite runs and, only when the key is
+  unchanged after a pass, records exactly that pre-run key (`record KEY`), so
+  an input edited during or after the run (the detached stop gate lets the
+  agent keep working) is tested again.
 - The list declares docs/ by path (the procedures, rules, profiles,
   decisions, lessons, library, roster and preferences folders and a few
   files), so a project's own other docs do not break reuse; verify-inputs

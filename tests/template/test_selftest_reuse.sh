@@ -60,6 +60,16 @@ run $REUSE check
 assert_rc "unchanged inputs: reuse" 0
 assert_contains "the reuse line names the date and the key" "selftest-reuse: inputs unchanged since "
 assert_contains "the reuse line shows the first 12 hex of the key" "(key ${KEY1:0:12})"
+# check.sh records the key it took before the run: record KEY writes exactly
+# that key, never one computed later (an edit in between is never recorded).
+GIVEN="0000000000000000000000000000000000000000000000000000000000000abc"
+run $REUSE record "$GIVEN"
+assert_rc "record KEY succeeds" 0
+assert_eq "record KEY stores exactly the given key" "$GIVEN" "$(cut -d' ' -f1 "$(git rev-parse --git-path selftest-pass)")"
+run $REUSE record "not-a-key"
+assert_rc "record with a malformed key is refused" 1
+run $REUSE record
+assert_rc "record without a key computes it, as before" 0
 
 # ---- a changed non-input path does not miss ----
 echo "print(2)" >> src/app.py

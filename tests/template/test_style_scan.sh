@@ -87,6 +87,12 @@ assert_contains "a stale exemption fails" "stale exemption 'vendor/gone.txt'"
 printf 'vendor/*\n' > tests/style-exempt.list
 run ./scripts/check.sh
 assert_contains "a wildcard entry is refused" "is a wildcard or pathspec magic"
+# "." or "./" would exclude the whole tree and switch the scan off silently.
+for whole in . ./ /; do
+  printf '%s\n' "$whole" > tests/style-exempt.list
+  run ./scripts/check.sh
+  assert_contains "an entry naming the whole tree ($whole) is refused" "names the whole tree"
+done
 printf 'vendor/\n' > tests/style-exempt.list
 # The list exempts only what it names: an untracked file elsewhere is still scanned.
 printf 'x %s y\n' "$EN" > loose.txt

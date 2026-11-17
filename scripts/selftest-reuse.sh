@@ -10,7 +10,7 @@
 #                  <UTC date> (key <12 hex>)" when the record holds the current
 #                  key; exit 1 with a one-line reason otherwise (no record, key
 #                  changed, list missing, CI=true, CHECK_SELFTEST=full).
-#   record         write "<key> <UTC date>" to the record.
+#   record [KEY]   write "<KEY or the current key> <UTC date>" to the record; check.sh passes the key it took before the run.
 #   verify-inputs  copy ONLY the declared inputs into a fresh temp git repository
 #                  and run ./scripts/selftest.sh there; exit with its status. A
 #                  test that reads an undeclared path fails there, so this proves
@@ -158,8 +158,16 @@ cmd_check() {
 }
 
 cmd_record() {
+  # record [KEY]: store KEY when given (check.sh passes the key it took before
+  # the run, so an input edited afterwards is never recorded as tested), else
+  # the key of the inputs as they are now.
   local key rec
-  key="$(compute_key)"
+  if [[ -n "${1:-}" ]]; then
+    [[ "$1" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]] || die "record: '$1' is not a key (40 or 64 lowercase hex characters, as 'key' prints)"
+    key="$1"
+  else
+    key="$(compute_key)"
+  fi
   rec="$(record_file)"
   printf '%s %s\n' "$key" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$rec"
   echo "selftest-reuse: recorded key ${key:0:12}"
@@ -216,7 +224,7 @@ cmd_verify() {
 case "${1:-}" in
   key) compute_key ;;
   check) cmd_check ;;
-  record) cmd_record ;;
+  record) shift; cmd_record "${1:-}" ;;
   verify-inputs) cmd_verify ;;
   *) echo "usage: selftest-reuse.sh key|check|record|verify-inputs" >&2; exit 2 ;;
 esac
