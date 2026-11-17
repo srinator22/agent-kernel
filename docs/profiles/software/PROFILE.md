@@ -39,6 +39,10 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
   along; workers never commit.
 - SW-14 A clean-clone build runs in the release path; local-only success is
   not evidence.
+- SW-15 The project carries a `verify` skill, written at start for its stack,
+  that boots, drives and inspects the real app; a change that alters what the
+  app does, shows or returns records a verify run line in `.work/TASK.md`
+  before ship (docs/decisions/0016).
 
 ## Gates
 
@@ -56,6 +60,8 @@ release path; inside stack-check.sh it would call check.sh again and recurse.
 | Mutation | stack mutation tool on changed modules | score at least the recorded floor | SW-2 |
 | Secrets | pinned gitleaks CLI, checksum verified | no findings | SW-11 |
 | Changelog freshness | regenerate with git-cliff, diff | no diff | SW-9 |
+| Verify skill installed | project mode of check.sh: `.claude/skills/verify/SKILL.md` exists and holds no `{{` | exit 0 | SW-15 |
+| Verify run recorded | review: the reviewer reads the `verify:` line in the `.work/TASK.md` Progress log | a PASS line for the shipped commit | SW-15 |
 
 ## Tools
 
@@ -85,10 +91,13 @@ release path; inside stack-check.sh it would call check.sh again and recurse.
 - Agents: `worker` (bounded edits, never commits), `reviewer` (read-only,
   fresh context), `explore` (read-only search), `monitor` (tracks a push to
   terminal state).
-- Skills: none (the core set of `start`, `ship`, `retro`, `maintain` and the
-  other core skills covers this profile; the cap is the template's core skills
-  plus 2 project skills plus the skills the adopted profiles declare on
-  their `Skills:` lines).
+- Skills: verify.
+  `skills/verify/SKILL.md` is a template: start fills its wiring for the
+  stack, then installs it into `.claude/skills/` and `.agents/skills/`
+  (docs/decisions/0016). It counts as this profile's skill, not a project
+  slot; the core skills cover the rest of this profile, and the cap is the
+  template's core skills plus 2 project skills plus the skills the adopted
+  profiles declare on their `Skills:` lines.
 
 ## Parameters and records
 
@@ -102,8 +111,9 @@ release path; inside stack-check.sh it would call check.sh again and recurse.
 
 - Implementation: behavior at the correct layer, tests cover it, nothing
   unrelated included.
-- Verification: acceptance tests green, `./scripts/check.sh` green, reviewer
-  verdict recorded.
+- Verification: acceptance tests green, `./scripts/check.sh` green, a verify
+  skill run recorded as PASS for a change the app shows, reviewer verdict
+  recorded.
 - Delivery: CI green on the exact SHA, observed to terminal success.
 - Every confirmed defect has a regression test and a DEFECT_MEMORY row.
 
@@ -115,6 +125,7 @@ release path; inside stack-check.sh it would call check.sh again and recurse.
   and PR run IDs; clean CI lacking a library the local machine had; build
   output that broke a docs link check.
 - A local build passed while a fresh clone failed.
+- Tests passed while the feature was broken in the running app.
 - A shared git index let one worker's staged file ride into another's commit.
 - Dashes broke repository CI.
 
