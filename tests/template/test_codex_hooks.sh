@@ -161,12 +161,19 @@ assert_file_has "the launcher never looks in System32 for bash" "$LAUNCHER" '%Pr
 assert_file_lacks "the launcher does not use System32 bash" "$LAUNCHER" 'System32'
 
 # ---- A13: names in check.sh, the blueprint and the check.sh fixture ----
-for f in .codex/hooks.json scripts/codex-hook.cmd tests/template/test_codex_hooks.sh; do
-  assert_file_has "check.sh requires $f" "$T_ROOT/scripts/check.sh" "$f"
-  assert_file_has "the blueprint names ${f##*/}" "$T_ROOT/docs/BLUEPRINT.md" "${f##*/}"
-done
-if [[ -f "$T_ROOT/tests/template/fixtures/check.sh" ]]; then
-  if cmp -s "$T_ROOT/scripts/check.sh" "$T_ROOT/tests/template/fixtures/check.sh"; then t_ok "fixtures/check.sh is identical to scripts/check.sh"; else t_bad "fixtures/check.sh differs from scripts/check.sh"; fi
+# These describe the template's own tree. A started project owns its check.sh
+# (local deviations are allowed) and its BLUEPRINT, so they print n/a there;
+# check.sh step 5i keeps the fixture identity in the template.
+if [[ -f "$T_ROOT/.start-done" ]] || { [[ -f "$T_ROOT/AGENTS.md" ]] && ! grep '^Status: TEMPLATE' "$T_ROOT/AGENTS.md" >/dev/null 2>&1; }; then
+  t_na "A13 names in check.sh, the blueprint and the fixture: this repository is a started project; its check.sh and BLUEPRINT are its own"
+else
+  for f in .codex/hooks.json scripts/codex-hook.cmd tests/template/test_codex_hooks.sh; do
+    assert_file_has "check.sh requires $f" "$T_ROOT/scripts/check.sh" "$f"
+    assert_file_has "the blueprint names ${f##*/}" "$T_ROOT/docs/BLUEPRINT.md" "${f##*/}"
+  done
+  if [[ -f "$T_ROOT/tests/template/fixtures/check.sh" ]]; then
+    if cmp -s "$T_ROOT/scripts/check.sh" "$T_ROOT/tests/template/fixtures/check.sh"; then t_ok "fixtures/check.sh is identical to scripts/check.sh"; else t_bad "fixtures/check.sh differs from scripts/check.sh"; fi
+  fi
 fi
 
 # ---- A3 and A4: Windows, the form Codex uses ----
