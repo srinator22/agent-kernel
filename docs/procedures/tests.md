@@ -24,6 +24,9 @@ already has somewhere to put its test (kernel rules 2 and 4).
    numbers with units, source and tolerance written beside each value
    (docs/rules/scientific-integrity.md). Never change an expected value
    to match new output; a wrong reference is its own reviewed commit.
+   An expected value that can be mathematically zero carries an absolute
+   tolerance scaled to the problem, never a relative one only: a relative
+   tolerance around zero rejects any rounding or accepts nothing.
 5. Quarantine protocol. A flaky test is a defect (kernel rule 2). Add it
    to `tests/quarantine.list`, read by the test runner: one test path per
    line, `# owner: <task> date: YYYY-MM-DD`. The runner skips only listed
@@ -56,6 +59,11 @@ already has somewhere to put its test (kernel rules 2 and 4).
     the fix and a row in `docs/DEFECT_MEMORY.md` (kernel rule 3;
     `docs/procedures/bugfix.md`). Behaviour changes extend an existing
     scenario or add one in the same change.
+11. Scripted edits and mutation runs. A script that edits a file asserts its
+    anchor matches exactly once before replacing, so a moved or duplicated
+    anchor fails loudly instead of editing the wrong place. In a mutation run,
+    each test's workflow run lives in a function-scoped fixture, so one
+    mutant's state never leaks into the next test.
 
 ## Test audit
 

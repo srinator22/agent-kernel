@@ -80,6 +80,10 @@ this template has measured only what its own timing lines print.
    41.7% cheaper and 16.5% slower on the smaller runner. Verify: compare the
    slowest job and total billed minutes before and after. Trap: more shards
    shorten the wait and can raise the cost; stale weights unbalance the split.
+   Locally the same limit applies to an agent session: at most 8 concurrent
+   heavy background tasks (full checks, suites, renders), with the count
+   recorded in the task record. Trap: dozens of parallel suites on one
+   machine starve each other and finish later than a few at a time.
 10. Record before and after. Applies to every step above. Write both numbers
     with units, the sample, and what was not measured (wall time versus billed
     time, queue time, PR-to-merge) in the task record (kernel rule 14). Trap:
