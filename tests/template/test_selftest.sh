@@ -13,7 +13,8 @@
 # wait on marker files with a bounded loop, never on a fixed delay. Timing:
 # the slowest-files and wall lines, SELFTEST_TIMES. --shard K/N: greedy deal by
 # weight, disjoint and complete, median for a missing weight, usage errors.
-# --write-weights: format, and the output feeds --shard.
+# --write-weights: format, and the output feeds --shard. The test-budget line
+# after a full run.
 # Recorded: nproc -> 24 (real, 2026-11-18, Git Bash on the recording host); the nproc shim prints that one number
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
@@ -217,6 +218,44 @@ run env TMPDIR="$FIX/tmpcheck" ./scripts/selftest.sh
 assert_rc "a failing run still fails" 1
 assert_eq "a failing run leaves nothing in TMPDIR" "" "$(ls -A "$FIX/tmpcheck")"
 chmod +x tests/template/test_*.sh
+
+# ---- the test-budget line ----
+# A full run prints the line of "test-budget.sh check" and keeps its own exit
+# status, even over budget; a named file, a shard, a missing script or a missing
+# tests/BUDGET print nothing of it.
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template
+printf '#!/usr/bin/env bash
+echo "  ok   a"
+' > tests/template/test_a.sh
+printf '#!/usr/bin/env bash
+echo "  ok   b"
+' > tests/template/test_b.sh
+chmod +x tests/template/test_*.sh
+printf '#!/usr/bin/env bash
+echo "test-budget: 12 lines, ceiling 10, allowance 5"
+echo "test-budget: FAIL: over" >&2
+exit 1
+' > scripts/test-budget.sh
+printf 'ceiling: 10
+' > tests/BUDGET
+run ./scripts/selftest.sh
+assert_rc "a full run keeps its status when the budget gate would fail" 0
+assert_contains "a full run prints the budget line" "test-budget: 12 lines, ceiling 10, allowance 5"
+assert_not_contains "only the budget line is printed, not the gate's failure" "test-budget: FAIL"
+run ./scripts/selftest.sh tests/template/test_a.sh
+assert_not_contains "a named file prints no budget line" "test-budget:"
+run ./scripts/selftest.sh --shard 1/2
+assert_not_contains "a shard prints no budget line" "test-budget:"
+rm -f tests/BUDGET
+run ./scripts/selftest.sh
+assert_not_contains "no tests/BUDGET prints no budget line" "test-budget:"
+printf 'ceiling: 10
+' > tests/BUDGET; rm -f scripts/test-budget.sh
+run ./scripts/selftest.sh
+assert_not_contains "no test-budget.sh prints no budget line" "test-budget:"
+assert_rc "the run still passes without the script" 0
 
 # ---- test files named on the command line ----
 make_fixture

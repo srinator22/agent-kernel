@@ -20,13 +20,32 @@
 # lessons, procedures, profiles, library, roster, decisions and the blueprint
 # (docs), the question set (tests/docs), the quarantine list, README.md (doctor
 # case), and copy the whole tree for the nested started-project case.
+#
+# docs/ is listed by path, not whole (audit 2026-11-18: grep of every docs/
+# path the tests and the scripts they run name). Read: BLUEPRINT.md,
+# ARCHITECTURE.md and operations.md (check.sh step 5b required list),
+# DEFECT_MEMORY.md (dream, template-sync, start reset), and the subfolders
+# procedures, rules, profiles, decisions, lessons, library, roster,
+# preferences. Not read, so not declared: docs/assets and docs/research; a
+# project's own new docs files and folders no longer miss reuse.
 
 scripts
 tests/template
 tests/docs
 tests/quarantine.list
 tests/BUDGET
-docs
+docs/BLUEPRINT.md
+docs/ARCHITECTURE.md
+docs/DEFECT_MEMORY.md
+docs/operations.md
+docs/procedures
+docs/rules
+docs/profiles
+docs/decisions
+docs/lessons
+docs/library
+docs/roster
+docs/preferences
 .claude
 .codex
 .agents

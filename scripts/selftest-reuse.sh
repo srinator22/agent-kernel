@@ -21,7 +21,10 @@
 # content> <path>" for every existing input file (a directory entry expands to
 # its tracked and untracked-not-ignored files; ignored files never count), "exists
 # <path>" for an "exists:" entry (presence only, content not hashed), then
-# "bash $BASH_VERSION", "git --version", "uname -s", a format constant and the
+# "bash $BASH_VERSION", "git --version", "python <version>" (the interpreter
+# scripts/find-python.sh picks; "none" when absent), "ruff <version>" (TEMPLATE_RUFF
+# when set, else ruff on PATH, the way check.sh step 5k picks it; "none" when
+# absent), "uname -s", a format constant and the
 # test-only SELFTEST_REUSE_ENV_EXTRA (appended so a test can change the tool
 # identity; never set it outside tests). Digest: sha256sum, else shasum -a 256,
 # else git hash-object --stdin of the same text (a sha1 blob id).
@@ -30,10 +33,9 @@
 # Dependencies: bash 3.2+, git, tar, mktemp; sha256sum or shasum when present.
 # verify-inputs empties every "exists:" file in its copy (presence kept), so a
 # test reading that content fails there.
-# Assumptions: run inside a git repository; paths contain no newline; the
-# python and ruff versions the tests use are not part of the key (they come from
-# the environment, a stale reuse after upgrading them is possible; set
-# CHECK_SELFTEST=full to force a run).
+# Assumptions: run inside a git repository; paths contain no newline; a ruff or
+# python reached only through uvx, pipx or another route than the two above is
+# not seen (set CHECK_SELFTEST=full to force a run after changing it).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -90,6 +92,32 @@ digest() {
   fi
 }
 
+# tool_version CMD...: the first line of "CMD --version", or "none" when CMD is
+# empty or does not run.
+tool_version() {
+  local v
+  (( $# )) && [[ -n "$1" ]] || { echo none; return 0; }
+  v="$("$@" --version 2>/dev/null | sed -n 1p)" || v=""
+  echo "${v:-none}"
+}
+
+python_identity() {
+  local PY=""
+  # shellcheck disable=SC1091
+  [[ -f scripts/find-python.sh ]] && . scripts/find-python.sh
+  tool_version "$PY"
+}
+
+ruff_identity() {
+  if [[ -n "${TEMPLATE_RUFF:-}" ]]; then
+    tool_version "$TEMPLATE_RUFF"
+  elif command -v ruff >/dev/null 2>&1; then
+    tool_version ruff
+  else
+    echo none
+  fi
+}
+
 key_material() {
   local paths hashes
   paths="$(expand ${content_entries[@]+"${content_entries[@]}"})"
@@ -103,6 +131,8 @@ key_material() {
   fi
   echo "bash ${BASH_VERSION:-unknown}"
   echo "git $(git --version)"
+  echo "python $(python_identity)"
+  echo "ruff $(ruff_identity)"
   echo "uname $(uname -s)"
   echo "format $FORMAT_VERSION"
   [[ -z "${SELFTEST_REUSE_ENV_EXTRA:-}" ]] || echo "extra ${SELFTEST_REUSE_ENV_EXTRA}"
