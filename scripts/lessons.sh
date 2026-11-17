@@ -445,7 +445,9 @@ handoff_errors() {
   done
   (( ${#mds[@]} )) || return 0
   awk '
-    FNR == 1 { fi++; f = 0 }
+    # The file index is the ARGV position: an empty file yields no records,
+    # so counting first lines would shift every later file onto a wrong name.
+    FNR == 1 { while (ARGV[++fi] != FILENAME) ; f = 0 }
     { sub(/\r$/, "") }
     /^## / { f = ($0 == "## Hand-offs"); next }
     f {
