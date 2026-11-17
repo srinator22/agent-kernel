@@ -73,6 +73,19 @@ docs/
     0004-profile-agent-sets.md
     0005-department-agent-roster.md
     0006-claude-code-hooks-enforce-the-destructive-action-rule-and-th.md
+    0007-product-render-capability.md
+    0008-template-releases-reach-projects-through-tags-a-notice-and-a.md
+    0009-local-dreaming.md
+    0010-template-python-is-linted-with-a-pinned-ruff-under-folder-co.md
+    0011-personal-taste-profile.md
+    0012-template-core-skills-are-counted-apart-from-project-skills.md
+    0013-project-taste.md
+    0014-codex-hooks.md
+    0015-shell-stdin-hook-in-core-and-project-hook-folders.md
+    0016-the-software-profile-ships-a-verify-skill-that-runs-the-real.md
+    0017-verdicts-bind-to-the-reviewed-tree-lessons-carry-triggers.md
+    0018-gate-changes-need-a-human-label.md
+    0019-reuse-the-template-self-test-result-when-its-declared-inputs.md
   procedures/
     start.md                  # the /start interview + adaptation ritual (one-shot)
     ship.md                   # done-gate: verify, version, changelog, push, monitor to terminal
@@ -89,6 +102,7 @@ docs/
     doc-eval.md               # fresh agent answers tests/docs/questions.md by navigation; traps declined
     dream.md                  # consolidate memory against session transcripts; proposals approved by number
     preferences.md            # capture owner feedback, record register rows, repeats ladder, baselines, draft review
+    ci-cost.md                # slow or expensive checks: measure, delete waste, stage, reuse, select, localise, cache, balance
   rules/                      # triggered reference rules; indexed one line each in AGENTS.md
     architecture.md
     security.md
@@ -117,6 +131,7 @@ docs/
     data-analysis/PROFILE.md
     data-analysis/skills/     # shipped skill set
     data-analysis/tools/      # shipped tools with tests/
+    product-render/PROFILE.md # rules and gates; procedure, skill and tools live in docs/library/
   library/                    # opt-in single-project items (ADR 0004)
     README.md                 # one-project-evidence rule, adoption, graduation, item table
     ruff.toml                 # ruff contract for the library's Python: default rules, no format
@@ -147,6 +162,8 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
+  fleet-status.sh             # per-project template ref, last sync date and releases behind (read-only, offline)
+  rating.sh                   # the numbers behind a template rating
   tree-id.sh                  # working-tree tree id for the verify line and the review verdict (ADR 0017)
   profiles.sh                 # the one parser of the AGENTS.md Profiles line (template-sync, lessons)
   feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
@@ -164,11 +181,13 @@ scripts/
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ (or the named test files) against the template scripts, SELFTEST_JOBS files at a time, results in file order
+  selftest-reuse.sh           # content-keyed reuse of the template self-test result: key, check, record, verify-inputs
+  test-budget.sh              # check | report: caps test-code growth against tests/BUDGET
   adr.sh                      # check (numbering, format, cited ADRs, records folder, origin numbers) | new <title>
   start-reset-lessons.sh      # start step 6: reset the lessons files to their format headers; --check
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
   destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
-  stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
+  stop-gate.sh                # Stop hook body: task-state checks; quickgate in the background once every criterion is ticked
   codex-hook.cmd              # Windows launcher for the Codex hooks: finds Git Bash, runs scripts/<name>.sh; CRLF
   refuse-shell-stdin.sh       # PreToolUse hook launcher: picks Python via find-python.sh, runs hooks/refuse_shell_stdin.py; fails open
   hooks-dispatch.sh           # EVENT: runs the project's own hooks in scripts/hooks.d/<EVENT>/; PreToolUse fails closed (ADR 0015)
@@ -181,7 +200,10 @@ scripts/
   tasklint.sh                 # check | ship: criteria evidence, assumption status, autopilot plan verdict
   doc-eval.sh                 # check | brief: the documentation question table
 tests/
+  BUDGET                      # test-code line ceiling, allowance and dated raises read by scripts/test-budget.sh
   template/                   # fixtures and tests for the scripts above; called from check.sh
+    selftest-weights.txt      # shard weights for selftest.sh --shard (proxy now; generated by selftest.sh --write-weights from measured times)
+    selftest-inputs.list      # declared repository inputs of the self-tests; exists: entries are presence only
     lib.sh                    # shared assertion helpers, fixtures, t_parallel sections, t_check_exec
     test_kernel_hash.sh       # verify, update, drift, CRLF, missing markers, a failed update keeps the hash
     test_new_task.sh
@@ -197,7 +219,7 @@ tests/
     test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
     test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
     test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
-    test_stop_gate.sh         # Stop hook decisions against a fake quickgate
+    test_stop_gate.sh         # Stop hook decisions against a fake background quickgate
     test_codex_hooks.sh       # .codex/hooks.json commands run as Codex runs them, Unix and Windows, launcher fail-closed cases
     test_shell_stdin_hook.sh  # scripts/hooks/tests, the settings.json wiring run as Claude runs it, long-command context, Store stub
     test_hooks_dispatch.sh    # hooks.d order, skips, exit 2, PreToolUse fail-closed, settings.json wiring for four events
@@ -218,11 +240,19 @@ tests/
     test_find_python.sh       # stub python3 skipped by running it, no variable left, scripts that source the helper
     test_taste_project.sh     # per-project taste: other projects excluded, home untouched, register rows, duplicates, template mode
     test_test_files.sh        # guarded lib.sh load in every test, exec bits, t_check_exec and its T_EXEC_CHECK hook, t_parallel
+    test_test_budget.sh       # under, at and over the ceiling, dated raises, malformed and absent BUDGET, report order
+    test_fleet_status.sh      # fleet rows against fixture projects: ref, last sync, releases behind, offline
+    test_rating.sh            # rating numbers against a fixture repository
+    test_selftest_reuse.sh    # reuse key, check, record, verify-inputs, unknown means run
     test_private_terms.sh     # masked output, staged and binary content, paths, refs, unpushed and full history, merges, tags, refusals
     fixtures/
       check.sh                # pristine template check.sh the tests run against
       fake-ruff.sh            # ruff stand-in so no self-test reaches the network
-    codex/                  # payloads recorded from a live Codex session, machine values replaced
+      codex/                  # payloads recorded from a live Codex session, machine values replaced
+        PreToolUse.json
+        SessionStart.json
+        Stop.json
+        UserPromptSubmit.json
   docs/
     questions.md              # question set and answer key for docs/procedures/doc-eval.md
 .work/
@@ -255,6 +285,10 @@ tests/
   skills/                     # Codex skills: start, ship, retro, maintain, adr, template-update, dream (same wrappers)
 .archive/
   README.md                   # graveyard: moved-not-deleted, one-line reason each
+  lessons/
+    L010.md                   # archived lesson, reason in the README
+  library-skills/
+    adr/SKILL.md              # the library adr skill, graduated to a core skill (Amendment 3)
 ```
 
 Placeholder convention: anything the start procedure must fill is written `{{LIKE_THIS}}`. Nothing may look finished when it is not.
@@ -265,7 +299,7 @@ Placeholder convention: anything the start procedure must fill is written `{{LIK
 
 ### 3.1 AGENTS.md
 
-Four sections. Total file <= 180 lines - hard budget, verified by check.sh. Copy the kernel byte-exact between the markers; do not paraphrase, reorder, or improve it:
+Five sections: Kernel, Standards, Response shape, Rules index and Project decisions. Total file <= 180 lines - hard budget, verified by check.sh. Copy the kernel byte-exact between the markers; do not paraphrase, reorder, or improve it:
 
 ```markdown
 <!-- KERNEL:BEGIN -->
@@ -312,7 +346,19 @@ These rules govern process. Project truth lives in the Project decisions section
 - README stays present-tense: what the thing IS, not a history.
 ```
 
-**Section 3 - Rules index** (one line each; open on match, never load wholesale):
+**Section 3 - Response shape** (editable):
+
+```markdown
+## Response shape
+
+- Lead with the result or next action.
+- Keep active steps bounded and visible.
+- Finish the primary issue before presenting secondary issues separately.
+- Distinguish confirmed causes from hypotheses; never present an inference as evidence.
+- Preserve relevant information when brevity would make the answer incomplete.
+```
+
+**Section 4 - Rules index** (one line each; open on match, never load wholesale; the CI cost line since 2026-11-17):
 
 ```markdown
 ## Rules index (triggered)
@@ -323,9 +369,19 @@ These rules govern process. Project truth lives in the Project decisions section
 - Experiments, models, leakage, validation status -> docs/rules/scientific-integrity.md
 - Deleting or overwriting anything material -> docs/rules/destructive-actions.md
 - CI permissions, pinning, caching, deploy gating -> docs/rules/ci-baseline.md
+- Advisor, workers, reviewer, monitor, task graph, time caps -> docs/rules/orchestration.md
+- Model tiers, harness adapters, mirror parity -> docs/rules/models.md
+- Project type bundles (rules, gates, tools, playbooks) -> docs/profiles/README.md
+- Before the first feature: what to automate, which tools exist or must be built -> docs/procedures/discover.md
+- Hunting defects proactively; defect memory -> docs/procedures/bughunt.md, docs/DEFECT_MEMORY.md
+- Tests from day one, quarantine, oracle first -> docs/procedures/tests.md
+- Lessons back to the template; staying in sync -> docs/procedures/upstream.md
+- Consolidating memory against session transcripts (dreaming) -> docs/procedures/dream.md
+- Owner preferences, feedback capture, baselines, draft review -> docs/procedures/preferences.md
+- CI cost, slow or expensive checks, staging, reuse, selection, sharding -> docs/procedures/ci-cost.md
 ```
 
-**Section 4 - Project decisions** (template state; start fills every line):
+**Section 5 - Project decisions** (template state; start fills every line):
 
 ```markdown
 ## Project decisions
@@ -341,6 +397,8 @@ Status: TEMPLATE - not initialized. Run docs/procedures/start.md before any proj
 - Decision records: {{docs/decisions (default) or the folder the project already keeps ADRs in}}
 - Data policy: {{what may enter git; where large/private data lives}}
 - Risk profile: {{ordinary / scientific / safety-sensitive / embedded}}
+- Profiles: {{FILLED_BY_START - software always; add scientific, embedded-firmware, hardware-pcb, data-analysis as adopted}}
+- Capability map: {{FILLED_BY_START - docs/CAPABILITY_MAP.md date and the top tools to build}}
 - Standing overrides recorded by the human: {{none yet}}
 - Stack and commands: {{FILLED_BY_START - must exactly match scripts/check.sh}}
 ```
@@ -364,8 +422,8 @@ The single entry point; CI runs this exact script so local and CI cannot diverge
 - Step 2, always: AGENTS.md line budget, `wc -l` <= 180, else fail.
 - Step 3, always: untracked-files report. `git status --porcelain` untracked entries are printed as a warning block (non-fatal) so nothing new is silently left unstaged. New modules that pass locally while never being staged is a known CI-breaker.
 - Flags: `--quick` (the in-work lane), `--fast` (since 2026-11-17: `--quick` with the self-tests cut to those the changed files map to; prints that it is not the full gate) and `--full-mutation`.
-- Step 4, always (Amendment 2): the index executable bits of scripts/ and tests/template/ (step 4f2, before the self-tests, since 2026-11-17), the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, the preference register check (`scripts/preferences.sh check`) and the private-terms check (`scripts/private-terms.sh check`) whenever each script exists. `--quick` never skips this step.
-- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, executable bits, ADR references, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`, `.claude/skills` equal to the `CORE_SKILLS` list in `scripts/lessons.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
+- Step 4, always (Amendment 2): the index executable bits of scripts/ and tests/template/ (step 4f2, before the self-tests, since 2026-11-17), the dash scan on tracked files, the memory caps and mirror parity (`scripts/lessons.sh check`), the task graph (`scripts/taskgraph.sh check`), the ADR numbering and format (`scripts/adr.sh check`, Amendment 3) and `scripts/selftest.sh` whenever `tests/template/` exists, the preference register check (`scripts/preferences.sh check`) and the private-terms check (`scripts/private-terms.sh check`) and the test-code budget (step 4k: `scripts/test-budget.sh check` against tests/BUDGET, skipped when tests/BUDGET is absent) whenever each script exists. `--quick` never skips this step. The self-tests are reused when the declared inputs are unchanged (`scripts/selftest-reuse.sh`; `CHECK_SELFTEST=full` forces a run, CI never reuses), check.sh prints a timing line, and `--fast` prints on stderr why each self-test was selected (since 2026-11-18).
+- Step 5: template-mode gate. If `.start-done` does not exist: run the template self-test (script syntax, required-file tree, placeholders, skill frontmatter, settings.json validity, the `tests/template/fixtures/check.sh` identity, BLUEPRINT tree parity, the template Python ruff contract with pinned ruff 0.16.10 from PATH, `uvx` or `pipx` (network on first use), no pipe into `head` in `scripts/*.sh`, `.claude/skills` equal to the `CORE_SKILLS` list in `scripts/lessons.sh`), print `TEMPLATE MODE - start has not run; running the template self-test.` and exit 0 only if the self-test and step 4 passed. A green badge in template mode attests template integrity, not inactivity.
 - The stack steps live in the project-owned `scripts/stack-check.sh`, which check.sh runs last with `--full-mutation` and `--quick` passed through; template-sync never touches it, so check.sh stays template-owned and syncs cleanly. Start writes it, each step a clearly commented block: format check -> typecheck -> lint (including mechanical boundary rules) -> tests -> secret scan (gitleaks) -> production build if the stack has one -> mutation testing on changed files (full run behind a `--full-mutation` flag) -> generated-artifact freshness check (regenerate CHANGELOG.md with git-cliff to a temp path and diff; fail on unexplained drift).
 
 ### 3.4 scripts/kernel-hash.sh
@@ -393,84 +451,15 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 
 ### 3.9 docs/procedures/ - portable, numbered, any agent can follow
 
-**start.md** (one-shot; refuses to re-run if `.start-done` exists). This is the /start ritual:
+Each procedure's text lives only in its own file; this section summarises it and points there (the files own the steps and change faster than this record).
 
-1. Read `docs/BLUEPRINT.md` and `AGENTS.md` in full. Inspect the environment against `manifest.md`.
-2. Ask the human ONE batched set of questions - only what cannot be inferred:
-   1. What is the project? Purpose, users, non-goals, system boundary (a paragraph is fine).
-   2. Stack preference, or should I propose one from the reference table?
-   3. Repo host and visibility (private/public), solo or team?
-   4. Git workflow: branch + gated merge (default), or direct-to-main as an explicit standing choice? (Recorded starting with the choice, such as "direct-to-main, <details>"; scripts/new-task.sh reads direct-to-main only before the end of the value or ; . : , ( or " - ".)
-   5. Deploy target, or none for now? If deploying: private or public exposure, auth approach?
-   6. Does it ship data or assets? (If yes: local-first data, self-hosted assets, and version-stamped caches become project defaults, recorded as an ADR - external sources are justified fallbacks with a written reason.)
-   7. Risk profile: ordinary, scientific/numerical, safety-sensitive, or embedded? (Scientific wires golden-master fixtures, deterministic seeds, and promotes docs/rules/scientific-integrity.md in the index.)
-   8. Default task mode: spec-approval or autopilot?
-   9. Any hard invariants I should never violate (UX, performance, compliance, compatibility)?
-   10. Is there confidential context that must not appear in the committed repo? (If yes: create a gitignored local instruction file, add the ignore line first, and never reference its existence in committed files.)
-3. Wire the stack: write the stack steps into `scripts/stack-check.sh` and fill every `{{...}}` in `ci.yml` from the reference table; add linter/formatter/test/mutation/gitleaks configs; pin runtime and package-manager versions; commit the lockfile; wire mechanical boundary rules per the architecture in docs/rules/architecture.md. All gauntlet roles filled or the gap logged with a reason.
-4. Fill the Project decisions section of AGENTS.md; append stack-specific lines to Standards if needed (respect the 180-line budget).
-5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction) and, if deploying, `docs/operations.md` (deploy, rollback, monitoring). Write the next-numbered ADR under docs/decisions/ (stack choice, with rejected alternatives).
-6. Rewrite `README.md` for the project, present tense. Set repo description, homepage, and topics (gh) so the sidebar reads properly. Scaffold BACKLOG.md with the first milestones from the interview.
-7. Configure the harness: attribution/trailers off in settings (verify current key names at run time); seed the permissions allowlist with the stack's safe verification commands (the same format, lint, typecheck, and test commands wired into `scripts/stack-check.sh`); branch protection if gated workflow.
-8. Verify a clean state: `./scripts/check.sh` passes for real (not template mode). Fix until it does. Completion rule: start may not declare itself complete if format/lint/typecheck/tests cannot actually execute.
-9. Write `.start-done` (date + summary), write `START_REPORT.md` (detected, wired, missing, degraded, manual steps), commit with conventional commits, tag `v0.1.0`, and if the workflow is gated, confirm CI on that SHA via `scripts/ci-watch.sh`.
-10. Never touch the kernel or `.kernel.hash`.
-
-**ship.md** (the done-gate; run when a logical change is ready to land):
-
-1. Confirm scope: `git status`; unrelated or untracked work is preserved and excluded; resolve every untracked file deliberately (stage it or ignore it, never leave it ambiguous).
-2. Version: bump the single source-of-truth version file per semver (patch fix, minor feature, major breaking; pre-1.0 per Project decisions). It comes before verification so the verified tree holds it (ADR 0017).
-3. Run `./scripts/check.sh` and keep its complete output; a clean run ends with `check.sh: verified tree <id>` (`scripts/tree-id.sh`). Anything red: stop and fix first.
-4. Reviewer gate: the reviewer receives the diff, `.work/TASK.md`, that verify output (Amendment 3) and the `scripts/lessons.sh match` output for the diff (ADR 0017); independent review verdict, holding `Reviewed tree: <id>` and ending with its Evidence checked list, present in `.work/TASK.md` (kernel rule 5); `scripts/tasklint.sh ship` fails a PASS verdict whose tree differs from the current one. Quick-mode tasks may skip the reviewer only if the diff touches no logic (docs/config-comments), and say so.
-5. Regenerate CHANGELOG.md via git-cliff (never hand-edit; the detail lives in commit bodies).
-6. Conventional commit; the body carries why, and for fixes the exact issue, fix, and files/functions touched.
-7. Push per the recorded workflow. Then `scripts/ci-watch.sh` - delegate to the monitor agent when available. A push is complete only when every required check for the exact SHA is terminal-success; on failure: inspect logs, fix root cause, verify locally, push the replacement, monitor the replacement SHA.
-8. Release, when a coherent wave ships: move the version, annotated tag `vX.Y.Z`, push the tag, AND create the platform Release object (`gh release create`) with user-facing plain-language notes curated from the changelog - a tag alone does not appear in the Releases panel.
-9. Final handoff format: Outcome / Evidence (commands and terminal results) / Artifacts (commit, release, deployment) / Limitations / Next action only if required.
-
-**retro.md** (end of every non-quick task):
-
-1. Classify each defect by discovery route: (a) caught pre-merge by checks, (b) escaped past merge, (c) reported by the human, (d) self-noticed and self-corrected.
-2. Routes (a) and (d): record nothing; the system worked.
-3. Routes (b) and (c): verify the failing-then-fixed regression test exists (kernel rule 3). If the cause cannot be expressed as any check, append one entry to PENDING.md in the four-field format.
-4. Confirmed-good calls: if the human explicitly validated an approach worth repeating, that is a lesson too - same gate, same format, retire-when included.
-   (Amendment 3: traps that cost time with no escaped defect are recorded too, and the check may read "none, this note is the guard"; durable decisions go to `docs/decisions/` per adr.md, not to PENDING.md.)
-5. Never record what the repo can already tell you (layout, conventions, history).
-6. Increment `used:` and `last:` in INDEX.md for each lesson consulted.
-7. Fill the Retro section of `.work/TASK.md`; update BACKLOG.md (done items off, discovered items on, with reasons); move TASK.md to `.work/done/YYYY-MM-DD-<slug>.md`; reset from template.
-
-**maintain.md** (monthly or on request; never mid-task):
-
-1. Verify caps with `scripts/lessons.sh check`: AGENTS.md <= 180 lines; <= 20 lessons; the template's core skills (at most 8) plus 2 project skills plus the skills the adopted profiles declare. Over cap: merge or archive until under.
-2. Archive lessons unused > 45 days or with retire-when met; merge near-duplicates into one generalized entry. Archival is a move to `.archive/` with a one-line reason.
-3. Run `./scripts/check.sh --full-mutation`; quarantine anything flaky as its own task.
-4. Audit surviving external/live data calls against the local-first rule (each must carry its written reason); convert stragglers. Remove unused dependencies; review lockfile drift.
-5. Verify kernel hash; regenerate CHANGELOG if a release is pending; confirm README is still present-tense truthful.
-6. Append a dated summary to docs/lessons/MAINTENANCE.log (create on first run).
-
-**bugfix.md**:
-
-1. Reproduce with the smallest reliable case, against real data where it exists. Get a numeric, exact root cause before writing a fix - instrument the actual code path; do not theorize.
-2. Identify the owning layer. For every fix (Amendment 3; originally only escaped or human-reported bugs): regression test first, pinned to the real numbers from step 1, not a synthetic happy path, shown failing for the stated root cause (file, function, condition) before the patch, with the repro command and output recorded.
-3. Patch the smallest safe surface; no unrelated cleanup.
-4. Targeted tests, then `./scripts/check.sh`. Re-verify against the motivating real data independently of the unit tests.
-5. Independent adversarial review (the reviewer agent) trying to find what is still wrong, not rubber-stamping.
-6. Ship per ship.md. When speed is requested, parallelize steps across workers; that is never permission to skip re-verification or review.
-
-**audit.md** (full-repo review):
-
-1. Triggers: after a major architecture change or migration; before first real data, customer, or production use; when failures across modules suggest systemic problems; before removing a legacy reference implementation; when security/CI/deploy assumptions have accumulated unreviewed.
-2. Scope: architecture boundaries, data flow, validation, error handling, state, concurrency, numerical logic, security, CI, deployment, documentation. Parallelize across workers by disjoint area; the advisor integrates.
-3. Priorities: P0 data loss, security exposure, unsafe behavior - stop and fix immediately. P1 wrong core result or broken critical journey - fix before release. P2 material reliability/maintainability defect - plan and fix with regression coverage. P3 minor - record in BACKLOG and batch.
-4. Separate confirmed defects (evidence, impact, reproduction, owning layer, verification method) from risks and ideas. Confirmed defects enter BACKLOG with priority; P0/P1 become tasks now.
-
-**longjob.md**:
-
-1. Anything slow (crawls, bulk downloads, migrations, transfers) runs via `scripts/bg.sh`, not as an agent loop.
-2. The job checkpoints to a file after every small unit so a kill resumes exactly where it stopped; never write a long job that starts over.
-3. A STATE file in `.work/jobs/` carries: mandate, plan checklist, running processes with log and checkpoint paths, decisions made and why, resume instructions. Update as you go so a cold session can pick up.
-4. Respect external hosts: honor robots.txt delays, descriptive User-Agent, polite pacing, one process per host.
-5. If usage limits may interrupt, schedule a wakeup to resume plus a cheap periodic pulse that restarts a stalled job and deletes itself when done (harness-dependent; degrade to documenting the manual resume).
+- **start.md** (`docs/procedures/start.md`): the one-shot ritual that turns the template into a project. It refuses to run again once `.start-done` exists, runs the doctor and capability discovery first, asks one batched interview, wires the stack into `scripts/stack-check.sh` and `ci.yml`, fills Project decisions (including `Profiles:`), writes ARCHITECTURE, README and the first ADR, configures the harness, verifies a clean non-template `./scripts/check.sh`, and writes `.start-done` and `START_REPORT.md`. It never touches the kernel or `.kernel.hash`.
+- **ship.md** (`docs/procedures/ship.md`): the done-gate. Confirm scope, version, run `./scripts/check.sh` and keep its output and verified tree id, reviewer gate bound to that tree, regenerate CHANGELOG, conventional commit, push and monitor the exact SHA to terminal success, release when a wave ships, then the fixed handoff format.
+- **retro.md** (`docs/procedures/retro.md`): end-of-task learning capture. Each defect is classified by discovery route; escaped or human-reported ones need a failing-then-fixed test and, if no check can express the cause, one PENDING entry; confirmed-good calls and time-costing traps count; counters are updated, the TASK.md Retro is filled and the file is archived to `.work/done/`.
+- **maintain.md** (`docs/procedures/maintain.md`): periodic pruning, never mid-task. Caps through `scripts/lessons.sh check`, archival on evidence, the full mutation run, local-first and dependency audit, kernel hash and changelog freshness, and a dated MAINTENANCE.log entry.
+- **bugfix.md** (`docs/procedures/bugfix.md`): reproduce on real data, find the numeric root cause, regression test first and shown failing, smallest patch, targeted tests then the gate, adversarial review, ship.
+- **audit.md** (`docs/procedures/audit.md`): full-repo review with triggers, scope, P0-P3 priorities, and confirmed defects kept apart from risks and ideas.
+- **longjob.md** (`docs/procedures/longjob.md`): slow work runs through `scripts/bg.sh` with checkpoints and a STATE file, politely, and resumes rather than restarts.
 
 ### 3.10 docs/rules/ - triggered reference rules (each <= 40 lines, dense, no filler)
 
@@ -535,18 +524,19 @@ Date: {{date}}
 
 ### 3.12 docs/lessons/
 
-- **INDEX.md**: header explaining format, then zero entries. Format: `- [L001] <one-line, situation-triggered description> - <the lesson, one or two lines> (used: 0, last: -, retire-when: <condition>)`. Separate file per lesson only if genuinely long.
+- **INDEX.md**: header explaining format, then zero entries. Format: `- [L001] <one-line, situation-triggered description> - <the lesson, one or two lines> (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>, trigger: <globs>)`; the trigger field is optional and last (path globs a diff can show, matched by `scripts/lessons.sh match`, ADR 0017) and `approved:` follows `last:`. Separate file per lesson only if genuinely long.
 - **PENDING.md**: header: proposed lessons await human approval; unapproved entries are never acted on; approval = human moves the entry to INDEX.md. Confirmations and corrections both belong here.
 - **QUARANTINE.md**: header: flaky tests are defects; each entry carries test path, observed flake behavior, date, and an owner task. A quarantined test may not be deleted.
 
 ### 3.13 .claude/ - accelerators only; the repo must function without this directory
 
-- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule); since Amendment 4 it also prints the branch, `git status --short` (capped at 20 lines) and the last 10 commits. Amendment 4 adds a `PreToolUse` hook (matcher `Bash|PowerShell`) running `scripts/destructive-guard.sh` and a `Stop` hook (timeout 1200 seconds) running `scripts/stop-gate.sh` (VERIFY 2026-10-29: Stop stdin carries `stop_hook_active`, exit 2 blocks with stderr fed back, project hooks also run inside subagents).
+- **settings.json**: minimal safe defaults; disable commit/PR attribution trailers (verify the current setting keys against Claude Code docs at build time; if unverifiable, ship `{}` plus a comment in START_REPORT territory - do not invent keys) (VERIFY). Also a `SessionStart` hook running `scripts/session-context.sh`, which injects the mode line, the kernel rule 7 reminder and any in-progress `.work/TASK.md` at startup, resume, clear and after compaction (mechanizes rule 7 for Claude Code; other harnesses keep the prose rule); since Amendment 4 it also prints the branch, `git status --short` (capped at 20 lines) and the last 10 commits. Amendment 4 adds a `PreToolUse` hook (matcher `Bash|PowerShell`) running `scripts/destructive-guard.sh` and a `Stop` hook (timeout 120 seconds; the quick gate runs detached and a later stop reads its result, since 2026-11-15) running `scripts/stop-gate.sh` (VERIFY 2026-10-29: Stop stdin carries `stop_hook_active`, exit 2 blocks with stderr fed back, project hooks also run inside subagents). Since Amendment 5 to 7 the file also wires a `UserPromptSubmit` hook running `scripts/feedback-log.sh` (the preference feedback log, ADR 0011), the `PreToolUse` shell-stdin refusal `scripts/refuse-shell-stdin.sh --warn-long` beside the destructive guard (matcher `Bash|PowerShell`, ADR 0015), and `scripts/hooks-dispatch.sh <EVENT>` as the first hook of SessionStart, UserPromptSubmit, PreToolUse (matcher `Bash|PowerShell|Edit|Write|NotebookEdit`) and Stop, which runs the project's own `scripts/hooks.d/<EVENT>/` hooks (PreToolUse fails closed).
 - **agents/reviewer.md**: `model: inherit`, read-only tools (VERIFY current tools syntax). Body: fresh-context adversarial reviewer; receives the diff, `.work/TASK.md`, the verify output (Amendment 3), and files it chooses to read; must not receive implementer reasoning; returns FAIL when the verify output is missing, truncated or not clean at every stage; checks criteria met, tests assert requirements not current behavior, no gate weakened, no secrets, no unjustified dependencies, edge cases handled, the AGENTS.md rules index and the adopted profiles' rules; writes PASS/FAIL ending with an Evidence checked list with specifics into the Review verdict section; gains nothing by being agreeable.
 - **agents/explore.md**: `model: haiku`, read-only; fast search and summarization; returns conclusions with file:line, quotes a few lines at most, skips vendored, build and dependency folders, never modifies.
 - **agents/worker.md**: `model: sonnet`; edit-capable but git commit and push blocked by a PreToolUse hook (Amendment 3: matcher `Bash|PowerShell`, body `scripts/worker-git-guard.sh`, VERIFY 2026-10-23; this mechanizes "workers never commit"). Body: executes exactly the scoped instruction it is given - precise paths, schemas, pitfalls; replies with files touched, each check's command and verbatim result ("could not run" stated as such) and conflicts; no version bump unless briefed; if its instruction conflicts with observed evidence, follows the evidence and says so.
-- **agents/monitor.md**: `model: haiku`; tools limited to Bash for `scripts/ci-watch.sh` and gh reads (VERIFY). Body: given a SHA, watch every required check to terminal state and report per the failure format in ship.md; runs in the foreground at the maximum tool timeout and re-runs on timeout, never in the background.
-- **skills/**: five thin wrappers (start, ship, retro, maintain, and adr since Amendment 3). Each SKILL.md: a description written to trigger on the situation ("Initialize this template for a new project...", "A logical change is complete and ready to land...", "A task just finished; capture what external signal showed...", "Periodic pruning and cap enforcement..."), body = "Follow docs/procedures/<name>.md exactly." Procedures are the truth; skills are pointers.
+- **agents/monitor.md**: `model: haiku`; tools limited to Bash for `scripts/ci-watch.sh` and gh reads (VERIFY). Body: given a SHA, watch every required check to terminal state and report in the monitor's own format; runs in the foreground at the maximum tool timeout and re-runs on timeout, never in the background.
+- **agents/dreamer.md** and **agents/taste-dreamer.md**: `model: sonnet`, read-only (Read, Grep, Glob); the dream's memory pass and taste pass return numbered proposals with evidence and never edit (ADR 0009, ADR 0011).
+- **skills/**: seven thin wrappers (start, ship, retro, maintain, adr, template-update and dream), each pointing at its procedure. Each SKILL.md: a description written to trigger on the situation ("Initialize this template for a new project...", "A logical change is complete and ready to land...", "A task just finished; capture what external signal showed...", "Periodic pruning and cap enforcement..."), body = "Follow docs/procedures/<name>.md exactly." Procedures are the truth; skills are pointers.
 
 ### 3.14 manifest.md
 
@@ -599,6 +589,7 @@ A profile carries what a project type needs beyond the software baseline: rules 
 - `embedded-firmware`: code that drives physical outputs; safe states, fault latching, host-side simulation, hardware-in-loop gate.
 - `hardware-pcb`: board design with a decision log, requirements, issue ledger, datasheet store and release gate.
 - `data-analysis`: raw instrument files and logs, import contracts, provenance, analysis and reporting.
+- `product-render` (2026-11-17, second-project evidence): CAD-to-render stills and films in Blender; rules RND-1 to RND-13 and gates over the library `product-render` procedure, skill and tools, which stay in `docs/library/` and are pointed to, not copied.
 
 Start question 7 (risk profile) is answered with a list; the selection is recorded in Project decisions as one `Profiles:` line, and every name must have a folder here. A profile gate that cannot run on the machine is logged in START_REPORT.md, never wired as a no-op.
 
@@ -713,3 +704,22 @@ most 8) plus 2 project skills plus the skills the adopted profiles declare.
 `scripts/lessons.sh` holds the core list, check.sh step 5m pins it to the
 template's `.claude/skills`, and `scripts/template-sync.sh` reports a cap
 breach after a sync as an action item.
+
+## Amendment 7 (2026-11-18): decisions since Amendment 6 and the CI cost work
+
+One line each; the record is the ADR or file named.
+
+- ADR 0009 `docs/decisions/0009-local-dreaming.md`: the dream procedure consolidates memory against session transcripts, proposals approved by number; `scripts/dream.sh` and `scripts/dream/`.
+- ADR 0010: template Python is linted with ruff 0.16.10 under folder-level `ruff.toml` files (check.sh step 5k).
+- ADR 0011 and ADR 0013: a personal taste profile and per-project taste, built from the feedback hook's log; `scripts/preferences.sh` and `docs/preferences/`.
+- ADR 0012 (Amendment 6): core skills are counted apart from project skills.
+- ADR 0014: Codex hooks in `.codex/hooks.json` with payload fixtures in `tests/template/fixtures/codex/`, launched by `scripts/codex-hook.cmd`.
+- ADR 0015: the shell-stdin refusal hook is core, and projects add their own hooks under `scripts/hooks.d/<EVENT>/` through `scripts/hooks-dispatch.sh`.
+- ADR 0016: the software profile ships a verify skill that runs the real gate (`docs/profiles/software/skills/`).
+- ADR 0017: a review verdict binds to the reviewed tree (`scripts/tree-id.sh`, `scripts/tasklint.sh ship`) and lessons carry triggers read by `scripts/lessons.sh match`.
+- ADR 0018: a gate change needs a human label on its pull request; agents never add it.
+- ADR 0019 `docs/decisions/0019-reuse-the-template-self-test-result-when-its-declared-inputs.md`: the template self-test result is reused when its declared inputs hash to the same content key; unknown means run, CI never reuses, and `scripts/selftest-reuse.sh verify-inputs` proves the input list.
+- Tonight's CI cost work: `docs/procedures/ci-cost.md` is the procedure, with `scripts/test-budget.sh` and `tests/BUDGET` capping test-code growth, `scripts/selftest-reuse.sh` reusing the self-test result by content key, shard weights in `tests/template/selftest-weights.txt`, and a quieter Stop gate (`scripts/stop-gate.sh` runs the quick gate detached, timeout 120 seconds).
+- Fleet and rating: `scripts/fleet-status.sh` (per-project template ref, last sync, releases behind) and `scripts/rating.sh` (the numbers behind a template rating), both read-only and offline-capable.
+- Profiles: `product-render` graduates from the library into `docs/profiles/product-render/PROFILE.md` (rules RND-1 to RND-13); its procedure, skill and tools stay in `docs/library/`.
+- Reconciliation: section 2 lists every ADR, the Codex fixtures and the archive entries; sections 3.1, 3.3, 3.9, 3.12 and 3.13 are present-tense and point at the procedure files that own their text. Kernel untouched.
