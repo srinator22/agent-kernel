@@ -374,6 +374,14 @@ if [[ -f scripts/private-terms.sh ]]; then
   bash scripts/private-terms.sh check || gerr "scripts/private-terms.sh check failed (a private term is in the repository; the lines above name where, masked)"
 fi
 
+# 4k. Test-code growth stays visible: past tests/BUDGET's ceiling plus its
+# allowance, consolidate tests or raise the ceiling with a dated reason
+# (docs/procedures/tests.md, "Test audit"). The script skips when tests/BUDGET
+# is absent; skipped where the project does not carry the script.
+if [[ -f scripts/test-budget.sh ]]; then
+  bash scripts/test-budget.sh check || gerr "scripts/test-budget.sh check failed (the lines above say how far over tests/BUDGET the test code is)"
+fi
+
 # The tree line is armed here: both modes exit below, and on_exit prints it on a clean full run (ADR 0017).
 TREE_LINE=1
 
@@ -484,6 +492,11 @@ if [[ ! -f .start-done ]]; then
     scripts/start-reset-lessons.sh tests/template/test_start_reset_lessons.sh
     scripts/selftest-reuse.sh tests/template/selftest-inputs.list
     tests/template/test_selftest_reuse.sh
+    scripts/test-budget.sh tests/BUDGET tests/template/test_test_budget.sh
+    scripts/fleet-status.sh tests/template/test_fleet_status.sh
+    scripts/rating.sh tests/template/test_rating.sh
+    tests/template/selftest-weights.txt docs/procedures/ci-cost.md
+    docs/profiles/product-render/PROFILE.md
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
