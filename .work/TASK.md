@@ -29,7 +29,7 @@ The owner rated the template 7/10 and said "Do those - aim for a rating of 10" (
 
 ## Acceptance criteria
 - [x] lessons.sh check output is byte-identical before and after the speed-up on the template and on fixtures with each class of problem -> tests/template/test_lessons.sh
-- [x] check.sh --fast on the template on this Windows machine drops from 109 s to under 40 s -> judgment: timing lines: before `selftest 0s, total 109s`; after `selftest 632s, total 670s`, so 38 s outside the self-tests (the run selected 12 tests because .work/TASK.md changed; BACKLOG row)
+- [x] check.sh --fast on the template on this Windows machine drops from 109 s to under 40 s -> judgment: measured on a clean tree with no self-test selected, as the baseline: before `check.sh: timing: selftest 0s, total 109s` (47fe54a), after `check.sh: timing: selftest 0s, total 38s` (fbf6154)
 - [x] test_check_always.sh is split so no self-test file exceeds 300 s on Windows CI, and the Windows shard wall time drops -> judgment: CI run 44178285788 slowest file test_check_always_template.sh 282 s (was test_check_always.sh 908 s); shards 295/410/262 s (run 44132290628: 1167/246/211 s); suite 2337 s (was 3048 s)
 - [x] every split test_check_always*.sh file is a gate file in ci.yml and ADR 0018 -> tests/template/test_ci_gate_files.sh
 - [ ] CI fails a pull request whose diff or commit metadata holds a term from the PRIVATE_TERMS secret, without printing the term, and fails when the secret is empty or missing in this repository -> tests/template/test_private_terms.sh (pending owner: `gh secret set PRIVATE_TERMS < .work/private-terms.txt` and `gh variable set PRIVATE_TERMS_REQUIRED --body true`; until then the job passes with a notice and scans nothing; the script behavior is tested in test_private_terms.sh, 138 passed)
@@ -66,6 +66,7 @@ PASS - reviewer, round 3 (rounds 1 and 2 FAIL: gate-file pattern for the split f
 - 2026-11-18 N7: main protection set and read back: required_status_checks.contexts [check, gate-label, private-terms] (adopted-project added after review round 1), strict false, enforce_admins.enabled true. The PRIVATE_TERMS secret and PRIVATE_TERMS_REQUIRED variable upload was refused by this session's permission classifier; left to the owner (until then the private-terms job passes with a notice).
 - 2026-11-18 PR 22 opened (b19/ten); range scan before push: private-terms OK (12 terms, range).
 - 2026-11-18 CI on dff3e80 (run 44178285788): check, selftest-windows 3/3, selftest-inputs, adopted-project, guard-bash32, private-terms green; gate-label waits on the owner. Earlier head failed test_test_files (split files lacked the canonical lib.sh line, lib lacked +x): fixed in dff3e80. The fast gate caught two pipes into grep -q (a7fdf7e).
+- 2026-11-18 review round 1 FAIL (tree 1ab53f0): handoff file index shifted by an empty agent (fixed, test failed first); the started copy lived only in a conditional, unrequired job (adopted-project now unconditional and required); the --fast figure was derived, not measured (now measured: 38 s); the private-terms criterion was ticked with no secret set (unticked, pending owner).
 
 ## Review verdict
 
