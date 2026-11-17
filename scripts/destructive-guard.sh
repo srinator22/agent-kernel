@@ -47,10 +47,16 @@
 #     --mirror/--prune/-f/-d or a +ref or :ref refspec; reset --hard;
 #     clean -f (unless a dry run); branch -D or -d with -f; checkout -f or a
 #     whole-tree target; restore of the whole tree (unless --staged only);
-#     stash drop and stash clear; -c core.hooksPath= (or --config-env of it).
-#   taskkill /IM (or a /FI imagename filter), Stop-Process/spps/kill -Name or
-#     -ProcessName, pkill, killall: a kill by image name can end processes this
-#     session did not start; kill by PID.
+#     stash drop and stash clear; -c core.hooksPath= (or --config-env of it);
+#     git config writing core.hooksPath (reads and --unset pass); a segment
+#     naming both a GIT_CONFIG_ variable and core.hooksPath (NAME=value
+#     prefixes, env, export, $env:, set); an inline alias, -c alias.X=...
+#     (or --config-env of it), whose body the guard never reads.
+#   taskkill /IM or any /FI filter, Stop-Process/spps/kill -Name or
+#     -ProcessName, pkill, killall, tskill NAME, wmic process delete or call
+#     terminate unless the where clause is one processid or handle (a clause
+#     cut at a parenthesis is unreadable and refused), kill of PID -1: these
+#     can end processes this session did not start; kill by PID.
 # Escaped spaces (bash \ and PowerShell ` before a space) stay inside the word,
 # and wrapper arguments are re-quoted when the inner command is rebuilt.
 # Limits: the segment split is quote-unaware, so a separator or bracket
@@ -62,8 +68,11 @@
 # Rare forms are also not read: a backtick substitution or PowerShell
 # expression as a target, ~+ and ~- as a path, a partial glob such as New*, a
 # PowerShell -Path:<value>, shortened git long options (--forc), and a kill
-# fed through a pipe (Get-Process -Name x | Stop-Process). ADR 0006 records
-# these as limits, not defects.
+# fed through a pipe (Get-Process -Name x | Stop-Process). Hooks are also
+# skipped by routes it does not read: git config --edit, a hand edit of a
+# config file, include.path, GIT_CONFIG_GLOBAL or GIT_CONFIG_SYSTEM naming a
+# file, and a persistent alias (git config alias.X) run later. ADR 0006
+# records these as limits, not defects.
 # Not parsed: eval, scripts run from files, aliases or functions defined
 # earlier in the shell, and targets fed through a pipe such as
 # Get-ChildItem ~ | Remove-Item -Recurse. A cd in a subshell or wrapper is
@@ -74,7 +83,7 @@
 # command, a false allow can destroy work that git cannot recover. There is no
 # bypass flag or environment variable.
 # Exit: 0 allow; 2 block, with the reason on stderr for the agent to read.
-# Written for bash 3.2 (CI runs bash 5); any unexpected error blocks: an EXIT
+# Written for bash 3.2 (CI runs bash 5); an unexpected error blocks: an EXIT
 # trap turns an error that ends the shell into a block, and main is followed by
 # exit 3 so an error that discards the running command cannot fall through to
 # an allow (an error that only fails one command, such as one inside (( )),
@@ -328,6 +337,11 @@ check_git() { # arguments in ARGS
       if [[ "$LC" == --config-env=core.hookspath* ]]; then
         block "git --config-env core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
       fi
+      # An inline alias body (!cmd, or git arguments such as push --force) is
+      # never expanded here, so the command it runs goes unread.
+      if [[ "$LC" == --config-env=alias.* ]]; then
+        block "a git alias defined inline runs a command the guard cannot read (kernel rule 6)" "$SEG"
+      fi
       # These options take their value as the next word; reading that word as
       # the subcommand would hide the real one (git --git-dir .git push -f).
       case "$a" in
@@ -336,6 +350,9 @@ check_git() { # arguments in ARGS
             lc "${ARGS[i+1]}"
             if [[ "$LC" == core.hookspath* ]]; then
               block "git $a core.hooksPath replaces the hooks (kernel rule 6)" "$SEG"
+            fi
+            if [[ "$LC" == alias.* ]]; then
+              block "a git alias defined inline runs a command the guard cannot read (kernel rule 6)" "$SEG"
             fi
           fi
           i=$((i + 2))
@@ -403,7 +420,39 @@ check_git() { # arguments in ARGS
         block "git stash drop/clear destroys stashed work (kernel rule 6)" "$SEG"
       fi
       ;;
+    config)
+      check_git_config
+      ;;
   esac
+}
+
+# git config core.hooksPath X stores what -c core.hooksPath= gives one command,
+# so every later plain commit skips the hooks. A read or an unset passes.
+check_git_config() {
+  local a la key=0 after=0 write=0 read=0 first=""
+  (( ${#GARGS[@]} )) && { lc "${GARGS[0]}"; first="$LC"; }
+  for a in ${GARGS[@]+"${GARGS[@]}"}; do
+    lc "$a"; la="$LC"
+    if (( key )); then
+      [[ "$la" != -* ]] && after=1
+    elif [[ "$la" == core.hookspath ]]; then
+      key=1
+      continue
+    fi
+    case "$la" in
+      --add | --replace-all) write=1 ;;
+      --get | --get-all | --get-regexp | --unset | --unset-all | --list | -l) read=1 ;;
+    esac
+  done
+  (( key )) || return 0
+  case "$first" in
+    set) write=1 ;;
+    get | unset | list) read=1 ;;
+  esac
+  if (( write )) || { (( after )) && (( ! read )); }; then
+    block "git config core.hooksPath replaces the hooks for every later commit (kernel rule 6)" "$SEG"
+  fi
+  return 0
 }
 
 # tokenize SEGMENT: split on whitespace outside quotes into toks[]; the quote
@@ -516,6 +565,16 @@ check_kill() {
   local name="$1" a lf min=2
   case "$name" in
     pkill | killall) block "process kill by name ($name) can end unrelated processes (kill the PID you started)" "$SEG" ;;
+    tskill)
+      # tskill takes a PID or a process name; options start with / or -.
+      for a in ${ARGS[@]+"${ARGS[@]}"}; do
+        [[ "$a" == /* || "$a" == -* ]] && continue
+        [[ "$a" =~ ^[0-9]+$ ]] || block "tskill by process name can end unrelated processes (pass the PID you started)" "$SEG"
+        break
+      done
+      return 0
+      ;;
+    kill) check_kill_all ;;
   esac
   # PowerShell's kill alias takes -Name too; bash kill has -n SIGNUM, so a
   # bare -n there is not a name.
@@ -527,6 +586,9 @@ check_kill() {
         case "$LC" in
           /im | -im | //im | /im:* | -im:*) block "taskkill by image name can end unrelated processes (use /PID of a process you started)" "$SEG" ;;
           *imagename*) block "taskkill filtered by image name can end unrelated processes (use /PID of a process you started)" "$SEG" ;;
+          # USERNAME, STATUS, WINDOWTITLE, PID gt and the rest select many
+          # processes; /PID names one.
+          /fi | -fi | //fi | /fi:* | -fi:*) block "taskkill /FI filter can end unrelated processes (use /PID of a process you started)" "$SEG" ;;
         esac
         ;;
       *)
@@ -540,6 +602,51 @@ check_kill() {
         ;;
     esac
   done
+}
+
+# check_kill_all: bash kill sends to PID -1 every process the user may
+# signal. The first option is the signal (-s and -n take it as the next word,
+# -l and -L list); after it, or after --, a word is a target and a negative
+# one is a process group, so kill -1 1234 is signal 1 to PID 1234.
+check_kill_all() {
+  local j=0 m=${#ARGS[@]} a sig=0 opts=1
+  while (( j < m )); do
+    a="${ARGS[j]}"
+    if (( opts && ! sig )) && [[ "$a" == -s || "$a" == -n ]]; then
+      sig=1
+      j=$((j + 1))
+    elif (( opts && ! sig )) && [[ "$a" == -l || "$a" == -L ]]; then
+      return 0
+    elif (( opts )) && [[ "$a" == -- ]]; then
+      opts=0
+    elif (( opts && ! sig )) && [[ "$a" == -* ]]; then
+      sig=1
+    elif [[ "$a" == -1 ]]; then
+      block "kill of PID -1 signals every process the user may signal (kill the PID you started)" "$SEG"
+    fi
+    j=$((j + 1))
+  done
+  return 0
+}
+
+# check_wmic: wmic process ... delete or call terminate ends every process the
+# where clause matches; only a clause naming one processid or handle (or the
+# alias's PID shorthand, wmic process 1234) is a process this session knows.
+re_wmic_pid="(^| )(win32_)?process (where (processid|handle) ?= ?'?[0-9]+'? |[0-9]+ )(delete|call terminate)( |\$)"
+check_wmic() {
+  local IFS=' ' all
+  all="${ARGS[*]+"${ARGS[*]}"}"
+  lc "$all"; all=" $LC "
+  [[ "$all" == *" process "* || "$all" == *" win32_process "* ]] || return 0
+  if [[ "$all" == *" delete "* || "$all" == *" terminate "* ]]; then
+    [[ "$LC" =~ $re_wmic_pid ]] && return 0
+    block "wmic process delete or terminate not by processid can end unrelated processes (kill the PID you started)" "$SEG"
+  fi
+  # A where clause in parentheses is cut off by the segment split.
+  if [[ "$all" == *" where " ]]; then
+    block "wmic process where clause the guard cannot read (it was cut at a parenthesis; quote it or kill by PID)" "$SEG"
+  fi
+  return 0
 }
 
 cd_unknown() { NBASE=""; CURUNK=1; }
@@ -623,6 +730,13 @@ check_text() {
     ran=1
     SEG="${SEG#"${SEG%%[![:space:]]*}"}"
     SEG="${SEG%"${SEG##*[![:space:]]}"}"
+    # git reads GIT_CONFIG_COUNT/KEY_n/VALUE_n and GIT_CONFIG_PARAMETERS as -c
+    # settings. Assignments are skipped before the command name below, and
+    # export, $env: and set spell them differently, so match the segment text.
+    lc "$SEG"
+    if [[ "$LC" == *git_config_* && "$LC" == *core.hookspath* ]]; then
+      block "core.hooksPath set through the GIT_CONFIG environment replaces the hooks (kernel rule 6)" "$SEG"
+    fi
     tokenize "$SEG"
     n=${#toks[@]}
     i=0
@@ -659,7 +773,8 @@ check_text() {
       bash | sh | zsh | dash | ksh) check_posix_shell "$depth" ;;
       powershell | pwsh) check_powershell "$depth" ;;
       cmd) check_cmd "$depth" ;;
-      taskkill | stop-process | spps | kill | pkill | killall) check_kill "$name" ;;
+      taskkill | stop-process | spps | kill | pkill | killall | tskill) check_kill "$name" ;;
+      wmic) check_wmic ;;
     esac
   done <<< "$in"
   # A here-string that failed to open skips the loop and bash carries on (bash
