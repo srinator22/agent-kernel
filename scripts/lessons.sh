@@ -34,8 +34,13 @@
 # with used: 0 more than 45 days after its approved: date is an error (archive
 # it with expire --apply or record a use); a retire-when carrying [met] prints a
 # warning and does not fail; every PENDING.md entry carries its four fields; no
-# QUARANTINE.md entry older than 30 days without an owner task; .claude/skills
-# and .agents/skills identical; skill directories <= the template core skills
+# QUARANTINE.md entry older than 30 days without an owner task; every
+# UPSTREAM.md entry carries those four fields plus "applies to:" (core or a
+# docs/profiles/ folder); every docs/profiles/*/PROFILE.md opening with
+# "# Profile: " has 60 to 160 lines and exactly the ten README.md headings;
+# .claude/skills and .agents/skills identical, except that a pointer SKILL.md
+# (sole file, body names one canonical SKILL.md with the same name and
+# description) may stand in one mirror; skill directories <= the template core skills
 # present (CORE_SKILLS, at most 8) + 2 project skills + profile skill sets
 # (the number of skills listed on the "Skills:" or "- Skills:" line of each
 # docs/profiles/*/PROFILE.md, comma-separated; when AGENTS.md has a
@@ -481,6 +486,92 @@ file_lines() { awk 'END { print NR }' "$1"; }
 # value is empty.
 is_placeholder() { [[ "$1$3$5$7" == "1111" && -z "$2$4$6$8" ]]; }
 
+# skills_pointer_target FILE: prints the canonical SKILL.md path and returns 0
+# when FILE is a skills pointer (a SKILL.md with frontmatter and a body of at
+# most 4 non-blank lines naming exactly one *SKILL.md path); returns 1 for a
+# real skill. The path is repo-relative.
+skills_pointer_target() {
+  local body paths
+  body="$(awk '
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") exit; next }
+    fm == 0 { if ($0 == "---") fm = 1; next }
+    $0 ~ /[^ \t]/ { print }' "$1" || true)"
+  [[ -n "$body" ]] || return 1
+  if (( $(printf '%s\n' "$body" | awk 'END { print NR }') > 4 )); then return 1; fi
+  paths="$(printf '%s\n' "$body" | grep -oE '[A-Za-z0-9_./-]*SKILL\.md' | sort -u || true)"
+  [[ -n "$paths" ]] || return 1
+  if (( $(printf '%s\n' "$paths" | awk 'END { print NR }') != 1 )); then return 1; fi
+  printf '%s\n' "${paths#./}"
+}
+
+# skills_pointer_errors FILE: one problem per line when a pointer FILE does not
+# resolve to a canonical skill with the same name and description. Prints
+# nothing for a real skill or a valid pointer.
+skills_pointer_errors() {
+  local f="$1" target pn pd cn cd
+  target="$(skills_pointer_target "$f")" || return 0
+  if [[ ! -f "$target" ]]; then
+    echo "$f is a skills pointer naming $target, which does not exist"
+    return 0
+  fi
+  pn="$(frontmatter_field "$f" name)"; pd="$(frontmatter_field "$f" description)"
+  cn="$(frontmatter_field "$target" name)"; cd="$(frontmatter_field "$target" description)"
+  if [[ -z "$pn" || -z "$pd" ]]; then
+    echo "$f is a skills pointer without a name: and description: in its frontmatter"
+  elif [[ "$pn" != "$cn" ]]; then
+    echo "$f pointer name '$pn' differs from $target name '$cn'"
+  elif [[ "$pd" != "$cd" ]]; then
+    echo "$f pointer description differs from the description in $target"
+  fi
+}
+
+# skills_mirror_errors: .claude/skills and .agents/skills must match entry by
+# entry; the one accepted difference is a pointer SKILL.md (the only file of
+# its folder) on one side whose counterpart is the canonical file it names.
+# Pointer validity itself is checked by skills_pointer_errors.
+skills_mirror_errors() {
+  local n side other target rest="" d names
+  names="$( { ls -A .claude/skills; ls -A .agents/skills; } | sort -u)"
+  while IFS= read -r n; do
+    [[ -n "$n" ]] || continue
+    if diff -rq ".claude/skills/$n" ".agents/skills/$n" >/dev/null 2>&1; then continue; fi
+    for side in .claude .agents; do
+      other=".agents"; [[ "$side" == ".agents" ]] && other=".claude"
+      [[ -f "$side/skills/$n/SKILL.md" ]] || continue
+      [[ "$(find "$side/skills/$n" -type f | awk 'END { print NR }')" == "1" ]] || continue
+      target="$(skills_pointer_target "$side/skills/$n/SKILL.md")" || continue
+      if [[ "$target" == "$other/skills/$n/SKILL.md" ]]; then continue 2; fi
+    done
+    d="$(diff -rq ".claude/skills/$n" ".agents/skills/$n" 2>&1 | sed -n '1,3p' | tr '\n' ';' || true)"
+    rest="$rest$d"
+  done <<< "$names"
+  if [[ -n "$rest" ]]; then echo "$rest"; fi
+}
+
+# profile_contract_errors PROFILE.md: the file contract of
+# docs/profiles/README.md - 60 to 160 lines and exactly these level-2
+# headings in this order (headings inside code fences are ignored).
+PROFILE_HEADINGS="Purpose and risk|Rules|Gates|Tools|Playbooks|Agents and skills|Parameters and records|Done means|Lessons carried in|Sources"
+profile_contract_errors() {
+  local f="$1" n found first
+  # Only a file that opens with the contract title line is held to the contract.
+  first="$(sed -n 1p "$f")"
+  [[ "$first" == "# Profile: "* ]] || return 0
+  n="$(file_lines "$f")"
+  if (( n < 60 || n > 160 )); then echo "$f has $n lines; a PROFILE.md is 60 to 160 lines (docs/profiles/README.md)"; fi
+  found="$(awk '
+    { sub(/\r$/, "") }
+    /^```/ { fence = !fence; next }
+    !fence && /^## / { sub(/^## /, ""); sub(/[ \t]+$/, ""); printf "%s%s", (c++ ? "|" : ""), $0 }' "$f")"
+  if [[ "$found" != "$PROFILE_HEADINGS" ]]; then
+    echo "$f level-2 headings are '$found'; expected exactly, in order: '$PROFILE_HEADINGS' (docs/profiles/README.md)"
+  fi
+}
+
+UPSTREAM="docs/lessons/UPSTREAM.md"
+UPSTREAM_LABELS="what happened|what check should have caught it|what was added|retire-when|applies to"
+
 cmd_check() {
   local errs=() approved_count=0 line lineno id seen=" "
 
@@ -546,6 +637,28 @@ cmd_check() {
     [[ -z "$missing" ]] || errs+=("PENDING.md entry at line $start is missing or has empty:$missing")
   done < <(entries "$PENDING" "$PENDING_LABELS")
 
+  # UPSTREAM entries: the PENDING four fields plus "applies to:", which names
+  # core or a profile folder under docs/profiles/ (docs/procedures/upstream.md).
+  local p5 v5 applies
+  while IFS="$US" read -r start p1 v1 p2 v2 p3 v3 p4 v4 p5 v5; do
+    [[ -n "$start" ]] || continue
+    # The documented format placeholder leaves the four fields empty.
+    if is_placeholder "$p1" "$v1" "$p2" "$v2" "$p3" "$v3" "$p4" "$v4"; then continue; fi
+    missing=""
+    [[ "$p1" == 1 && -n "$v1" ]] || missing="$missing 'what happened'"
+    [[ "$p2" == 1 && -n "$v2" ]] || missing="$missing 'what check should have caught it'"
+    [[ "$p3" == 1 && -n "$v3" ]] || missing="$missing 'what was added'"
+    [[ "$p4" == 1 && -n "$v4" ]] || missing="$missing 'retire-when'"
+    [[ "$p5" == 1 && -n "$v5" ]] || missing="$missing 'applies to'"
+    [[ -z "$missing" ]] || errs+=("UPSTREAM.md entry at line $start is missing or has empty:$missing")
+    if [[ "$p5" == 1 && -n "$v5" ]]; then
+      applies="${v5%%[[:space:]]*}"
+      if [[ "$applies" != "core" && ! -d "docs/profiles/$applies" ]]; then
+        errs+=("UPSTREAM.md entry at line $start: 'applies to' is '$v5'; expected core or a profile folder name under docs/profiles/")
+      fi
+    fi
+  done < <(entries "$UPSTREAM" "$UPSTREAM_LABELS")
+
   # QUARANTINE entries: an owner task is required once older than 30 days.
   local now_dn owner_lc age
   now_dn="$(day_number "$(today)")"
@@ -610,10 +723,17 @@ cmd_check() {
     else
       # The substitution can fail (diff exits 1 on a difference); under set -e a
       # failing substitution inside an assignment would end the script silently.
-      drift="$(diff -rq .claude/skills .agents/skills 2>&1 | sed -n '1,3p' | tr '\n' ';' || true)"
+      drift="$(skills_mirror_errors)"
       if [[ -n "$drift" ]]; then
         errs+=(".claude/skills and .agents/skills differ: $drift")
       fi
+      local sk
+      for sk in .claude/skills/*/SKILL.md .agents/skills/*/SKILL.md; do
+        [[ -f "$sk" ]] || continue
+        while IFS= read -r msg; do
+          if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+        done < <(skills_pointer_errors "$sk")
+      done
     fi
     skills_cap
     if (( SK_COUNT > SK_CAP )); then errs+=("$(skills_over_msg)"); fi
@@ -645,6 +765,9 @@ cmd_check() {
     while IFS= read -r msg; do
       if [[ -n "$msg" ]]; then errs+=("$msg"); fi
     done < <(shipped_set_check "$(dirname "$pf")" "$pf")
+    while IFS= read -r msg; do
+      if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+    done < <(profile_contract_errors "$pf")
   done
   local optdir
   for optdir in docs/library docs/roster; do

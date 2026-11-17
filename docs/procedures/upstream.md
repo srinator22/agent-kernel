@@ -216,3 +216,23 @@ skill folder is listed file by file.
    5. Record `- Template: <url> <tag>` and the first sync line in
       `docs/lessons/MAINTENANCE.log`, then the adoption as an ADR (what was
       copied, what was merged, what was deferred, the template tag adopted).
+   6. A long existing agent file (`CLAUDE.md` or `AGENTS.md` over the
+      180-line cap) moves whole, unedited, to a long-form memory file such
+      as `docs/memory/<name>-long-form.md`. The new `AGENTS.md` keeps a
+      resident routing table (one row per topic: when to read it, the
+      section of the long-form file) and links to the file; the long-form
+      file opens with a line linking back to `AGENTS.md`. Nothing is
+      summarized away.
+   7. Older ADRs are normalized to the template header and nothing else:
+      a title line (`# NNNN - Title`), a `Date: YYYY-MM-DD` line taken from
+      the commit that first added the file, and a `Status:` line. Find the
+      date with
+      `git log --diff-filter=A --follow --format=%as -- docs/decisions/<file>.md`
+      (the last line printed is the first commit). Body text is untouched.
+   8. A project may keep `.claude/skills/<name>/SKILL.md` as a pointer to a
+      canonical skill file elsewhere (for example `.agents/skills/<name>/SKILL.md`).
+      `scripts/lessons.sh check` accepts the layout when the pointer is the
+      only file in its folder, its body (at most 4 non-blank lines) names
+      exactly one repo-relative `SKILL.md` path, that file exists, and its
+      frontmatter `name:` and `description:` equal the pointer's. A pointer
+      with a different name or description, or naming a missing file, fails.

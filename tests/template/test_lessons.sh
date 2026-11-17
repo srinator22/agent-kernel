@@ -751,4 +751,111 @@ run ./scripts/lessons.sh match "$FIX.empty"
 assert_rc "an empty diff file fails" 2
 rm -f "$FIX.diff" "$FIX.space.diff" "$FIX.crlf.diff" "$FIX.notdiff" "$FIX.empty"
 
+# Skills pointer layout: .claude/skills/<name>/SKILL.md names the canonical
+# file and repeats its name and description; nothing else is accepted.
+rm -rf .claude/skills/alpha .agents/skills/alpha
+mkdir -p .claude/skills/ptr .agents/skills/ptr
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nbody of the real skill\nmore body\n' > .agents/skills/ptr/SKILL.md
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "an accepted skills pointer passes" 0
+printf -- '---\nname: ptr\ndescription: another words\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer with a different description fails" 1
+assert_contains "the description mismatch is named" "pointer description differs"
+printf -- '---\nname: other\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer with a different name fails" 1
+assert_contains "the name mismatch is named" "pointer name 'other' differs"
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/gone/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer naming a missing file fails" 1
+assert_contains "the missing file is named" ".agents/skills/gone/SKILL.md, which does not exist"
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nsome other prose without a path\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a differing real skill is not a pointer and fails as drift" 1
+assert_contains "drift is named for a non-pointer" "differ"
+rm -rf .claude/skills/ptr .agents/skills/ptr
+mkdir -p .claude/skills/alpha .agents/skills/alpha
+echo "# alpha" > .claude/skills/alpha/SKILL.md
+echo "# alpha" > .agents/skills/alpha/SKILL.md
+
+# UPSTREAM.md entries follow the PENDING rule plus "applies to:".
+UPSTREAM_HEAD='# Upstream
+
+Entry format (all five fields required):
+
+- what happened:
+- what check should have caught it:
+- what was added:
+- retire-when:
+- applies to: core | <profile name>
+'
+printf '%s\n' "$UPSTREAM_HEAD" > docs/lessons/UPSTREAM.md
+run ./scripts/lessons.sh check
+assert_rc "the UPSTREAM placeholder passes" 0
+printf '%s\n' "$UPSTREAM_HEAD" > docs/lessons/UPSTREAM.md
+cat >> docs/lessons/UPSTREAM.md <<'EOT'
+- what happened: a thing
+- what check should have caught it: a check
+- what was added: a script
+- retire-when: the template carries it
+- applies to: core
+EOT
+run ./scripts/lessons.sh check
+assert_rc "a complete UPSTREAM entry passes" 0
+sed -i.bak '/^- what was added: a script$/d' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "an UPSTREAM entry without a field fails" 1
+assert_contains "the missing field is named" "UPSTREAM.md entry at line"
+assert_contains "which field" "'what was added'"
+sed -i.bak -e 's/^- retire-when: the template carries it$/- retire-when: the template carries it\n- what was added: a script/' -e '/^- applies to: core$/d' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "an UPSTREAM entry without applies to fails" 1
+assert_contains "applies to is named" "'applies to'"
+echo "- applies to: nosuchprofile" >> docs/lessons/UPSTREAM.md
+run ./scripts/lessons.sh check
+assert_rc "an unknown applies to fails" 1
+assert_contains "the unknown value is named" "'applies to' is 'nosuchprofile'"
+mkdir -p docs/profiles/known
+sed -i.bak 's/^- applies to: nosuchprofile$/- applies to: known (sent: #12)/' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "a profile name with a sent note passes" 0
+rm -rf docs/profiles/known docs/lessons/UPSTREAM.md
+
+# PROFILE.md contract: 60 to 160 lines, the ten headings in order.
+mkdir -p docs/profiles/pc
+PROFILE_BODY() { # heading-list-file-free generator: prints a valid profile of N filler lines
+  local n="$1" h
+  echo "# Profile: pc"
+  for h in "Purpose and risk" "Rules" "Gates" "Tools" "Playbooks" "Agents and skills" "Parameters and records" "Done means" "Lessons carried in" "Sources"; do
+    echo; echo "## $h"
+  done
+  local have=$(( 1 + 20 ))
+  while (( have < n )); do echo "filler line"; have=$((have + 1)); done
+}
+PROFILE_BODY 60 > docs/profiles/pc/PROFILE.md
+printf 'Skills: none\n' >> docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a PROFILE.md at 61 lines with the headings passes" 0
+PROFILE_BODY 59 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a 59-line PROFILE.md fails" 1
+assert_contains "the short length is named" "has 59 lines; a PROFILE.md is 60 to 160 lines"
+PROFILE_BODY 161 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a 161-line PROFILE.md fails" 1
+assert_contains "the long length is named" "has 161 lines"
+PROFILE_BODY 100 | sed 's/^## Tools$/## Toolbox/' > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a renamed heading fails" 1
+assert_contains "the headings are named" "level-2 headings are"
+PROFILE_BODY 100 | sed '/^## Done means$/d' > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a missing heading fails" 1
+PROFILE_BODY 100 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a valid 100-line PROFILE.md passes" 0
+rm -rf docs/profiles/pc
+
 t_finish
