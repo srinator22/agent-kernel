@@ -36,6 +36,12 @@
             "type": "command",
             "command": "bash \"$(git rev-parse --show-toplevel)/scripts/refuse-shell-stdin.sh\"",
             "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" refuse-shell-stdin"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/push-scan.sh\"",
+            "commandWindows": "git --version >nul 2>&1 || (echo codex-hook: git is not on PATH; run bash scripts/doctor.sh 1>&2 & exit 0) & git rev-parse --show-toplevel >nul 2>&1 || (echo codex-hook: git cannot read this repository; run git status here 1>&2 & exit 0) & for /f \"usebackq delims=\" %r in (`git rev-parse --show-toplevel`) do @call \"%r\\scripts\\codex-hook.cmd\" push-scan",
+            "timeout": 60
           }
         ]
       }

@@ -47,7 +47,8 @@ SHA is terminal-success (kernel rule 5).
    lives in commit bodies (kernel rule 18).
 6. Conventional commit. The body carries why, and for fixes the exact
    issue, the fix, and the files and functions touched (kernel rule 6).
-7. Push per the recorded workflow. Then run `scripts/ci-watch.sh` in the
+7. Push per the recorded workflow (scripts/push-scan.sh refuses a push while
+   `scripts/private-terms.sh check` fails). Then run `scripts/ci-watch.sh` in the
    foreground - delegate to the monitor agent when available. It prints the
    workflows the commit can trigger and waits for each; exit 3 means it
    timed out with checks still running, so run it again. When one push
