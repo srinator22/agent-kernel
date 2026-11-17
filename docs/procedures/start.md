@@ -104,6 +104,13 @@ start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
    `docs/procedures/`, and a library skill takes one of the 2 project skill
    slots (kernel rule 10). `scripts/lessons.sh check` must pass
    after the copy (skills cap and mirror).
+   The software profile's `verify` skill is a template (SW-15,
+   `docs/decisions/0016`): before installing it, fill every `{{VERIFY_...}}`
+   wiring line with this project's real build, boot, ready signal, drive,
+   inspect and stop commands, using its "Adapting at start" table for the
+   stack kind (cli, web, service, library, or the nearest real run), then
+   delete that section; install the filled copy to both skill folders so
+   they stay byte-identical. No `{{` may remain in the installed copy.
 5. Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
    and, if deploying, `docs/operations.md` (deploy, rollback, monitoring).
    Write the next-numbered ADR under docs/decisions/ (stack choice, with
@@ -114,7 +121,16 @@ start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
    homepage, and topics (gh) so the sidebar reads properly (per Q11). Replace
    `BACKLOG.md` with the project's backlog (first milestones from the
    interview, plus the discover tool rows); move the template rows to
-   `.archive/` with the reason "template maintenance items".
+   `.archive/` with the reason "template maintenance items". With the
+   lessons files committed as copied, run
+   `bash scripts/start-reset-lessons.sh`, then the same with `--check`
+   (exit 0): it resets `docs/lessons/INDEX.md`, `PENDING.md`,
+   `QUARANTINE.md` and `UPSTREAM.md` to their format headers, so the project
+   does not inherit the template's own lessons as its memory. It refuses
+   after `.start-done` or with uncommitted changes in those files, so every
+   dropped line stays in git history; `--check` names a file that still
+   holds entries. `docs/DEFECT_MEMORY.md` is left as shipped (format and
+   EXAMPLE rows only).
 7. Configure the harness: attribution/trailers off in settings (verify
    current key names at run time); seed the permissions allowlist with
    the stack's safe verification commands (the same format, lint,
@@ -124,9 +140,11 @@ start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
    runs the stack gauntlet.
 9. Verify a clean state: run `./scripts/check.sh` for real. Fix until it is
    green. Completion rule: start may not declare itself complete if
-   format/lint/typecheck/tests cannot actually execute.
+   format/lint/typecheck/tests cannot actually execute. Then run the
+   installed `verify` skill once against the scaffolded app; it must pass.
 10. Write `START_REPORT.md` (detected, wired, missing, degraded, manual
-    steps), commit with conventional commits, tag `v0.1.0`, and if the
+    steps, and the first verify run: command, what was driven, observed
+    result, or "N/A - reason" when no real run is possible), commit with conventional commits, tag `v0.1.0`, and if the
     workflow is gated, confirm CI on that SHA via `scripts/ci-watch.sh`.
     Push and tag only as Q11 allowed.
 11. Never touch the kernel or `.kernel.hash`.

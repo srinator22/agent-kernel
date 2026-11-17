@@ -31,7 +31,9 @@ real projects; each rule states the failure it prevents.
    AGENTS.md rules index as one line per rule file or ID range (the 180-line
    budget holds); wires every Gates row into `scripts/stack-check.sh` and
    `.github/workflows/ci.yml`; turns each Tools row marked `build` into a
-   BACKLOG item; scaffolds the Parameters and records files; copies
+   BACKLOG item; installs its shipped skills (the software profile's
+   `verify` skill is filled in for the stack first, ADR 0016); scaffolds
+   the Parameters and records files; copies
    the Done means list into the Project decisions section of AGENTS.md.
 4. The selection is recorded in Project decisions as one line,
    `Profiles: software, scientific, ...`. A test can check that every name in
