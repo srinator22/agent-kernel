@@ -240,6 +240,10 @@ git checkout -q -b mine
 adr 0003-mine.md 0003 2026-01-05 accepted
 # Without a fetch the comparison has no origin/main to read.
 git update-ref -d refs/remotes/origin/main
+# The quick lanes skip the fetch and say so; the full gate compares.
+QUICK=1 run ./scripts/adr.sh check
+assert_rc "QUICK=1 skips the origin comparison" 0
+assert_contains "the quick skip is said" "adr: origin check skipped: quick lane (QUICK=1); the full check.sh compares new numbers with the default branch"
 run ./scripts/adr.sh check
 assert_rc "a new number already taken on origin/main fails" 1
 assert_contains "the collision and the fix are named" "docs/decisions/0003-mine.md: number 0003 is already taken on origin/main by docs/decisions/0003-theirs.md; number the ADRs this branch adds from 0004 (after origin/main's last, 0003): git mv the file and fix its title line"

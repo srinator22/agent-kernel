@@ -115,6 +115,12 @@ stray_check() {
 origin_check() {
   local head branch ref remote_files f base num other added=0 collide=0 rmax=0 n
   local fetch=(git fetch -q --no-tags)
+  # The quick lanes (check.sh --quick and --fast, the stop gate's quickgate)
+  # run often against a short budget; a network fetch belongs to the full gate.
+  if [[ "${QUICK:-0}" == 1 ]]; then
+    echo "adr: origin check skipped: quick lane (QUICK=1); the full check.sh compares new numbers with the default branch"
+    return 0
+  fi
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "adr: origin check skipped: not a git repository; new numbers were not compared with the default branch"
     return 0
