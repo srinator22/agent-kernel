@@ -1,0 +1,16 @@
+# tests/BUDGET - caps test-code growth (scripts/test-budget.sh, docs/procedures/tests.md "Test audit").
+# Lines, one per field; blank lines and # comments are ignored.
+#   paths: <space-separated globs>   the test files counted (git pathspec globs, relative to the
+#                                    repository root; tracked and untracked files both count).
+#                                    A project edits this for its own suites.
+#   ceiling: <N>                     non-blank test lines the suite holds today.
+#   allowance: <N>                   net new lines a change may add above the ceiling with no record.
+#   raise: <old>-><new> <YYYY-MM-DD> <reason>
+#                                    one per ceiling increase, oldest first, reason required. To pass
+#                                    a larger addition, set ceiling: to the new count in the same
+#                                    change and add the raise line.
+# `check` fails when the count exceeds ceiling + allowance. Deleting or consolidating duplicate
+# tests lowers the count; lower ceiling: to the new count when a pass has removed lines.
+paths: tests/template/*.sh tests/template/fixtures/*
+ceiling: 11058
+allowance: 400
