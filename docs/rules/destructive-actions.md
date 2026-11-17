@@ -22,7 +22,7 @@ steps, in order:
 7. Verify the result afterward and report exactly what was removed or
    changed, and how to recover it.
 
-In Claude Code, `scripts/destructive-guard.sh` (PreToolUse) refuses, before
+In Claude Code and Codex, `scripts/destructive-guard.sh` (PreToolUse) refuses, before
 they run: removal of filesystem roots, the home directory, the workspace
 and their ancestors (any spelling), bare globs, a glob under an unresolved
 variable, a recursive variable path or `.git` removal, the git forms of

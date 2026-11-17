@@ -14,9 +14,9 @@
   pull requests only when the change touches its files, decided by a
   `paths` job inside the same workflow, and skips private repositories
   where its minutes are billed.
-- A pull request that changes a gate file (check.sh, the self-test
-  runner, the reviewer brief, the workflows) needs the `gate-change`
-  label, added by a human who reviewed the gate change (ADR 0018).
+- A pull request that changes a gate file (the gate files the ci.yml
+  `paths` job lists) needs the `gate-change` label, added by a human who
+  reviewed the gate change (ADR 0018).
 - Cache keys include the lockfile hash and the toolchain version so a
   stale cache cannot mask breakage.
 - On failure, upload diagnostic artifacts (logs, reports) with no secrets

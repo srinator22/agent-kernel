@@ -82,3 +82,8 @@ Owner checklist for the first Codex session in a project:
    continues it once. Look at how the rollout records that continuation;
    `scripts/dream.sh digest` must show no signal for it.
 6. `scripts/dream.sh digest` lists signals from the Codex session.
+
+## Amendment 2026-11-18
+
+The Decision's "four scripts" reads five since ADR 0015 added the shell-stdin
+hook (`/hooks` lists five, as the owner checklist says).

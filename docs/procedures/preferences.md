@@ -7,7 +7,7 @@ baselines, and checking a first draft before the owner sees it.
 
 ## What is captured
 
-In Claude Code, the UserPromptSubmit hook `scripts/feedback-log.sh` appends
+In Claude Code and Codex, the UserPromptSubmit hook `scripts/feedback-log.sh` appends
 every owner message to `.work/feedback/log.jsonl` in the main checkout, shared
 by every worktree. Each line holds the time, branch, task, a script guess of
 the kind (deferral, correction, preference, approval or message), the text,

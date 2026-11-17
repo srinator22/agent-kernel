@@ -39,7 +39,6 @@ These rules govern process. Project truth lives in the Project decisions section
 
 ## Response shape
 
-- Lead with the result or next action.
 - Keep active steps bounded and visible.
 - Finish the primary issue before presenting secondary issues separately.
 - Distinguish confirmed causes from hypotheses; never present an inference as evidence.

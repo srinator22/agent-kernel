@@ -15,10 +15,19 @@ SHA is terminal-success (kernel rule 5).
    `check.sh: verified tree <id>` (`scripts/tree-id.sh`: the whole working
    tree, untracked files included, except `.work/` and `CHANGELOG.md`), so
    step 1 must leave nothing in the tree that the commit will not carry.
-   While working, `./scripts/check.sh --fast` runs lint, the secret scan
-   and only the self-tests the changed files map to; it is not the full
+   While working, `./scripts/check.sh --fast` runs the quick lane
+   (`--quick`: no mutation or production build, no ship-readiness lint)
+   with only the self-tests the changed files map to; it is not the full
    gate. A pull request that changes a gate file needs the `gate-change`
    label from the owner (ADR 0018); agents never add it.
+   In the template repository the full suite runs on CI (local runs take
+   20-60 minutes on Windows), so the log of the `check` job for the exact
+   head, ending with its `check.sh: verified tree <id>` line, is an
+   acceptable verify output there.
+   3a. A project with a `verify` skill (SW-15, template ADR 0016) runs it
+   for any change that alters what the app does, shows or returns, and
+   records a `verify:` line in the `.work/TASK.md` Progress log before
+   step 4.
 4. Reviewer gate: hand the reviewer agent the diff, `.work/TASK.md`, the
    verify output from step 3, complete and untruncated (never a summary of
    it), and the output of `scripts/lessons.sh match <the diff file or git
@@ -31,7 +40,9 @@ SHA is terminal-success (kernel rule 5).
    after the review needs a new one (make "Pending re-review" the first
    line of the section, run step 3 again, record the new verdict first).
    Quick-mode tasks may skip the reviewer only if the diff touches no logic
-   (docs or config comments), and must say so explicitly.
+   (docs or config comments), and must say so explicitly. Once the verdict is
+   recorded, `scripts/tasklint.sh final` must pass: it is `ship` plus a
+   required PASS verdict, waived only for `Mode: quick`.
 5. Regenerate `CHANGELOG.md` via git-cliff. Never hand-edit it; the detail
    lives in commit bodies (kernel rule 18).
 6. Conventional commit. The body carries why, and for fixes the exact

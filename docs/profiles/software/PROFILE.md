@@ -16,9 +16,11 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
 - SW-3 No tracked text file contains an en dash (U+2013) or em dash (U+2014);
   vendored and captured third-party files are listed as exempt in one place.
 - SW-4 Tests are deterministic: no wall-clock races, no unseeded randomness,
-  no network, no test-order dependence; a flaky test is quarantined in
-  `docs/lessons/QUARANTINE.md` and fixed as its own task.
-- SW-5 A bug found after merge gets a failing regression test before the fix.
+  no network, no test-order dependence; a flaky test is listed in
+  `tests/quarantine.list`, recorded in `docs/lessons/QUARANTINE.md` and
+  fixed as its own task.
+- SW-5 A bug gets a failing regression test before the fix, recorded per
+  `docs/procedures/bugfix.md`.
 - SW-6 The reviewer is a fresh-context agent given the diff and the acceptance
   criteria, not the author's conclusions; the verdict is recorded in
   `.work/TASK.md` by the reviewer only.

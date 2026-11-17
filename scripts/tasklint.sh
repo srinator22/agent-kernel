@@ -6,6 +6,10 @@
 # Usage:
 #   scripts/tasklint.sh check    problems that are wrong at any time
 #   scripts/tasklint.sh ship     check, plus problems that block calling the task done
+#   scripts/tasklint.sh final    ship, plus a required PASS review verdict (any
+#                                mode but quick); run once the reviewer has recorded it.
+#                                ship cannot demand it: check.sh runs ship before the
+#                                review, and the reviewer needs check.sh's tree line.
 # Set TASKLINT_FILE to read another file (default .work/TASK.md, resolved from
 # the repo root). Evidence paths also resolve from the repo root.
 #
@@ -34,7 +38,7 @@
 #                verdict (rounds newest first), PASS or FAIL as a word. The first
 #                "Reviewed tree: <id>" line in the section (a leading "- " or
 #                bold markers allowed) names the tree the reviewer saw.
-# ship also fails every [open] assumption unless the mode is quick, and a PASS
+# ship (and final) also fail every [open] assumption unless the mode is quick, and a PASS
 # review verdict whose tree is missing or differs from scripts/tree-id.sh now
 # (a change after the review); a FAIL or other first line is not compared, nor
 # is a record under .work/done/.
@@ -47,13 +51,13 @@ cd "$ROOT"
 FILE="${TASKLINT_FILE:-.work/TASK.md}"
 
 usage() {
-  echo "usage: scripts/tasklint.sh check | ship" >&2
+  echo "usage: scripts/tasklint.sh check | ship | final" >&2
   exit 2
 }
 
 [[ $# -eq 1 ]] || usage
 case "$1" in
-  check|ship) MODE="$1" ;;
+  check|ship|final) MODE="$1" ;;
   *) usage ;;
 esac
 
@@ -260,7 +264,7 @@ problem() {
   probs=$((probs + 1))
 }
 
-analysis="$(awk "$AWK_STRIP" "$FILE" | awk -v lintmode="$MODE" "$AWK_ANALYZE")"
+analysis="$(awk "$AWK_STRIP" "$FILE" | awk -v lintmode="${MODE/final/ship}" "$AWK_ANALYZE")"
 
 while IFS= read -r rec; do
   IFS="$SEP" read -r kind a b c <<< "$rec"
@@ -305,7 +309,7 @@ done <<< "$analysis"
 case "$FILE" in
   .work/done/*|*/.work/done/*) rvstate=archived ;;
 esac
-if [[ "$MODE" == ship && "${rvstate:-empty}" == pass ]]; then
+if [[ "$MODE" != check && "${rvstate:-empty}" == pass ]]; then
   if [[ -z "${rvtree:-}" ]]; then
     problem "review verdict is PASS but names no reviewed tree; the reviewer copies the \"check.sh: verified tree <id>\" line of the verify output into its verdict as \"Reviewed tree: <id>\" (docs/procedures/ship.md step 4)"
   elif ! now_tree="$(bash "$ROOT/scripts/tree-id.sh" 2>&1)"; then
@@ -313,6 +317,12 @@ if [[ "$MODE" == ship && "${rvstate:-empty}" == pass ]]; then
   elif [[ "$now_tree" != "$rvtree" ]]; then
     problem "review verdict covers tree $rvtree but the working tree is now $now_tree: files changed after the review. Re-review: make \"Pending re-review\" the first line of the Review verdict section, run ./scripts/check.sh, and record the new verdict first (docs/procedures/ship.md step 4)"
   fi
+fi
+
+# final: kernel rule 5 wants an independent PASS verdict; only a quick-mode task
+# may go without one. A record under .work/done/ was judged when it shipped.
+if [[ "$MODE" == final && "$taskmode" != quick && "${rvstate:-empty}" != pass && "${rvstate:-empty}" != archived ]]; then
+  problem "no PASS review verdict (the first line of \"## Review verdict\" is ${rvstate:-empty}); hand the reviewer the diff, .work/TASK.md and the verify output and record its verdict, or set Mode: quick for a change that touches no logic (docs/procedures/ship.md step 4)"
 fi
 
 if (( probs > 0 )); then

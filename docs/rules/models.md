@@ -10,15 +10,15 @@ Tiers:
 - inherit: the advisor's own model, for roles that are the advisor's
   judgment (the reviewer is inherit or strong).
 
-Tier to model mapping lives only in harness config: `model:` in
-`.claude/agents/*.md` and `.codex/agents/*.toml`; update it there when
+Tier to model mapping lives only in `model:` of `.claude/agents/*.md`;
+Codex agents set none and inherit the session model. Update it there when
 models change.
 
 Harness adapters:
 - Claude Code: hooks (commit block, session context, feedback capture),
   agents, skills, background tasks, workflows. VERIFY 2026-11-08.
 - Codex: agents in `.codex/agents/*.toml`, skills in `.agents/skills`, the
-  same four hooks in `.codex/hooks.json` (Windows through
+  same five hooks in `.codex/hooks.json` (Windows through
   `scripts/codex-hook.cmd`), run once the owner trusts the project and its
   hooks; no per-agent hooks, so the worker no-commit rule is prose plus the
   advisor gate (template ADR 0014). VERIFY 2026-11-10.
@@ -29,8 +29,8 @@ Parity rule:
 - `.claude/skills` and `.agents/skills` stay byte-identical; check.sh
   compares them.
 - Every Claude agent has a Codex counterpart, or the reason it has none
-  is recorded. explore: no Codex counterpart, Codex's built-in explorer is
-  used (recorded reason).
+  is recorded. explore: no Codex counterpart; use Codex's built-in explorer
+  or the library's explorer.toml (recorded reason).
 - A one-harness capability is an accelerator; procedures work without it.
 
 Every claim about harness limits (caps, hook support, tool names, settings

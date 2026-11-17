@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# stop-gate.sh - Claude Code Stop hook body: the agent cannot end a turn on a
-# broken task state, and cannot call a task finished while the quick gate is
-# red. Mechanizes part of kernel rule 5 ("done is layered") for Claude Code;
-# other harnesses keep the prose rule and the ship procedure.
+# stop-gate.sh - Stop hook body (Claude Code; Codex runs it too through
+# .codex/hooks.json): the agent cannot end a turn on a broken task state, and
+# cannot call a task finished while the quick gate is red. Mechanizes part of
+# kernel rule 5 ("done is layered"); other harnesses keep the prose rule and
+# the ship procedure.
 # Input: the Stop hook payload (JSON) on stdin.
 # Behaviour, in order:
 #   1. "stop_hook_active": true (this turn already continued once because of a
