@@ -225,6 +225,55 @@ assert_file_has "the project line survives --resolved" docs/procedures/p.md "plu
 assert_file_has "the sync is recorded" docs/lessons/MAINTENANCE.log "template-sync: v2 2026-10-09"
 git reset -q --hard keep-before-h && git clean -qfd -e .work/template-sync >/dev/null 2>&1
 
+# ---- kernel change pending: non-kernel files still sync; --accept-kernel is the owner's explicit step ----
+# Conflicts merged by hand, kernel left at v1: the template kernel v2 is pending.
+kbranch() { git reset -q --hard "$1" && git clean -qfd -e .work/template-sync >/dev/null 2>&1; }
+put docs/procedures/p.md "procedure p v2"
+put docs/profiles/embedded/PROFILE.md "embedded v2"
+proj_commit "conflicts merged, kernel still v1"
+git branch -q kbase
+run ./scripts/template-sync.sh --template "$TPL" --ref v2
+assert_rc "a pending kernel change exits 1" 1
+assert_contains "the kernel change is announced" "KERNEL CHANGE"
+assert_eq "non-kernel files are still applied" "echo a v2" "$(cat scripts/a.sh)"
+assert_file_has "the kernel is left alone" AGENTS.md "Kernel v1."
+assert_contains "the sync is not recorded while the kernel is pending" "sync NOT recorded"
+assert_file_lacks "the log keeps the old ref as the base" docs/lessons/MAINTENANCE.log "v2"
+kbranch kbase
+run ./scripts/template-sync.sh --template "$TPL" --ref v2 --accept-kernel
+assert_rc "--accept-kernel on an unmodified kernel exits 0" 0
+assert_eq "exactly one acceptance line" "1" "$(printf '%s\n' "$OUT" | grep -c 'kernel accepted verbatim from v2 under --accept-kernel')"
+assert_file_has "the template kernel is in AGENTS.md" AGENTS.md "Kernel v2."
+assert_file_has "the rules index is not touched" AGENTS.md "rule index v1"
+run ./scripts/kernel-hash.sh --verify
+assert_rc "the kernel hash was updated" 0
+assert_file_has "the sync is recorded" docs/lessons/MAINTENANCE.log "template-sync: v2 2026-10-09"
+kbranch kbase
+run ./scripts/template-sync.sh --template "$TPL" --ref v2 --accept-kernel --dry-run
+assert_contains "a dry run never accepts" "KERNEL CHANGE"
+assert_file_has "dry run left the kernel alone" AGENTS.md "Kernel v1."
+# The three refusals: AGENTS.md keeps its kernel and the reason is named.
+kstop() { # name reason-needle
+  run ./scripts/template-sync.sh --template "$TPL" --ref v2 --accept-kernel
+  assert_rc "$1: exits 1" 1
+  assert_contains "$1: KERNEL CHANGE" "KERNEL CHANGE"
+  assert_contains "$1: the reason is named" "$2"
+  assert_file_lacks "$1: AGENTS.md is not changed" AGENTS.md "Kernel v2."
+  kbranch kbase
+}
+git rm -q docs/lessons/MAINTENANCE.log && proj_commit "no log"
+kstop "no recorded sync" "no recorded sync line"
+put docs/lessons/MAINTENANCE.log "template-sync: nosuchref 2026-09-01" && proj_commit "unknown ref"
+kstop "recorded ref missing" "missing from the template"
+put_agents "Kernel custom." "rule index v1" && ./scripts/kernel-hash.sh --update >/dev/null && proj_commit "customized kernel"
+kstop "customized kernel" "customized"
+sed -i 's/$/\r/' AGENTS.md && proj_commit "CRLF checkout"
+run ./scripts/template-sync.sh --template "$TPL" --ref v2 --accept-kernel
+assert_rc "a CRLF-only difference counts as equal" 0
+assert_file_has "the kernel is accepted into the CRLF file" AGENTS.md "Kernel v2."
+assert_eq "the file keeps its CRLF line endings" "$(wc -l < AGENTS.md | tr -d ' ')" "$(grep -c $'\r' AGENTS.md)"
+kbranch keep-before-h
+
 # ---- resolve by hand: conflicts and kernel merged ----
 put docs/procedures/p.md "procedure p v2"
 put docs/profiles/embedded/PROFILE.md "embedded v2"
@@ -388,7 +437,8 @@ assert_file_has "shared history prints the merge-base" "$FIX/shared.out" "shared
 assert_file_has "the merge-base is the commit the project came from" "$FIX/shared.out" "$(git -C "$TPL" log -1 --format=%h v1)"
 # A real apply with --baseline (the shared clone has no sync record) on a
 # working branch: untouched files update and the sync is recorded normally.
-(cd "$SHARED" && git checkout -q -b sync-base && ./scripts/template-sync.sh --template "$TPL" --ref v2 --baseline v1 > "$FIX/shared.apply" 2>&1)
+# The kernel already matches v2 here: a pending kernel change would (rightly) leave the sync unrecorded.
+(cd "$SHARED" && git checkout -q -b sync-base && sed -i 's/Kernel v1\./Kernel v2./' AGENTS.md && ./scripts/kernel-hash.sh --update >/dev/null   && git add -A -- . ":!.work" && git -c user.name=t -c user.email=t@example.invalid commit -q -m "kernel at v2" && ./scripts/template-sync.sh --template "$TPL" --ref v2 --baseline v1 > "$FIX/shared.apply" 2>&1)
 assert_file_has "a real apply names the baseline" "$FIX/shared.apply" "previous version v1 from --baseline"
 assert_file_has "an untouched file is updated against the baseline" "$SHARED/scripts/a.sh" "echo a v2"
 assert_file_has "the sync is recorded normally after --baseline" "$SHARED/docs/lessons/MAINTENANCE.log" "template-sync: v2 2026-10-09"
@@ -662,6 +712,7 @@ chmod +x scripts/*.sh
 # .start-done puts --status in project mode; without it the template-mode
 # short-circuit would make the status assertions below check nothing.
 touch .start-done
+sed -i 's/Kernel v1\./Kernel v2./' AGENTS.md
 ./scripts/kernel-hash.sh --update >/dev/null
 proj_commit "project at template-v0.2.0"
 git checkout -q -b sync-real
