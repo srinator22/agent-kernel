@@ -314,12 +314,13 @@ def names_path(named, path):
     return path == named or path.endswith("/" + named) or named.endswith("/" + path)
 
 
-def main_worktree(root):
+def main_worktree(root, timeout=10):
     """The main worktree of root's repository, so every linked worktree shares
-    one state folder; root itself outside git or when it cannot be resolved."""
+    one state folder; root itself outside git or when it cannot be resolved
+    within timeout seconds (a hook caller passes its own smaller budget)."""
     try:
         r = subprocess.run(["git", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return root
     out = r.stdout.strip()
@@ -1151,9 +1152,9 @@ def outcome_text(c, path, applied, s):
                      + ["Unchanged: %s" % (", ".join(same) or "none"), ""])
 
 
-def feedback_dir(root):
+def feedback_dir(root, timeout=10):
     """The folder feedback.py writes to: the main checkout's .work/feedback."""
-    return os.path.join(main_worktree(root), ".work", "feedback")
+    return os.path.join(main_worktree(root, timeout), ".work", "feedback")
 
 
 def read_log_lines(path, off):
