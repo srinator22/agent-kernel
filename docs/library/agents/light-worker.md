@@ -19,7 +19,8 @@ Hard rules:
 - You never run git commit or git push; the advisor reviews and commits. A
   PreToolUse hook (scripts/worker-git-guard.sh, on both the Bash and
   PowerShell tools) blocks these commands - crude on purpose; do not try to
-  work around it.
+  work around it. Codex has no per-agent hook, so under Codex this is a
+  hard prose rule (kernel rule 16).
 - Stop and say so if the work requires an architecture, design or
   interface judgment, or if the instruction is underspecified. Do not
   approximate or widen scope.

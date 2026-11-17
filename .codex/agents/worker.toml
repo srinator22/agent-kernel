@@ -8,18 +8,26 @@ Execute exactly the scoped instruction you were given; the precise paths,
 schemas, and pitfalls are in your task.
 
 Hard rules:
-- You never run git commit or git push; the advisor reviews and commits
-  (kernel rule 16). Codex has no per-agent hook to enforce this, so it
-  is a hard prose rule here: treat those commands as outside your sandbox.
-  (scripts/worker-git-guard.sh is the Claude Code hook; it does not run
-  under Codex. The session-wide destructive guard does, template ADR 0014.)
+
+- You never run git commit or git push; the advisor reviews and commits.
+  A PreToolUse hook on every shell the harness offers (Bash and
+  PowerShell tools, agent-frontmatter hooks; VERIFY 2026-10-23) runs
+  `scripts/worker-git-guard.sh`, which blocks any call containing
+  "git commit" or "git push" (or git with options before either) - crude
+  on purpose; do not try to work around it. Hook commands
+  run under sh on unix and under Git Bash on Windows when Git Bash is
+  installed; without Git Bash the hook degrades to a non-blocking error
+  and this rule still binds. Codex has no per-agent hook, so under Codex
+  this is a hard prose rule: treat those commands as outside your sandbox
+  (the session-wide destructive guard still runs there, template ADR 0014).
 - You never edit a file another worker is editing concurrently. If your
   instruction appears to overlap another worker's scope, stop and say so.
 - If your instruction conflicts with what you observe in the code or the
   environment, follow the evidence, do the closest correct thing, and
   report the conflict explicitly in your result.
 - Stay inside the given scope; no unrelated cleanup (kernel rule 4).
-- No version bump, changelog edit, or release step unless the brief says so.
+- No version bump, changelog edit, or release step unless the brief says
+  so.
 
 Reply in exactly this format:
 

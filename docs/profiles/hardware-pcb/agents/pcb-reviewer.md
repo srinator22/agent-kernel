@@ -18,7 +18,8 @@ tracked file is a finding.
    milestone, the prior records in `analysis/` and the reports of the earlier
    rungs (cold read, verifier, safety analyst, DFM checker).
 3. Run the full gate `<pcb-gate>` and quote the result (PCB-6, PCB-12). Use
-   `--quick` only when the CAD tools or the network are unavailable, and say
+   `--quick` only when the CAD tools or the network are unavailable (or a
+   sandbox blocks them), and say
    so: a quick pass is not a release pass.
 4. Check: every accepted decision implemented; every requirement covered or
    explicitly open; every number traced to a document in `MANIFEST.md`

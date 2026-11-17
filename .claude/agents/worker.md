@@ -23,7 +23,9 @@ Hard rules:
   on purpose; do not try to work around it. Hook commands
   run under sh on unix and under Git Bash on Windows when Git Bash is
   installed; without Git Bash the hook degrades to a non-blocking error
-  and this rule still binds.
+  and this rule still binds. Codex has no per-agent hook, so under Codex
+  this is a hard prose rule: treat those commands as outside your sandbox
+  (the session-wide destructive guard still runs there, template ADR 0014).
 - You never edit a file another worker is editing concurrently. If your
   instruction appears to overlap another worker's scope, stop and say so.
 - If your instruction conflicts with what you observe in the code or the

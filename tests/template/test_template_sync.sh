@@ -47,7 +47,7 @@ mkdir -p "$TPL" && cd "$TPL" || exit 1
 git init -q . >/dev/null 2>&1
 git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
 mkdir -p scripts
-cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" scripts/
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/profiles.sh" scripts/
 put scripts/a.sh "echo a v1"
 put scripts/obsolete.sh "echo obsolete"
 put tests/template/t.sh "echo t v1"
@@ -433,7 +433,7 @@ mkdir -p "$TPL3" && cd "$TPL3" || exit 1
 git init -q . >/dev/null 2>&1
 git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
 mkdir -p scripts
-cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" scripts/
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" "$T_ROOT/scripts/profiles.sh" scripts/
 put_agents "Kernel v1." "rule index v1"
 sed -i.bak "s|^- Template:.*|- Template: $TPL3 v1|" AGENTS.md && rm -f AGENTS.md.bak
 for s in adr maintain retro ship start template-update; do put_skill "$s"; done
@@ -477,6 +477,160 @@ run ./scripts/template-sync.sh --template "$TPL3" --ref v3
 assert_not_contains "a lessons.sh without the skills command is no cap breach" "ACTION: skills cap"
 assert_contains "a cap that could not be counted is reported" "template-sync: skills cap not checked: scripts/lessons.sh skills exited 2"
 assert_rc "a sync whose cap could not be counted exits 1" 1
+assert_not_contains "a lessons.sh with no CORE_SKILLS line retires nothing" "RETIRED CORE SKILL"
+cd "$PRJ" || exit 1
+
+# ---- (p2) a core skill a later release retires (ADR 0012 amendment) ----
+# v2 drops template-update from CORE_SKILLS and removes its folders; the
+# project keeps its folder, which now counts as a project skill and is named.
+TPL4="$FIX/template4"
+PRJ4="$FIX/project4"
+mkdir -p "$TPL4" && cd "$TPL4" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
+mkdir -p scripts
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/lessons.sh" "$T_ROOT/scripts/profiles.sh" scripts/
+put_agents "Kernel v1." "rule index v1"
+sed -i.bak "s|^- Template:.*|- Template: $TPL4 v1|" AGENTS.md && rm -f AGENTS.md.bak
+for s in adr dream maintain retro ship start template-update; do put_skill "$s"; done
+commit_all v1 && git tag v1
+sed -i.bak 's/^CORE_SKILLS=(.*)$/CORE_SKILLS=(adr dream maintain retro ship start)/' scripts/lessons.sh && rm -f scripts/lessons.sh.bak
+git rm -q -r .claude/skills/template-update .agents/skills/template-update
+commit_all v2 && git tag v2
+mkdir -p "$PRJ4" && cd "$PRJ4" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email p@example.invalid; git config user.name p; git config core.autocrlf false
+git -C "$TPL4" archive --format=tar v1 | tar -x -C "$PRJ4"
+put_skill own1
+put docs/lessons/MAINTENANCE.log "template-sync: v1 2026-09-01"
+chmod +x scripts/*.sh
+./scripts/kernel-hash.sh --update >/dev/null
+proj_commit "project at v1"
+git checkout -q -b sync-retired
+run ./scripts/template-sync.sh --template "$TPL4" --ref v2 --dry-run
+assert_contains "a dry run names the retired core skill the project keeps" "RETIRED CORE SKILL: template-update  (.claude/skills/template-update is kept but no longer a template core skill; it now counts as a project skill (ADR 0012)"
+assert_contains "its template files are removed upstream, never deleted" "REMOVED   .claude/skills/template-update/SKILL.md"
+assert_not_contains "a skill still in the core list is not retired" "RETIRED CORE SKILL: start"
+run ./scripts/template-sync.sh --template "$TPL4" --ref v2
+assert_contains "a real run names the retired core skill" "RETIRED CORE SKILL: template-update"
+assert_contains "the retired skill counts as a project skill" "template-sync: skills: 8 (cap 8 = 6 core + 2 project"
+assert_rc "a retired skill within the project slots exits 0" 0
+assert_file_has "the retired skill folder is kept" .claude/skills/template-update/SKILL.md "# template-update"
+proj_commit "sync to v2"
+put_skill own2
+proj_commit "a second project skill"
+run ./scripts/template-sync.sh --template "$TPL4" --ref v2 --baseline v1
+assert_contains "a full project with a retired skill is named and over its cap" "RETIRED CORE SKILL: template-update"
+assert_contains "the cap breach is an action item" "ACTION: skills cap: .claude/skills has 9 skills; the cap is 8"
+assert_rc "a retired skill that takes the project over its cap exits 1" 1
+proj_commit "the over-cap sync"
+# The project archived the retired skill: nothing to name. The project's own
+# lessons.sh is v2's now and v2 is the baseline, so only the old list says it.
+mkdir -p "$FIX/archive4/claude" "$FIX/archive4/agents"
+mv .claude/skills/template-update "$FIX/archive4/claude/"
+mv .agents/skills/template-update "$FIX/archive4/agents/"
+proj_commit "archive the retired skill"
+run ./scripts/template-sync.sh --template "$TPL4" --ref v2 --baseline v1 --dry-run
+assert_not_contains "an archived retired skill is not named" "RETIRED CORE SKILL"
+cd "$PRJ" || exit 1
+
+# ---- (q) installed items: the ledger docs/installed.list ----
+# Library, roster and profile items a project copied into its own folders sync
+# from their template source under the same three-way rules, and the catalog
+# folder itself need not be carried.
+TPL5="$FIX/template5"
+PRJ5="$FIX/project5"
+mkdir -p "$TPL5" && cd "$TPL5" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email t@example.invalid; git config user.name t; git config core.autocrlf false
+mkdir -p scripts
+cp "$T_ROOT/scripts/kernel-hash.sh" "$T_ROOT/scripts/template-sync.sh" "$T_ROOT/scripts/profiles.sh" scripts/
+put_agents "Kernel v1." "rule index v1"
+sed -i.bak "s|^- Template:.*|- Template: $TPL5 v1|" AGENTS.md && rm -f AGENTS.md.bak
+put docs/library/agents/x.md "x v1"
+put docs/library/skills/s/SKILL.md "s v1"
+put docs/roster/agents/r.md "r v1"
+put docs/library/agents/gone.md "gone v1"
+put docs/profiles/software/agents/p.md "p v1"
+put .claude/agents/core.md "core v1"
+commit_all v1 && git tag v1
+put docs/library/agents/x.md "x v2"
+put docs/library/skills/s/SKILL.md "s v2"
+put docs/roster/agents/r.md "r v2"
+git rm -q docs/library/agents/gone.md
+put docs/library/agents/new.md "new v2"
+put docs/profiles/software/agents/p.md "p v2"
+commit_all v2 && git tag v2
+mkdir -p "$PRJ5" && cd "$PRJ5" || exit 1
+git init -q . >/dev/null 2>&1
+git config user.email p@example.invalid; git config user.name p; git config core.autocrlf false
+git -C "$TPL5" archive --format=tar v1 | tar -x -C "$PRJ5"
+mv docs/library "$FIX/library5-not-carried"
+mv docs/roster "$FIX/roster5-not-carried"
+put .claude/agents/x.md "x v1"
+put .claude/skills/s/SKILL.md "s v1 edited by the project"
+put .claude/agents/r.md "r v2"
+put .claude/agents/gone.md "gone v1"
+put .codex/agents/p.md "p v1"
+printf '%s\r\n' '# installed items: <project path> <template path>' '' \
+  '.claude/agents/x.md docs/library/agents/x.md' \
+  '.claude/skills/s/SKILL.md   docs/library/skills/s/SKILL.md  # edited here' \
+  '.claude/agents/r.md docs/roster/agents/r.md' \
+  '.claude/agents/gone.md docs/library/agents/gone.md' \
+  '.claude/agents/new.md docs/library/agents/new.md' \
+  '.codex/agents/p.md docs/profiles/software/agents/p.md' > docs/installed.list
+put docs/lessons/MAINTENANCE.log "template-sync: v1 2026-09-01"
+chmod +x scripts/*.sh
+./scripts/kernel-hash.sh --update >/dev/null
+proj_commit "project at v1"
+git checkout -q -b sync-installed
+run ./scripts/template-sync.sh --template "$TPL5" --ref v2 --dry-run
+assert_contains "the ledger is read (CRLF, comments, blank lines)" "template-sync: 6 installed item(s) in docs/installed.list"
+assert_contains "an untouched installed copy is an update from its source" "UPDATE    .claude/agents/x.md  (project copy untouched since v1; template changed) [installed from docs/library/agents/x.md]"
+assert_contains "an edited installed copy is a conflict" "CONFLICT  .claude/skills/s/SKILL.md  (project edited and template differs; merge by hand, then rerun with --resolved) [installed from docs/library/skills/s/SKILL.md]"
+assert_contains "a source removed upstream is listed, never deleted" "REMOVED   .claude/agents/gone.md  (no longer in the template; review, then archive if unused) [installed from docs/library/agents/gone.md]"
+assert_contains "a source new in the template is added at the installed path" "ADD       .claude/agents/new.md  (new in the template) [installed from docs/library/agents/new.md]"
+assert_contains "a profile item installed by start syncs too" "UPDATE    .codex/agents/p.md"
+assert_not_contains "a copy equal to the new source is unchanged" ".claude/agents/r.md"
+assert_contains "the conflict diff is written for the installed path" "=== diff: .claude/skills/s/SKILL.md (project -> template) ==="
+assert_not_contains "the uncarried catalog itself is not synced" "docs/library/agents/x.md  ("
+assert_rc "a dry run with a ledger conflict exits 1" 1
+assert_file_has "a dry run applies nothing" .claude/agents/x.md "x v1"
+run ./scripts/template-sync.sh --template "$TPL5" --ref v2
+assert_file_has "the update is applied from the source" .claude/agents/x.md "x v2"
+assert_file_has "the added item lands at its installed path" .claude/agents/new.md "new v2"
+assert_file_has "the edited copy is kept" .claude/skills/s/SKILL.md "s v1 edited by the project"
+assert_file_has "the removed item is kept" .claude/agents/gone.md "gone v1"
+assert_no_file "the uncarried catalog is not created" docs/library
+assert_contains "a ledger conflict leaves the sync unrecorded" "sync NOT recorded"
+assert_rc "a real run with a ledger conflict exits 1" 1
+# Malformed lines stop the run (exit 2) before anything is written; forms
+# refused (L012), each alone in the ledger.
+cp docs/installed.list "$FIX/ledger5"
+bad_ledger() { # name line message
+  printf '%s\n' "$2" > docs/installed.list
+  run ./scripts/template-sync.sh --template "$TPL5" --ref v2 --dry-run
+  assert_rc "ledger refuses $1" 2
+  assert_contains "ledger names the line for $1" "template-sync: docs/installed.list:1: $3"
+}
+bad_ledger "one field" ".claude/agents/x.md" "want exactly"
+bad_ledger "three fields" ".claude/agents/x.md docs/library/agents/x.md extra" "want exactly"
+bad_ledger "an absolute path" "/etc/x docs/library/agents/x.md" "paths must be relative"
+bad_ledger "a parent part" ".claude/../x.md docs/library/agents/x.md" "paths must be relative"
+bad_ledger "a backslash path" '.claude\agents\x.md docs/library/agents/x.md' "paths must be relative"
+bad_ledger "a source outside the catalogs and profiles" ".claude/agents/x.md scripts/a.sh" "the template path must be under"
+bad_ledger "a project path inside a catalog" "docs/library/agents/x.md docs/library/agents/x.md" "the project path must be outside"
+bad_ledger "AGENTS.md as the project path" "AGENTS.md docs/library/agents/x.md" "the project path is a file template-sync never applies"
+bad_ledger "a lessons header file" "docs/lessons/INDEX.md docs/library/agents/x.md" "the project path is a file template-sync never applies"
+bad_ledger "a core file" "CLAUDE.md docs/library/agents/x.md" "the project path is a template core file"
+printf '%s\n' ".claude/agents/x.md docs/library/agents/x.md" ".claude/agents/x.md docs/roster/agents/r.md" > docs/installed.list
+run ./scripts/template-sync.sh --template "$TPL5" --ref v2 --dry-run
+assert_rc "ledger refuses a duplicate project path" 2
+assert_contains "the duplicate is named on its line" "docs/installed.list:2: the project path is listed twice"
+printf '%s' ".claude/agents/x.md docs/library/agents/x.md" > docs/installed.list
+run ./scripts/template-sync.sh --template "$TPL5" --ref v2 --dry-run
+assert_contains "a last line without a newline is read" "template-sync: 1 installed item(s)"
+cp "$FIX/ledger5" docs/installed.list
 cd "$PRJ" || exit 1
 
 # ---- (r) a real run against a published tag: bare repo, URL transport ----

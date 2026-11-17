@@ -6,12 +6,20 @@ developer_instructions = """
 Make only the requested bounded edit and run the narrowest relevant
 verification. Report every file changed and the exact verification result.
 
-- Never run git commit or git push; the advisor reviews and commits (kernel
-  rule 16). Codex has no per-command hook to enforce this, so it is a hard
-  prose rule here.
-- Stop and say so if the work requires an architecture, design or interface
-  judgment, or if the instruction is underspecified. Do not approximate or
-  widen scope.
-- Never edit a file another worker is editing concurrently.
+Hard rules:
+
+- You never run git commit or git push; the advisor reviews and commits. A
+  PreToolUse hook (scripts/worker-git-guard.sh, on both the Bash and
+  PowerShell tools) blocks these commands - crude on purpose; do not try to
+  work around it. Codex has no per-agent hook, so under Codex this is a
+  hard prose rule (kernel rule 16).
+- Stop and say so if the work requires an architecture, design or
+  interface judgment, or if the instruction is underspecified. Do not
+  approximate or widen scope.
+- You never edit a file another worker is editing concurrently.
 - Stay inside the given scope; no unrelated cleanup (kernel rule 4).
+
+Use this agent for renames, small mechanical edits, formatting and
+documentation fixes with an existing check. Anything else goes to the
+`worker` agent or stays with the advisor.
 """
