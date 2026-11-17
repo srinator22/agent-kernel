@@ -34,7 +34,9 @@ tells you.
    history).
 6. For each lesson consulted during the task run
    `scripts/lessons.sh use <Lnnn>`; it increments `used:` and updates
-   `last:` in `docs/lessons/INDEX.md`.
+   `last:` in `docs/lessons/INDEX.md`. `approved:` is the approval date,
+   written once when the human moves an entry into INDEX.md; it never
+   changes.
 7. Fill the Retro section of `.work/TASK.md`; update `BACKLOG.md` (done
    items off, discovered items on, with reasons); move TASK.md to
    `.work/done/YYYY-MM-DD-<slug>.md`; reset `.work/TASK.md` from the

@@ -5,6 +5,8 @@
 #   use <Lnnn>     increment used: and set last: to today for one lesson
 #   expire         list lessons whose last: is older than 45 days or whose
 #                  retire-when contains [met]; --apply archives them
+#   archive <Lnnn> <reason>
+#                  archive one lesson with a one-line reason (kernel rule 11)
 #   stats          print counts
 #   skills         print the skills count and cap; exit 1 when over the cap
 #                  (scripts/template-sync.sh runs it after a sync)
@@ -15,20 +17,23 @@
 #                  over the given revisions (--staged and --cached allowed)
 #
 # INDEX.md line format (exactly as documented in docs/lessons/INDEX.md):
-#   - [L001] <description> - <lesson> (used: 0, last: -, retire-when: <condition>)
+#   - [L001] <description> - <lesson> (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>)
 # with an optional trigger as the last field (ADR 0017):
-#   (used: 0, last: -, retire-when: <condition>, trigger: <token> <token>...)
+#   (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>, trigger: <token> <token>...)
 # A token is <glob> or A:<glob>, M:<glob>, D:<glob>: a changed path matching the
 # glob, for A only an added path (a rename or copy adds its new path), M only a
 # modified one, D only a deleted one (a rename deletes its old path). The glob
 # is a bash pattern over the whole repo-relative path, so * also crosses "/".
-# last: is YYYY-MM-DD or "-". A lesson with last: "-" has no age and never
-# expires by age; set last: to the approval date when approving a lesson if you
-# want the 45-day clock to run. Lines inside code fences and the documented
+# last: is YYYY-MM-DD or "-". approved: is the YYYY-MM-DD date the lesson was
+# approved; it measures the age of a lesson that was never used (last: "-"), so
+# check and expire need it. Lines inside code fences and the documented
 # format placeholder (description starting with "<") are not lessons.
 #
-# check enforces: <= 20 approved lessons; every one carries all three fields
-# and a unique id; every PENDING.md entry carries its four fields; no
+# check enforces: <= 20 approved lessons; every one carries all four fields
+# (a missing or malformed approved: date is an error) and a unique id; a lesson
+# with used: 0 more than 45 days after its approved: date is an error (archive
+# it with expire --apply or record a use); a retire-when carrying [met] prints a
+# warning and does not fail; every PENDING.md entry carries its four fields; no
 # QUARANTINE.md entry older than 30 days without an owner task; .claude/skills
 # and .agents/skills identical; skill directories <= the template core skills
 # present (CORE_SKILLS, at most 8) + 2 project skills + profile skill sets
@@ -69,7 +74,7 @@ PROJECT_SKILLS=2
 US=$'\037'
 
 usage() {
-  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats | skills | core-skills | match <diff file | git revisions>" >&2
+  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | archive <Lnnn> <reason> | stats | skills | core-skills | match <diff file | git revisions>" >&2
   exit 2
 }
 
@@ -130,7 +135,10 @@ trigger_token_ok() {
   [[ -n "$g" && "$g" != *:* ]]
 }
 
-FIELD_RE='^-[[:space:]]\[(L[0-9]+)\][[:space:]](.*)\(used:[[:space:]]([0-9]+),[[:space:]]last:[[:space:]]([0-9]{4}-[0-9]{2}-[0-9]{2}|-),[[:space:]]retire-when:[[:space:]](.+)\)[[:space:]]*$'
+# Groups: 1 id, 2 text, 3 used, 4 last, 5 the whole "approved: X, " clause (empty
+# when absent, which check reports), 6 the approved value, 7 retire-when (with
+# any trigger).
+FIELD_RE='^-[[:space:]]\[(L[0-9]+)\][[:space:]](.*)\(used:[[:space:]]([0-9]+),[[:space:]]last:[[:space:]]([0-9]{4}-[0-9]{2}-[0-9]{2}|-),[[:space:]](approved:[[:space:]]*([^,]*),[[:space:]])?retire-when:[[:space:]](.+)\)[[:space:]]*$'
 
 # Entry blocks of PENDING/QUARANTINE: one line per entry,
 # "start<US>p1<US>v1<US>p2<US>v2..." where p is 1 when the label is present.
@@ -488,7 +496,7 @@ cmd_check() {
     approved_count=$((approved_count + 1))
     if [[ "$line" =~ $FIELD_RE ]]; then
       id="${BASH_REMATCH[1]}"
-      local last="${BASH_REMATCH[4]}" retire="${BASH_REMATCH[5]}"
+      local used="${BASH_REMATCH[3]}" last="${BASH_REMATCH[4]}" aclause="${BASH_REMATCH[5]}" approved="${BASH_REMATCH[6]}" retire="${BASH_REMATCH[7]}"
       if [[ "$seen" == *" $id "* ]]; then errs+=("INDEX.md line $lineno: duplicate lesson id $id"); fi
       seen="$seen$id "
       split_retire "$retire"
@@ -503,9 +511,22 @@ cmd_check() {
         done
       fi
       if [[ "$last" != "-" ]] && ! valid_date "$last"; then errs+=("INDEX.md line $lineno: $id has an invalid last: date '$last'"); fi
+      if [[ -z "$aclause" ]]; then
+        errs+=("INDEX.md line $lineno: $id has no approved: YYYY-MM-DD field (put it right after last:)")
+      elif ! valid_date "$approved"; then
+        errs+=("INDEX.md line $lineno: $id has a malformed approved: date '$approved' (expected YYYY-MM-DD)")
+      elif [[ "$used" == "0" ]]; then
+        local age=$(( $(day_number "$(today)") - $(day_number "$approved") ))
+        if (( age > EXPIRE_DAYS )); then
+          errs+=("INDEX.md line $lineno: $id has used: 0 and was approved $age days ago (> $EXPIRE_DAYS); archive it in a maintain pass (scripts/lessons.sh expire --apply) or record a use (scripts/lessons.sh use $id)")
+        fi
+      fi
+      if [[ "$retire" == *"[met]"* ]]; then
+        echo "lessons: warning - $id retire-when is marked [met]; archive it in a maintain pass (scripts/lessons.sh expire --apply)"
+      fi
     else
       id="$(printf '%s' "$line" | sed -n 's/^- \[\(L[0-9]*\)\].*/\1/p')"
-      errs+=("INDEX.md line $lineno: approved lesson ${id:-?} lacks the (used: N, last: ..., retire-when: ...) fields")
+      errs+=("INDEX.md line $lineno: approved lesson ${id:-?} lacks the (used: N, last: ..., approved: ..., retire-when: ...) fields")
     fi
   done < <(approved_lines)
   if (( approved_count > MAX_LESSONS )); then
@@ -673,16 +694,16 @@ rewrite_line() {
 cmd_use() {
   local want="${1:-}"
   [[ "$want" =~ ^L[0-9]+$ ]] || { echo "usage: scripts/lessons.sh use <Lnnn>" >&2; exit 2; }
-  local lineno line used last retire trimmed tail head now
+  local lineno line used last aclause retire trimmed tail head now
   while IFS="$US" read -r lineno line; do
     [[ -n "$lineno" ]] || continue
     if [[ "$line" =~ $FIELD_RE ]] && [[ "${BASH_REMATCH[1]}" == "$want" ]]; then
-      used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; retire="${BASH_REMATCH[5]}"
+      used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; aclause="${BASH_REMATCH[5]}"; retire="${BASH_REMATCH[7]}"
       trimmed="${line%"${line##*[![:space:]]}"}"
-      tail="(used: $used, last: $last, retire-when: $retire)"
+      tail="(used: $used, last: $last, ${aclause}retire-when: $retire)"
       head="${trimmed%"$tail"}"
       now="$(today)"
-      rewrite_line "$INDEX" "$lineno" "${head}(used: $((used + 1)), last: $now, retire-when: $retire)"
+      rewrite_line "$INDEX" "$lineno" "${head}(used: $((used + 1)), last: $now, ${aclause}retire-when: $retire)"
       echo "lessons: $want used: $((used + 1)), last: $now"
       return 0
     fi
@@ -698,7 +719,7 @@ cmd_expire() {
     --apply) apply=1 ;;
     *) usage ;;
   esac
-  local now now_dn lineno line found=0 never="" id last retire reason age
+  local now now_dn lineno line found=0 never="" id last approved retire reason age used
   now="$(today)"
   now_dn="$(day_number "$now")"
   # Collect first, apply bottom-up so line numbers stay valid.
@@ -706,12 +727,17 @@ cmd_expire() {
   while IFS="$US" read -r lineno line; do
     [[ -n "$lineno" ]] || continue
     [[ "$line" =~ $FIELD_RE ]] || continue
-    id="${BASH_REMATCH[1]}"; last="${BASH_REMATCH[4]}"; retire="${BASH_REMATCH[5]}"; reason=""
+    id="${BASH_REMATCH[1]}"; used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; approved="${BASH_REMATCH[6]}"; retire="${BASH_REMATCH[7]}"; reason=""
     if [[ "$last" != "-" ]] && valid_date "$last"; then
       age=$(( now_dn - $(day_number "$last") ))
       if (( age > EXPIRE_DAYS )); then reason="last used $age days ago (> $EXPIRE_DAYS)"; fi
     else
-      never="$never $id"
+      # Never used: the approval date is the only age there is.
+      if [[ "$used" == "0" ]] && valid_date "$approved"; then
+        age=$(( now_dn - $(day_number "$approved") ))
+        if (( age > EXPIRE_DAYS )); then reason="never used, approved $age days ago (> $EXPIRE_DAYS)"; fi
+      fi
+      [[ -n "$reason" ]] || never="$never $id"
     fi
     if [[ "$retire" == *"[met]"* ]]; then
       reason="${reason:+$reason; }retire-when marked [met]"
@@ -730,24 +756,52 @@ cmd_expire() {
   fi
   (( found )) || return 0
 
-  mkdir -p .archive/lessons
-  local i h hl hid hreason hline dest
+  local i h hl hid hreason hline
   for (( i = ${#hits[@]} - 1; i >= 0; i-- )); do
     h="${hits[$i]}"
     IFS="$US" read -r hl hid hreason hline <<< "$h"
-    dest=".archive/lessons/$hid.md"
-    [[ ! -e "$dest" ]] || dest=".archive/lessons/$hid-$now.md"
-    {
-      echo "# $hid archived $now"
-      echo
-      echo "reason: $hreason"
-      echo
-      echo "$hline"
-    } > "$dest"
-    rewrite_line "$INDEX" "$hl"
-    echo "$now expire: $hid archived to $dest - $hreason" >> "$LOG"
-    echo "expire: archived $hid -> $dest"
+    archive_line "$hl" "$hid" "$hreason" "$hline" expire
   done
+}
+
+# archive_line LINENO ID REASON LINE TAG: move one approved lesson to
+# .archive/lessons/ with its one-line reason (kernel rule 11), drop it from
+# INDEX.md and log it. A second archive of the same id gets a dated name.
+archive_line() {
+  local hl="$1" hid="$2" hreason="$3" hline="$4" tag="$5" now dest
+  now="$(today)"
+  mkdir -p .archive/lessons
+  dest=".archive/lessons/$hid.md"
+  [[ ! -e "$dest" ]] || dest=".archive/lessons/$hid-$now.md"
+  {
+    echo "# $hid archived $now"
+    echo
+    echo "reason: $hreason"
+    echo
+    echo "$hline"
+  } > "$dest"
+  rewrite_line "$INDEX" "$hl"
+  echo "$now $tag: $hid archived to $dest - $hreason" >> "$LOG"
+  echo "$tag: archived $hid -> $dest"
+}
+
+# archive <Lnnn> <reason>: archive one lesson on evidence the retire-when
+# marker cannot carry (for example its content now lives in a repo file).
+cmd_archive() {
+  local want="${1:-}" reason="${2:-}" lineno line
+  if [[ ! "$want" =~ ^L[0-9]+$ || -z "${reason//[[:space:]]/}" || $# -ne 2 ]]; then
+    echo "usage: scripts/lessons.sh archive <Lnnn> <one-line reason>" >&2; exit 2
+  fi
+  case "$reason" in *$'\n'*) echo "lessons: the reason must be one line" >&2; exit 2 ;; esac
+  while IFS="$US" read -r lineno line; do
+    [[ -n "$lineno" ]] || continue
+    if [[ "$line" =~ ^-[[:space:]]\[($want)\][[:space:]] ]]; then
+      archive_line "$lineno" "$want" "$reason" "$line" archive
+      return 0
+    fi
+  done < <(approved_lines)
+  echo "lessons: $want not found in $INDEX" >&2
+  exit 1
 }
 
 cmd_stats() {
@@ -850,7 +904,7 @@ cmd_match() {
     [[ -n "$lineno" ]] || continue
     [[ "$line" =~ $FIELD_RE ]] || continue
     id="${BASH_REMATCH[1]}"
-    split_retire "${BASH_REMATCH[5]}"
+    split_retire "${BASH_REMATCH[7]}"
     [[ -n "$TRIG" ]] || continue
     ntrig=$((ntrig + 1))
     hit=""
@@ -886,6 +940,7 @@ case "${1:-}" in
   core-skills) printf '%s\n' "${CORE_SKILLS[@]}" ;;
   use) shift; cmd_use "$@" ;;
   expire) shift; cmd_expire "$@" ;;
+  archive) shift; cmd_archive "$@" ;;
   stats) cmd_stats ;;
   match) shift; cmd_match "$@" ;;
   *) usage ;;
