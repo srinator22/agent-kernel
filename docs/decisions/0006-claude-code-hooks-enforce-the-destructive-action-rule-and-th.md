@@ -55,7 +55,8 @@ Alternatives considered:
   the text in a file and pass it by path. The guard reads the command line,
   including heredocs.
 - The guard needs bash 4.4 or newer (manifest.md); a port to bash 3.2 is in
-  BACKLOG.
+  BACKLOG. Amended 2026-11-17: the port landed in PR 9; the guard is
+  written for bash 3.2 and a macOS CI job runs its test under /bin/bash.
 - The quick lane is too slow to run at every turn end until the self-tests
   are faster (BACKLOG P2). Revisit the Stop gate trigger then.
 - Codex and other harnesses have no equivalent hooks. They keep the prose

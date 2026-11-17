@@ -102,6 +102,7 @@ docs/
     README.md                 # index and the selection procedure
     ruff.toml                 # ruff contract for the profiles' Python: default rules, no format (synced)
     software/PROFILE.md       # always on
+    software/skills/          # verify skill template, filled and installed by start (ADR 0016)
     scientific/PROFILE.md
     scientific/skills/        # shipped skill set, installed by start (ADR 0004)
     embedded-firmware/PROFILE.md
@@ -161,7 +162,8 @@ scripts/
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
   selftest.sh                 # runs tests/template/ (or the named test files) against the template scripts, SELFTEST_JOBS files at a time, results in file order
-  adr.sh                      # check (ADR numbering and format) | new <title>
+  adr.sh                      # check (numbering, format, cited ADRs, records folder, origin numbers) | new <title>
+  start-reset-lessons.sh      # start step 6: reset the lessons files to their format headers; --check
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
   destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
   stop-gate.sh                # Stop hook body: task-state checks; quickgate once every criterion is ticked
@@ -179,7 +181,7 @@ scripts/
 tests/
   template/                   # fixtures and tests for the scripts above; called from check.sh
     lib.sh                    # shared assertion helpers, fixtures, t_parallel sections, t_check_exec
-    test_kernel_hash.sh       # verify, update, drift, CRLF, missing markers
+    test_kernel_hash.sh       # verify, update, drift, CRLF, missing markers, a failed update keeps the hash
     test_new_task.sh
     test_lessons.sh
     test_taskgraph.sh
@@ -189,6 +191,7 @@ tests/
     test_blueprint_parity.sh  # full-path parity both ways, a tree larger than a pipe buffer
     test_profile_tools.sh     # runs the tests of every shipped tool and hook
     test_adr.sh
+    test_start_reset_lessons.sh # template and synthetic headers, --check, CRLF, refusals write nothing
     test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
     test_worker_git_guard.sh  # commit and push refused from Bash and PowerShell payloads
     test_destructive_guard.sh # destructive forms refused, safe forms allowed, both shells
@@ -331,6 +334,7 @@ Status: TEMPLATE - not initialized. Run docs/procedures/start.md before any proj
 - Release model and versioning source of truth: {{FILLED_BY_START}}
 - Deploy target and exposure: {{FILLED_BY_START or none}}
 - Canonical verification: ./scripts/check.sh
+- Decision records: {{docs/decisions (default) or the folder the project already keeps ADRs in}}
 - Data policy: {{what may enter git; where large/private data lives}}
 - Risk profile: {{ordinary / scientific / safety-sensitive / embedded}}
 - Standing overrides recorded by the human: {{none yet}}
@@ -609,7 +613,7 @@ Start question 7 (risk profile) is answered with a list; the selection is record
 - `scripts/template-sync.sh`: fetch the template at a tag, diff the core files, apply non-conflicting updates, never touch Project decisions, re-verify the kernel hash, log the run.
 - `scripts/quickgate.sh`: the fast subset of the gauntlet for use during work; the full gate runs before publication.
 - `scripts/selftest.sh`: runs `tests/template/` against `kernel-hash.sh`, `new-task.sh`, `lessons.sh`, `taskgraph.sh`, `quickgate.sh`, `template-sync.sh`, `adr.sh`, `ci-watch.sh`, `worker-git-guard.sh` (the last three since Amendment 3), the check.sh always section and the blueprint parity function, and `test_feedback.sh` and `test_preferences.sh` cover the feedback hook and the preference registers; called from check.sh in every mode whenever `tests/template/` exists.
-- `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, the Context, Decision and Consequences sections in order, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Runs in check.sh's always section.
+- `scripts/adr.sh` (Amendment 3): `check` enforces contiguous NNNN numbering, `NNNN-slug.md` names, the `# NNNN - Title` line, `Date:` and `Status:`, the Context, Decision and Consequences sections in order, superseded-by targets and no leftover placeholders; `new <title>` writes the next ADR from the template. Since 2026-11-17 `check` also reads the records folder from the Project decisions "Decision records" line (default docs/decisions), fails on ADRs kept in another known folder, checks that every ADR cited by path in docs/procedures, docs/rules and docs/profiles exists (formerly check.sh step 5h, template mode only), and compares numbers added on the branch with the remote default branch, saying so when it cannot fetch. Runs in check.sh's always section.
 - `scripts/worker-git-guard.sh` (Amendment 3): the worker agent's commit and push block, one script for every shell the harness offers.
 - `scripts/destructive-guard.sh`, `scripts/stop-gate.sh`, `scripts/tasklint.sh`, `scripts/doc-eval.sh` (Amendment 4): see the Amendment 4 entry below.
 - `tests/template/`: fixtures and plain-bash tests (no test framework required) so the template's own scripts are verified, not assumed.
