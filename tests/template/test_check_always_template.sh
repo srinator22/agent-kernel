@@ -3,6 +3,7 @@
 # stubbed exits 0, and each template-only step fails on its own defect.
 # Shared fixtures: check_always_lib.sh.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 source "$(dirname "${BASH_SOURCE[0]}")/check_always_lib.sh" || { echo "$0: cannot load check_always_lib.sh; stopped before writing anything" >&2; exit 2; }
 
 sec_template() {

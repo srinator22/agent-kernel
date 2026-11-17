@@ -3,8 +3,8 @@
 # which test the "always" section of check.sh (style, memory caps, task graph,
 # ADR format, selftest when tests/template exists) in project and template mode.
 # The six sections were one file that took 908 s of the 3048 s Windows suite
-# (2026-11-18); as separate files the shards can spread them. Sourced, never run.
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
+# (2026-11-18); as separate files the shards can spread them. Sourced, never
+# run, after lib.sh (each test loads lib.sh itself with the canonical line).
 
 # A started (adopted) project: .start-done exists, or AGENTS.md no longer
 # carries the template's "Status: TEMPLATE" line. Real-tree assertions about
