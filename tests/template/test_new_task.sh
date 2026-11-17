@@ -120,6 +120,7 @@ cat > docs/preferences/film.md <<'REG'
 | Kind | Reference | Owns | Check |
 |---|---|---|---|
 | title card | `docs/film/title.md` 2026-11-08 | layout, palette | Review |
+| end \| credits | `docs/film/end.md` 2026-11-08 | timing \| pace | Review |
 REG
 cat > docs/preferences/ui.md <<'REG'
 # UI
@@ -140,6 +141,11 @@ assert_not_contains "a Kind word alone does not print the area" "film (docs/pref
 pref_case ui-fixes
 assert_contains "another area prints" "ui (docs/preferences/ui.md)"
 assert_not_contains "its slug does not print the film baseline" "baseline title card"
+# An escaped pipe is part of its cell, as the Python reader and
+# session-context.sh read it: the Kind, the Reference and Owns keep their columns.
+pref_case credits-roll
+assert_contains "an escaped pipe stays inside its cell" "baseline end | credits: docs/film/end.md 2026-11-08 (owns: timing | pace)"
+assert_not_contains "an escaped pipe does not shift the columns" "(owns: credits"
 pref_case readme-cleanup
 assert_not_contains "README is not an area" "preferences/README.md"
 assert_not_contains "an unrelated slug prints nothing" "preferences:"
