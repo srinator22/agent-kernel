@@ -26,6 +26,8 @@
 #      Any nonzero exit of a wired lane -> block with the tail of its output;
 #      exit 2 is not trusted to mean "not wired", because a wired stack step
 #      (make, pytest) can exit 2 on a real failure.
+# The quick gate runs detached (see the comment above its launch): this hook
+# never waits for it, and a failed run blocks a later stop once.
 # Exit: 0 allow; 2 block, with the reason on stderr (Claude reads it and keeps
 # working). The hook's timeout is set in .claude/settings.json; a timed-out
 # hook renders no decision, so the stop is allowed (VERIFY 2026-10-29,
@@ -105,12 +107,51 @@ if [[ -n "$key" && -f "$GREEN" && "$(cat "$GREEN")" == "$key" ]]; then
   exit 0
 fi
 
-rc=0
-qout="$(bash scripts/quickgate.sh 2>&1)" || rc=$?
-case "$rc" in
-  0)
-    if [[ -n "$key" ]]; then mkdir -p .work/jobs && printf '%s\n' "$key" > "$GREEN"; fi
-    exit 0
-    ;;
-  *) block "every acceptance criterion is ticked but scripts/quickgate.sh failed (exit $rc)" "$qout" ;;
-esac
+# The quick gate can take many minutes. A Stop hook that waits for it holds the
+# chat in "processing" and queues the user's next message, so the gate runs
+# detached and a later stop reads its result:
+#   stop-gate.result   "<tree key> <exit code>" of the last finished run
+#   stop-gate.running  "<pid> <start epoch>" while a run is going
+#   stop-gate.log      output of the last run
+JOBS=".work/jobs"
+RES="$JOBS/stop-gate.result"
+RUN="$JOBS/stop-gate.running"
+LOG="$JOBS/stop-gate.log"
+mkdir -p "$JOBS"
+
+if [[ -f "$RES" ]]; then
+  rkey="" rrc=""
+  read -r rkey rrc < "$RES" || true
+  if [[ "$rrc" == "0" ]]; then
+    if [[ -n "$key" && "$rkey" == "$key" ]]; then
+      printf '%s\n' "$key" > "$GREEN"
+      rm -f "$RES"
+      exit 0
+    fi
+    rm -f "$RES"   # passed, but for an older tree: run again below
+  else
+    # A failed run is reported once, even if the tree has moved on since.
+    mv -f "$RES" "$RES.reported"
+    block "every acceptance criterion is ticked but scripts/quickgate.sh failed (exit ${rrc:-?}) in the background run" "$(tail -n 40 "$LOG" 2>/dev/null)"
+  fi
+fi
+
+if [[ -f "$RUN" ]]; then
+  rpid="" rstart=0
+  read -r rpid rstart < "$RUN" || true
+  if [[ -n "$rpid" ]] && kill -0 "$rpid" 2>/dev/null && (( $(date +%s) - ${rstart:-0} < 3600 )); then
+    exit 0   # a run is still going: let the turn end
+  fi
+  rm -f "$RUN"
+fi
+
+[[ -n "$key" ]] || exit 0
+(
+  rc=0
+  bash scripts/quickgate.sh > "$LOG" 2>&1 || rc=$?
+  printf '%s %s\n' "$key" "$rc" > "$RES"
+  rm -f "$RUN"
+) < /dev/null > /dev/null 2>&1 &
+printf '%s %s\n' "$!" "$(date +%s)" > "$RUN"
+disown 2>/dev/null || true
+exit 0

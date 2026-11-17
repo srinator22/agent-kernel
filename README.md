@@ -244,8 +244,9 @@ contract: `docs/procedures/upstream.md`.
   PASS plan verdict.
 - Claude Code hooks: `scripts/destructive-guard.sh` refuses destructive rm and
   git forms before they run, in every session and subagent;
-  `scripts/stop-gate.sh` blocks a turn end on broken task state and runs the
-  quick gate once every criterion is ticked; `scripts/session-context.sh`
+  `scripts/stop-gate.sh` blocks a turn end on broken task state and starts the
+  quick gate in the background once every criterion is ticked (a later turn
+  end reads its result, so no turn waits for it); `scripts/session-context.sh`
   loads the mode, the branch, status, recent commits, the live task and the
   preference registers; `scripts/feedback-log.sh` notes each message you send.
 - Template mode (before start): template integrity, including required files,

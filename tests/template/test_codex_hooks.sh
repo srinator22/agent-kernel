@@ -71,7 +71,7 @@ check_event PreToolUse destructive-guard " || exit 2" 2 none Bash 0 2
 # The shell-stdin hook fails open (exit 0 when git or Git Bash is missing):
 # it refuses a habit, it does not guard data (ADR 0015).
 check_event PreToolUse refuse-shell-stdin "" 0 none Bash 1 2
-check_event Stop stop-gate "" 0 1200 none
+check_event Stop stop-gate "" 0 120 none
 
 # ---- fixtures: recorded payloads carry no machine values ----
 for n in SessionStart UserPromptSubmit PreToolUse Stop; do
