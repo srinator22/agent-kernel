@@ -146,6 +146,17 @@ last), so check.sh itself stays the template's and syncs cleanly.
    `CORE_SKILLS` whose folder the project keeps: it now counts as a project
    skill (template ADR 0012); archive it or keep it in a project slot.
 
+   Verify skill upgrade (a sync that brings software profile rule SW-15,
+   template ADR 0016): check.sh then fails project mode until
+   `.claude/skills/verify/SKILL.md` exists with no `{{` left. The profile
+   files arrive as DIFF only, so take the skill template from the new
+   template ref (`git show <ref>:docs/profiles/software/skills/verify/SKILL.md`),
+   fill its `{{VERIFY_...}}` wiring for this project's stack as start.md
+   step 4 describes, install the same file in `.claude/skills/verify/` and
+   `.agents/skills/verify/`, merge the profile's `Skills: verify` line into
+   the project's PROFILE.md (so it counts as the profile's skill, not a
+   project slot), and run it once, recording the `verify:` line.
+
    The script never touches the Project decisions section, re-verifies the
    kernel hash after applying, and refuses a real apply on main or on a
    dirty tree. A conflict (the project edited the file and the template

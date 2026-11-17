@@ -598,7 +598,7 @@ fi
 #     fail on drift
 
 if [[ ! -f .claude/skills/verify/SKILL.md ]] || grep -q '{{' .claude/skills/verify/SKILL.md; then
-  fail "software profile SW-15: .claude/skills/verify/SKILL.md is missing or still holds a {{ wiring placeholder; fill and install it per docs/procedures/start.md step 4"
+  fail "software profile SW-15: .claude/skills/verify/SKILL.md is missing or still holds a {{ wiring placeholder; fill and install it per docs/procedures/start.md step 4 (a project synced from an older template: docs/procedures/upstream.md, Verify skill upgrade)"
 fi
 if [[ ! -f scripts/stack-check.sh ]]; then
   fail ".start-done exists but scripts/stack-check.sh is missing. Write the stack steps there (docs/procedures/start.md step 3), or remove .start-done."

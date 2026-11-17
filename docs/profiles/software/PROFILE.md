@@ -42,7 +42,7 @@ leaked secrets, unreviewed merges). Every other profile stacks on this one.
 - SW-15 The project carries a `verify` skill, written at start for its stack,
   that boots, drives and inspects the real app; a change that alters what the
   app does, shows or returns records a verify run line in `.work/TASK.md`
-  before ship (docs/decisions/0016).
+  before ship (template ADR 0016).
 
 ## Gates
 
@@ -94,7 +94,7 @@ release path; inside stack-check.sh it would call check.sh again and recurse.
 - Skills: verify.
   `skills/verify/SKILL.md` is a template: start fills its wiring for the
   stack, then installs it into `.claude/skills/` and `.agents/skills/`
-  (docs/decisions/0016). It counts as this profile's skill, not a project
+  (template ADR 0016). It counts as this profile's skill, not a project
   slot; the core skills cover the rest of this profile, and the cap is the
   template's core skills plus 2 project skills plus the skills the adopted
   profiles declare on their `Skills:` lines.

@@ -105,7 +105,7 @@ start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
    slots (kernel rule 10). `scripts/lessons.sh check` must pass
    after the copy (skills cap and mirror).
    The software profile's `verify` skill is a template (SW-15,
-   `docs/decisions/0016`): before installing it, fill every `{{VERIFY_...}}`
+   template ADR 0016): before installing it, fill every `{{VERIFY_...}}`
    wiring line with this project's real build, boot, ready signal, drive,
    inspect and stop commands, using its "Adapting at start" table for the
    stack kind (cli, web, service, library, or the nearest real run), then

@@ -64,6 +64,21 @@ assert_contains "the always section ran: lessons" "lessons: OK"
 assert_contains "the always section ran: task graph" "taskgraph:"
 assert_contains "the stack block is what failed" "$STACK_MSG"
 
+# ---- SW-15: project mode refuses a missing or unfilled verify skill ----
+SW15_MSG="software profile SW-15: .claude/skills/verify/SKILL.md is missing or still holds a {{ wiring placeholder"
+mv .claude/skills/verify .claude/skills/verify.off
+run ./scripts/check.sh
+assert_rc "a project without the verify skill fails" 1
+assert_contains "the missing verify skill is named" "$SW15_MSG"
+assert_not_contains "the stack block is not reached without the verify skill" "$STACK_MSG"
+mv .claude/skills/verify.off .claude/skills/verify
+cp .claude/skills/verify/SKILL.md "$FIX.verify"
+printf -- '- boot: {{VERIFY_BOOT}}\n' >> .claude/skills/verify/SKILL.md
+run ./scripts/check.sh
+assert_rc "a verify skill with a wiring placeholder fails" 1
+assert_contains "the unfilled verify skill is named" "$SW15_MSG"
+mv "$FIX.verify" .claude/skills/verify/SKILL.md
+
 # ---- 4h: the Template line names the last recorded sync ----
 cp_script template-sync.sh
 commit_fixture

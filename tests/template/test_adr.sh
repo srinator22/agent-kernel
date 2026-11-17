@@ -143,6 +143,21 @@ adr 0002-second.md 0002 2026-01-03 accepted
 adr 0003-third.md 0003 2026-01-04 accepted
 run ./scripts/adr.sh check
 assert_rc "creating the cited ADRs clears the failure" 0
+# The template itself (Status: TEMPLATE, no .start-done): synced files must
+# cite template ADRs in prose, since a path names each project's own records.
+printf '# Template\n\n## Project decisions\n\nStatus: TEMPLATE - not initialized.\n' > AGENTS.md
+run ./scripts/adr.sh check
+assert_rc "a path citation fails in the template even when the record exists" 1
+assert_contains "the prose form is named" "docs/rules/r.md cites docs/decisions/0002 by path; this file syncs into projects whose docs/decisions/ holds their own records, so write 'template ADR 0002'"
+printf 'Rule from template ADR 0002.\n' > docs/rules/r.md
+printf 'Profile rule from template ADR 0003.\n' > docs/profiles/sci/rules.md
+printf 'See template ADR 0001 and docs/decisions/NNNN.\n' > docs/procedures/one.md
+run ./scripts/adr.sh check
+assert_rc "prose citations pass in the template" 0
+touch .start-done
+printf 'Rule from docs/decisions/0002.\n' > docs/rules/r.md
+run ./scripts/adr.sh check
+assert_rc "after start a resolving path citation passes again" 0
 
 # The records folder: the AGENTS.md Project decisions line
 # "- Decision records: <folder>", else docs/decisions. Records in another

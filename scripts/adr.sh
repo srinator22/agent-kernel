@@ -82,10 +82,19 @@ cited_check() {
     [[ -f "$f" ]] && files+=("$f")
   done
   (( ${#files[@]} > 0 )) || return 0
+  # In the template itself these files sync into every project, where the
+  # same path names that project's own records: a path citation there either
+  # fails or resolves to an unrelated ADR, so the template cites in prose.
+  local template=0
+  if [[ ! -f .start-done && -f AGENTS.md ]] && grep -q '^Status: TEMPLATE' AGENTS.md; then template=1; fi
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     src="${line%%:*}"
     ref="${line#*:}"
+    if (( template )); then
+      echo "$src cites $ref by path; this file syncs into projects whose $DIR/ holds their own records, so write 'template ADR ${ref##*/}'"
+      continue
+    fi
     ls "$ref"-*.md >/dev/null 2>&1 || echo "$src cites $ref, which does not exist"
   done < <(grep -oHE -- "$pat" "${files[@]}" | LC_ALL=C sort -u)
 }
