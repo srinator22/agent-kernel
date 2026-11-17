@@ -63,3 +63,5 @@ for exactly that and nothing else.
 
 Reread the map at each retro; a tool built or a gap closed updates it in
 the same commit.
+
+When planning CI and checks, `docs/procedures/ci-cost.md` lists the stages and cost levers.

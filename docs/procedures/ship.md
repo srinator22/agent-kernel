@@ -56,3 +56,6 @@ SHA is terminal-success (kernel rule 5).
 9. Final handoff format: Outcome / Evidence (commands and terminal results)
    / Artifacts (commit, release, deployment) / Limitations / Next action
    only if required.
+
+When checks are slow or costly, see `docs/procedures/ci-cost.md` before
+changing a gate.

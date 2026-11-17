@@ -29,3 +29,15 @@
 - Record every deployment: commit, artifact, environment, time, result.
 - A documented rollback path exists before the first deploy, not after
   the first incident.
+- `cancel-in-progress` is for pull-request runs only, keyed on the PR; never
+  on main, tags or deploys.
+- Optional jobs are gated at the job level (`if:` fed by a `paths` job) so a
+  skipped job allocates no runner; a step-level skip has already paid setup.
+- Only trusted jobs write caches; untrusted jobs (fork or pull-request code)
+  restore only.
+- Moving a check to another stage (push, schedule) never makes a required
+  answer optional: required checks stay green for the exact pushed SHA and a
+  release gate stays attached to the version shipped
+  (docs/procedures/ci-cost.md).
+- `actions/upload-artifact` and `actions/download-artifact` are pinned by
+  commit SHA like other third-party actions.
