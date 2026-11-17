@@ -377,6 +377,18 @@ assert_contains "the failure is reported" "scripts/selftest.sh failed"
 run ./scripts/check.sh
 assert_not_contains "a failed run recorded nothing to reuse" "inputs unchanged since"
 printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+# An input edited while the suite runs (the detached stop gate lets the agent
+# keep working) must not be recorded as tested: the next run tests it.
+printf '#!/usr/bin/env bash\n[[ -f edit.mark ]] || { : > edit.mark; printf "%s\\n" "# edited mid-run" >> tests/template/test_ok.sh; }\nexit 0\n' > tests/template/test_edit.sh
+chmod +x tests/template/test_edit.sh
+RAN2="selftest: 2 passed, 0 failed, 0 quarantined (2 test files)"
+run ./scripts/check.sh
+assert_contains "a run whose input is edited mid-run still runs the self-tests" "$RAN2"
+run ./scripts/check.sh
+assert_contains "an input edited mid-run is tested again on the next run" "$RAN2"
+assert_not_contains "an input edited mid-run is never reused" "inputs unchanged since"
+rm -f tests/template/test_edit.sh edit.mark
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
 git rm -q -f --cached scripts/selftest-reuse.sh >/dev/null 2>&1
 rm -f scripts/selftest-reuse.sh
 run ./scripts/check.sh

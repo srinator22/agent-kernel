@@ -25,9 +25,11 @@ permissions:
 # tags are never cancelled: every pushed SHA must reach a terminal result
 # (kernel rule 5), and a version-tag run carries the deploy job. The deploy
 # job keeps its own group below, so racing deploys queue; that group is
-# job-level and independent of this workflow-level one.
+# job-level and independent of this workflow-level one. Non-PR runs are keyed
+# on the SHA, so each has a group of its own: GitHub cancels a PENDING run in a
+# shared group when a newer one queues, even with cancel-in-progress false.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

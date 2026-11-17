@@ -30,8 +30,8 @@
 - Record every deployment: commit, artifact, environment, time, result.
 - A documented rollback path exists before the first deploy, not after
   the first incident.
-- `cancel-in-progress` is for pull-request runs only, keyed on the PR; never
-  on main, tags or deploys.
+- `cancel-in-progress` is for pull-request runs only, keyed on the PR; other
+  runs key on the SHA (a shared group cancels a pending run anyway).
 - Optional jobs are gated at the job level (`if:` fed by a `paths` job) so a
   skipped job allocates no runner; a step-level skip has already paid setup.
 - Moving a check to another stage (push, schedule) never makes a required

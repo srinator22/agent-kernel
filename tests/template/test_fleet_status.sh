@@ -110,8 +110,12 @@ run scripts/fleet-status.sh --tsv --list "$FIX/one.list"
 assert_eq "--list limits rows" 2 "$(printf '%s\n' "$OUT" | wc -l | tr -d '[:space:]')"
 
 # The list of the main checkout is found from a linked worktree.
+# The list stays out of the commit (it is gitignored in real checkouts), so
+# the worktree has no root list and only the git-common-dir fallback can find it.
+printf 'fleet.local.list\none.list\n' >> "$FIX/.gitignore"
 commit scripts >/dev/null 2>&1 || true
 git worktree add -q "$FIX-wt" -b wtb >/dev/null 2>&1
+assert_eq "the worktree carries no fleet.local.list of its own" "absent" "$([[ -e "$FIX-wt/fleet.local.list" ]] && echo present || echo absent)"
 if [[ -x "$FIX-wt/scripts/fleet-status.sh" || -f "$FIX-wt/scripts/fleet-status.sh" ]]; then
   chmod +x "$FIX-wt/scripts/fleet-status.sh"
   run "$FIX-wt/scripts/fleet-status.sh" --tsv
