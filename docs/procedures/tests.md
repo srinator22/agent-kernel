@@ -56,3 +56,37 @@ already has somewhere to put its test (kernel rules 2 and 4).
     the fix and a row in `docs/DEFECT_MEMORY.md` (kernel rule 3;
     `docs/procedures/bugfix.md`). Behaviour changes extend an existing
     scenario or add one in the same change.
+
+## Test audit
+
+Agents add tests easily and delete them rarely, so a suite grows without
+protecting more. More test code is not more protection: a test that restates
+the implementation, breaks on a harmless refactor or stays green when its
+behaviour breaks is noise ("make every test earn its place", the OpenClaw
+write-up, Nov 2026). Deleting and consolidating tests is a first-class
+deliverable of a test change, not cleanup to skip.
+
+1. Audit one subsystem at a time. Read the production code and its tests,
+   then for each test: name the behaviour it protects; show a believable bug
+   (a one-line change to the code) that would make it fail; keep one strong
+   owner per contract. A test with no believable bug is repaired or removed;
+   a second test whose only bug is already caught by the owner is merged into
+   it or removed.
+2. Kernel rule 2 still holds. Never delete or weaken a test to get green, and
+   never delete the only regression guard for a defect (a row in
+   `docs/DEFECT_MEMORY.md` names its test). Consolidation keeps every
+   distinct contract assertion.
+3. Ledger. An audit records, in `.work/done/<date>-<slug>-ledger.md`: the
+   areas completed, the duplication removed (file and lines, before and
+   after), the contract coverage that remains per file, and unresolved
+   risks. A later pass starts from the ledger instead of re-reading the suite.
+4. Budget. `tests/BUDGET` names the counted test files (`paths:`), the
+   current `ceiling:` in non-blank lines and a per-change `allowance:` (the
+   template ships 400). `scripts/test-budget.sh check` (check.sh step 4)
+   fails when the count exceeds ceiling plus allowance; the remedy is to
+   consolidate or delete duplicates, or to raise the ceiling in the same
+   change with a dated `raise: <old>-><new> <YYYY-MM-DD> <reason>` line.
+   After a pass that removes lines, lower `ceiling:` to the new count so the
+   saving is not spent again. `scripts/test-budget.sh report` lists files by
+   size. A project edits `paths:` for its own suites; a project whose sync
+   predates the file skips the check with a printed line.
