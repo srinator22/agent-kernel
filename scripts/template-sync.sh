@@ -794,7 +794,7 @@ main() {
     fi
     while IFS= read -r s; do
       [[ -n "$s" && -d ".claude/skills/$s" ]] || continue
-      printf '%s\n' "$new_core" | grep -qx -- "$s" && continue
+      grep -qx -- "$s" <<< "$new_core" && continue
       retired_skills+=("$s")
     done <<< "$prior_core"
   fi

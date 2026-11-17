@@ -295,6 +295,9 @@ if [[ -f scripts/private-terms.sh ]]; then
   bash scripts/private-terms.sh check || gerr "scripts/private-terms.sh check failed (a private term is in the repository; the lines above name where, masked)"
 fi
 
+# On a clean exit only, name the tree this run verified; the reviewer copies it into its verdict and tasklint ship compares it (ADR 0017). Set here because both modes exit below.
+trap 'if (( $? == 0 )); then tid="$(bash scripts/tree-id.sh 2>/dev/null)" || tid="N/A - scripts/tree-id.sh failed or is missing"; echo "check.sh: verified tree $tid"; fi' EXIT
+
 # Step 5: template-mode gate. Before start runs there is no stack to
 # check, so the gauntlet checks the template itself: a green badge means
 # the template is intact, not merely that nothing executed.
@@ -445,11 +448,8 @@ if [[ ! -f .start-done ]]; then
 
   # 5g. The executable-bit check moved to the always section (step 4f2).
 
-  # 5h. Every ADR a procedure or rule cites exists.
-  for ref in $(grep -ohE 'docs/decisions/[0-9]{4}' docs/procedures/*.md docs/rules/*.md docs/profiles/*/*.md 2>/dev/null | sort -u); do
-    n="${ref##*/}"
-    ls docs/decisions/"$n"-*.md >/dev/null 2>&1 || terr "cited ADR does not exist: $ref"
-  done
+  # 5h. Every ADR a procedure, rule or profile cites exists: scripts/adr.sh
+  # check verifies it in step 4d, in template mode and after start alike.
 
   # 5i. The pristine check.sh fixture the self-tests run against is this file.
   # After start wires the stack, the fixture keeps the template version.
