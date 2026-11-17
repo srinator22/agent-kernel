@@ -17,6 +17,11 @@
 # stripped first; CRLF is tolerated; a section runs from "## Name" to the next "## "):
 #   Mode:        first line starting "Mode:"; standard|quick|autopilot (any case).
 #                Absent, or a value holding "|" (the unfilled template line), is standard.
+#   Unattended:  optional first line starting "Unattended:": "yes - <pre-approved actions>;
+#                report: <path>" or "no". It records the owner's per-task approval scope for
+#                an unattended run (kernel rule 15 is unchanged). Absent is fine; any other
+#                shape is a problem, and actions naming deleting data, force-push or kernel
+#                files (AGENTS.md, CLAUDE.md) are refused.
 #   Criteria     in "## Acceptance criteria", each "- [x]" or "- [X]" line is ticked.
 #                Evidence is the text after the last "->". It is either
 #                "judgment: <reason>" or names at least one path that exists
@@ -147,7 +152,7 @@ function flush() {
   emit(pk, pa, pb)
   pend = 0
 }
-BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
+BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasun = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
 /^## / {
   flush()
   sec = tolower(trim(substr($0, 4)))
@@ -155,6 +160,7 @@ BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0;
   next
 }
 !hasmode && /^Mode:/ { hasmode = 1; modeval = trim(substr($0, 6)) }
+!hasun && /^Unattended:/ { hasun = 1; unval = trim(substr($0, 12)) }
 sec == "acceptance criteria" && pend && /^[ \t]+[^ \t]/ && !/^[ \t]*-([ \t]|$)/ {
   if (!contline) contline = NR
   next
@@ -226,6 +232,14 @@ END {
     m = tolower(modeval)
     if (m == "standard" || m == "quick" || m == "autopilot") taskmode = m
     else emit("PROB", "Mode must be standard, quick or autopilot: " substr(modeval, 1, 60))
+  }
+  if (hasun) {
+    ul = tolower(unval)
+    if (ul == "no") { }
+    else if (ul !~ /^yes[ \t]+-[ \t]+[^;]*[^; \t][^;]*;[ \t]*report:[ \t]*[^ \t]/)
+      emit("PROB", "Unattended must be \"yes - <pre-approved actions>; report: <path>\" or \"no\": " substr(unval, 1, 60))
+    else if (ul ~ /delet|force[- ]push|--force|kernel|agents\.md|claude\.md/)
+      emit("PROB", "Unattended actions must not name deleting data, force-push or kernel edits (kernel rule 15): " substr(unval, 1, 60))
   }
   if (lintmode == "ship" && taskmode != "quick") {
     for (i = 1; i <= nopen; i++) emit("PROB", "open assumption (settle it: confirmed or verified): " openl[i])

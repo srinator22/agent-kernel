@@ -31,6 +31,8 @@ assert_rc "valid slug scaffolds" 0
 assert_eq "branch task/good-slug created" "task/good-slug" "$(git symbolic-ref --short HEAD)"
 assert_file_has "title line" .work/TASK.md "# Task: good-slug"
 assert_file_has "mode line" .work/TASK.md "Mode: standard"
+assert_file_has "optional Unattended hint" .work/TASK.md "Unattended: yes - <pre-approved actions>; report: <path>"
+assert_eq "the Unattended hint is commented out, not a live field" "0" "$(grep -c "^Unattended:" .work/TASK.md || true)"
 assert_file_has "Budget section" .work/TASK.md "## Budget"
 assert_file_has "Budget wall-clock line" .work/TASK.md "- Wall-clock:"
 assert_file_has "Plan section" .work/TASK.md "## Plan"

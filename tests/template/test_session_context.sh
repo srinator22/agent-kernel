@@ -38,6 +38,16 @@ printf '# Task: demo\nMode: standard\n' > .work/TASK.md
 run bash scripts/session-context.sh
 assert_contains "a live TASK.md is printed" "In-progress task state"
 assert_contains "its content follows" "# Task: demo"
+assert_not_contains "no Unattended line without the field" "UNATTENDED RUN"
+printf '# Task: demo\nMode: standard\nUnattended: yes - run tests, edit owned files; report: .work/done/night.md\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_contains "the Unattended field prints one line with scope and report" "UNATTENDED RUN: yes - run tests, edit owned files; report: .work/done/night.md"
+printf '# Task: demo\nMode: standard\nUnattended: no\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_not_contains "Unattended: no prints no line" "UNATTENDED RUN"
+printf '# Task: demo\nMode: standard\n<!-- Unattended: yes - x; report: y -->\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_not_contains "a commented Unattended line prints no line" "UNATTENDED RUN"
 # MSYS_NO_PATHCONV: warn when it is defined (any value, empty included, since
 # Git Bash checks only that it exists); say nothing when it is not.
 run env -u MSYS_NO_PATHCONV bash scripts/session-context.sh
