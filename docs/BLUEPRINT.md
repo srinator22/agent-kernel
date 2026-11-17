@@ -191,6 +191,7 @@ scripts/
   stop-gate.sh                # Stop hook body: task-state checks; quickgate in the background once every criterion is ticked
   codex-hook.cmd              # Windows launcher for the Codex hooks: finds Git Bash, runs scripts/<name>.sh; CRLF
   refuse-shell-stdin.sh       # PreToolUse hook launcher: picks Python via find-python.sh, runs hooks/refuse_shell_stdin.py; fails open
+  push-scan.sh                # PreToolUse hook: runs private-terms.sh check before any git push (exit 2 on failure)
   hooks-dispatch.sh           # EVENT: runs the project's own hooks in scripts/hooks.d/<EVENT>/; PreToolUse fails closed (ADR 0015)
   hooks/                      # template hook bodies in Python, under their own ruff.toml (ADR 0015)
     refuse_shell_stdin.py     # stdlib: refuses python from stdin and here-documents; --warn-long adds additionalContext over 4096 bytes
@@ -223,6 +224,7 @@ tests/
     test_stop_gate.sh         # Stop hook decisions against a fake background quickgate
     test_codex_hooks.sh       # .codex/hooks.json commands run as Codex runs them, Unix and Windows, launcher fail-closed cases
     test_shell_stdin_hook.sh  # scripts/hooks/tests, the settings.json wiring run as Claude runs it, long-command context, Store stub
+    test_push_scan.sh         # push-scan hook forms, target repo, fast path, malformed payload, wiring
     test_hooks_dispatch.sh    # hooks.d order, skips, exit 2, PreToolUse fail-closed, settings.json wiring for four events
     test_tasklint.sh
     test_doc_eval.sh

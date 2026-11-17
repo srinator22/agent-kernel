@@ -529,6 +529,7 @@ if [[ ! -f .start-done ]]; then
     scripts/rating.sh tests/template/test_rating.sh
     tests/template/selftest-weights.txt docs/procedures/ci-cost.md
     docs/profiles/product-render/PROFILE.md
+    scripts/push-scan.sh tests/template/test_push_scan.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
