@@ -1,0 +1,52 @@
+# selftest-inputs.list - every repository path the template self-tests
+# (tests/template/test_*.sh, run by scripts/selftest.sh) read from the
+# repository. One path per line: a file or a directory (directories count
+# recursively, tracked and untracked-not-ignored files). Blank lines and lines
+# starting with "#" are ignored. scripts/selftest-reuse.sh hashes these paths
+# into the key that lets scripts/check.sh skip the self-tests when none changed;
+# its verify-inputs subcommand copies ONLY these paths into a fresh repository
+# and runs the whole suite there (CI), so a test that reads an undeclared path
+# fails there. Under-inclusion is a defect, over-inclusion only costs a rerun:
+# when a test starts reading a new path, add it here (or add its directory).
+#
+# Prefix "exists:" - the path must be present but its content is not hashed.
+# Used for task and backlog state that changes with every task and that no
+# test reads for its content (the nested started-project case in
+# test_check_always.sh copies the tree, whose .work/TASK.md the outer check.sh
+# lints in the same run).
+#
+# Audit (2026-11-17): the tests copy scripts through lib.sh cp_script, read the
+# real settings and hooks (.claude, .codex), the shipped agents, skills,
+# lessons, procedures, profiles, library, roster, decisions and the blueprint
+# (docs), the question set (tests/docs), the quarantine list, README.md (doctor
+# case), and copy the whole tree for the nested started-project case.
+
+scripts
+tests/template
+tests/docs
+tests/quarantine.list
+docs
+.claude
+.codex
+.agents
+.github
+.archive
+
+AGENTS.md
+CLAUDE.md
+README.md
+CONTRIBUTING.md
+SECURITY.md
+LICENSE
+manifest.md
+cliff.toml
+.kernel.hash
+.gitignore
+.gitattributes
+.editorconfig
+
+exists: BACKLOG.md
+exists: BUILD_NOTES.md
+exists: .work/TASK.md
+exists: .work/done/.gitkeep
+exists: .work/jobs/.gitkeep
