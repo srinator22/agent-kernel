@@ -13,7 +13,7 @@
 # Words, not lines: a line budget was met once by unwrapping lines, which
 # cut 1.8% of the words and none of the reading (2026-11-18); the width cap
 # keeps that from moving the cost back into long lines. The total is a
-# ratchet: the 2026-11-18 cut aimed at 9500 and stopped at 10164 words, where
+# ratchet: the 2026-11-18 cut aimed at 9500 and stopped at 10166 words, where
 # what remained was rule text that exists nowhere else; lower it after a cut,
 # never raise it without a dated reason in the commit body.
 # The anchors are one awk pass over docs/, not one grep per anchor: 606 greps
