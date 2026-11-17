@@ -10,10 +10,14 @@
 # results print in file order; INT and TERM stop every running file; test
 # files named on the command line run alone; T_EXEC_CHECK=1 and the one
 # executable-bit probe reach every file. Cases that need two files at once
-# wait on marker files with a bounded loop, never on a fixed delay.
+# wait on marker files with a bounded loop, never on a fixed delay. Timing:
+# the slowest-files and wall lines, SELFTEST_TIMES. --shard K/N: greedy deal by
+# weight, disjoint and complete, median for a missing weight, usage errors.
+# --write-weights: format, and the output feeds --shard.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+unset SELFTEST_TIMES # an outer run's times file must not be overwritten by these inner runs
 make_fixture
 cp_script selftest.sh
 mkdir -p tests/template
@@ -351,5 +355,129 @@ run env -u T_EXEC_CHECK -u T_EXEC_BITS -u T_EXEC_NA ./scripts/selftest.sh -v
 assert_rc "two lib.sh tests pass" 0
 assert_eq "every file sees T_EXEC_CHECK=1 and the probed bits" "2" "$(printf '%s\n' "$OUT" | grep -c "ok   check=1 bits=$bits")"
 assert_eq "the executable-bit n/a line appears once per run where it applies" "$na" "$(printf '%s\n' "$OUT" | grep -c 'n/a .*executable bits')"
+
+# ---- timing, shards and the weights generator ----
+# A fake weights file and eight fake passing tests (weights 8..1, test_a..h).
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template
+for x in a b c d e f g h; do printf '#!/usr/bin/env bash\necho "  ok   %s"\n' "$x" > "tests/template/test_$x.sh"; done
+chmod +x tests/template/test_*.sh
+{ echo '# fake weights'; echo; i=8; for x in a b c d e f g h; do echo "$i tests/template/test_$x.sh"; i=$((i - 1)); done; } > tests/template/selftest-weights.txt
+ALL_FILES="$(printf 'tests/template/test_%s.sh\n' a b c d e f g h | LC_ALL=C sort | tr '\n' ' ')"
+# files_of: the files a shard run printed, sorted, space-separated.
+files_of() { printf '%s\n' "$OUT" | sed -n 's/^selftest: shard [0-9]*\/[0-9]* file //p' | LC_ALL=C sort | tr '\n' ' '; }
+
+# Timing summary and the SELFTEST_TIMES file (one line per file that ran).
+printf 'tests/template/test_h.sh # owner: t date: 2026-11-17\n' > tests/quarantine.list
+run env SELFTEST_TIMES="$FIX/times.out" ./scripts/selftest.sh
+assert_rc "a timed run passes" 0
+assert_contains "the slowest-files line is printed" "selftest: slowest: tests/template/test_"
+assert_contains "the wall-clock line is printed" "selftest: wall "
+assert_eq "the slowest line names five files" "5" "$(printf '%s\n' "$OUT" | grep '^selftest: slowest:' | grep -o 'test_[a-z]*\.sh [0-9][0-9]*s' | wc -l | tr -d ' ')"
+assert_file "SELFTEST_TIMES writes its file" "$FIX/times.out"
+assert_eq "the times file has one line per file that ran (quarantined excluded)" "7" "$(grep -c '' "$FIX/times.out")"
+assert_eq "every times line is '<seconds> <test path>'" "7" "$(grep -cE '^[0-9]+ tests/template/test_[a-g]\.sh$' "$FIX/times.out")"
+echo "stale" > "$FIX/times.out"
+run env SELFTEST_TIMES="$FIX/times.out" ./scripts/selftest.sh tests/template/test_a.sh
+assert_eq "SELFTEST_TIMES is overwritten, not appended" "1" "$(grep -c '' "$FIX/times.out")"
+rm -f tests/quarantine.list
+# SELFTEST_TIMES is read once and removed from the environment, so a test file
+# (and a selftest.sh run nested in a fixture) never inherits and overwrites it.
+printf '#!/usr/bin/env bash\necho "${SELFTEST_TIMES-unset}" > "%s/env.out"\n' "$FIX" > tests/template/test_i.sh
+chmod +x tests/template/test_i.sh
+run env SELFTEST_TIMES="$FIX/times2.out" ./scripts/selftest.sh tests/template/test_i.sh
+assert_rc "the env probe test passes" 0
+assert_eq "a test file does not see SELFTEST_TIMES" "unset" "$(cat "$FIX/env.out")"
+assert_eq "the run still wrote its times file" "1" "$(grep -c 'test_i.sh' "$FIX/times2.out")"
+rm -f tests/template/test_i.sh
+
+# Shards: union equals the full set and shards are disjoint, for several N.
+for n in 1 2 3 5; do
+  union=""; cnt=0
+  for (( k = 1; k <= n; k++ )); do
+    run ./scripts/selftest.sh --shard "$k/$n"
+    assert_rc "shard $k/$n passes" 0
+    union="$union$(files_of)"
+    cnt=$((cnt + $(printf '%s\n' "$OUT" | grep -c '^selftest: shard [0-9]*/[0-9]* file ')))
+  done
+  assert_eq "N=$n: the shards together hold every file" "$ALL_FILES" "$(printf '%s' "$union" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ')"
+  assert_eq "N=$n: the shards deal 8 files in all" "8" "$cnt"
+  assert_eq "N=$n: no file appears in two shards" "" "$(printf '%s' "$union" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | uniq -d)"
+done
+# The greedy deal itself (hand-computed): a8->1 b7->2 c6->2 d5->1 e4->1 f3->2 g2->2 h1->1.
+run ./scripts/selftest.sh --shard 1/2
+assert_eq "shard 1/2 holds a, d, e, h" "tests/template/test_a.sh tests/template/test_d.sh tests/template/test_e.sh tests/template/test_h.sh " "$(files_of)"
+assert_contains "the shard run names its estimate" "selftest: shard 1/2: 4 files, estimated 18.00s"
+assert_contains "the summary counts only the shard's files" "(4 test files)"
+first="$OUT"
+run ./scripts/selftest.sh --shard 1/2
+assert_eq "the same shard prints the same files twice" "$(printf '%s\n' "$first" | grep '^selftest: shard')" "$(printf '%s\n' "$OUT" | grep '^selftest: shard')"
+run ./scripts/selftest.sh --shard=2/2
+assert_eq "--shard=K/N is accepted; shard 2/2 holds b, c, f, g" "tests/template/test_b.sh tests/template/test_c.sh tests/template/test_f.sh tests/template/test_g.sh " "$(files_of)"
+# More shards than files: the extra shards are empty and pass.
+run ./scripts/selftest.sh --shard 9/9
+assert_rc "an empty shard exits 0" 0
+assert_contains "an empty shard says so" "shard 9/9 has no files"
+# A quarantined file is in no shard.
+printf 'tests/template/test_a.sh # owner: t date: 2026-11-17\n' > tests/quarantine.list
+run ./scripts/selftest.sh --shard 1/2
+assert_not_contains "a quarantined file is dealt to no shard" "file tests/template/test_a.sh"
+rm -f tests/quarantine.list
+
+# A file without a weight gets the median of the known ones (weights 10, 2, 6
+# for a, b, c; d unknown -> 6, so c and d tie by path: a->1, c->2, d->2, b->1).
+{ echo '10 tests/template/test_a.sh'; echo '2 tests/template/test_b.sh'; echo '6 tests/template/test_c.sh'; } > tests/template/selftest-weights.txt
+rm -f tests/template/test_[e-h].sh
+run ./scripts/selftest.sh --shard 1/2
+assert_eq "median weight for the unweighted file: shard 1 holds a, b" "tests/template/test_a.sh tests/template/test_b.sh " "$(files_of)"
+assert_contains "the median counts in the estimate (10 + 2)" "estimated 12.00s"
+run ./scripts/selftest.sh --shard 2/2
+assert_eq "median weight for the unweighted file: shard 2 holds c, d" "tests/template/test_c.sh tests/template/test_d.sh " "$(files_of)"
+# No weights file: every file weighs 1 and the deal still covers all of them.
+rm -f tests/template/selftest-weights.txt
+run ./scripts/selftest.sh --shard 1/2
+assert_rc "no weights file is not an error" 0
+assert_contains "no weights: 4 files split 2 and 2" "shard 1/2: 2 files, estimated 2.00s"
+
+# A weights line naming a missing test, or a malformed one, warns once and the run goes on.
+{ echo '10 tests/template/test_a.sh'; echo '2 tests/template/test_b.sh'; echo '6 tests/template/test_c.sh'; echo '5 tests/template/test_gone.sh'; echo 'garbage'; } > tests/template/selftest-weights.txt
+run ./scripts/selftest.sh --shard 1/2
+assert_rc "a weights line naming a missing test does not fail the run" 0
+assert_eq "the missing test is warned about once" "1" "$(printf '%s\n' "$OUT" | grep -c 'warning:.*test_gone.sh')"
+assert_eq "the malformed line is warned about once" "1" "$(printf '%s\n' "$OUT" | grep -c 'warning:.*malformed.*garbage')"
+assert_eq "the deal ignores the stale line" "tests/template/test_a.sh tests/template/test_b.sh " "$(files_of)"
+
+# Usage errors.
+run ./scripts/selftest.sh --shard 1/2 tests/template/test_a.sh
+assert_rc "--shard with a TEST_FILE is a usage error" 2
+assert_contains "the conflict is named" "--shard cannot be combined with TEST_FILE"
+for bad in 0/3 4/3 x 3 1/0 1/2/3 -1/2 1/; do
+  run ./scripts/selftest.sh --shard "$bad"
+  assert_rc "--shard $bad is a usage error" 2
+done
+run ./scripts/selftest.sh --shard
+assert_rc "--shard without a value is a usage error" 2
+
+# --write-weights: format, and the output feeds --shard.
+printf '%s\n' '# a times file' '3 tests/template/test_c.sh' '12 tests/template/test_a.sh' '' '7.5 tests/template/test_b.sh' '1 tests/template/test_d.sh' > "$FIX/times.in"
+run ./scripts/selftest.sh --write-weights "$FIX/times.in"
+assert_rc "--write-weights succeeds" 0
+assert_contains "it reports what it wrote" "selftest: wrote tests/template/selftest-weights.txt from"
+assert_eq "the generated file starts with the generated-by header" "# selftest-weights.txt - GENERATED by scripts/selftest.sh --write-weights" "$(sed -n 1p tests/template/selftest-weights.txt | cut -c1-73)"
+assert_file_has "the header says never hand-edited" tests/template/selftest-weights.txt "Never hand-edited"
+assert_eq "the data lines are sorted by path" "12 tests/template/test_a.sh,7.5 tests/template/test_b.sh,3 tests/template/test_c.sh,1 tests/template/test_d.sh" "$(grep -v '^#' tests/template/selftest-weights.txt | tr '\n' ',' | sed 's/,$//')"
+run ./scripts/selftest.sh --shard 1/2
+assert_eq "the generated weights round-trip into --shard (a12->1, b7.5->2, c3->2, d1->2)" "tests/template/test_a.sh " "$(files_of)"
+assert_contains "the estimate comes from the generated weights" "estimated 12.00s"
+run ./scripts/selftest.sh --write-weights "$FIX/nope.in"
+assert_rc "--write-weights with a missing times file is a usage error" 2
+printf 'tests/template/test_a.sh fast\n' > "$FIX/bad.in"
+run ./scripts/selftest.sh --write-weights "$FIX/bad.in"
+assert_rc "--write-weights with a malformed times line is a usage error" 2
+run ./scripts/selftest.sh --write-weights "$FIX/times.in" --shard 1/2
+assert_rc "--write-weights with --shard is a usage error" 2
+run ./scripts/selftest.sh --write-weights
+assert_rc "--write-weights without a file is a usage error" 2
 
 t_finish
