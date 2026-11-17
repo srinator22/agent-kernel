@@ -73,6 +73,15 @@ last), so check.sh itself stays the template's and syncs cleanly.
    agents, core, header, catalog (a commit that also changes the kernel or rules
    index is agents). fleet.sh counts every line; the release
    notes list agents, core and header under synced and catalog under library.
+   `scripts/fleet-status.sh [--tsv]` is the short form: per project the template
+   ref, the date of the last recorded sync and the number of template-v* tags
+   newer than that ref ("unknown" for a ref this repository does not have), plus
+   uncommitted files and the old repository URL of a renamed template. Read-only,
+   offline; exit 0 even when projects lag.
+   `scripts/rating.sh [--offline]` prints the numbers behind a template rating:
+   open backlog rows by priority, lesson slots, skills against their cap, the
+   last maintain pass, the latest tag, CI of main, merged-PR cycle time and the
+   fleet versions; "N/A - reason" where a number cannot be read.
 
 ## Template sync (down)
 
