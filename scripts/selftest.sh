@@ -58,6 +58,11 @@
 # is skipped and named on every run; lessons.sh enforces the owner, date and
 # 30-day limit. A listed tests/template path that does not exist fails the run.
 # Entries outside tests/template belong to the project's own test runner.
+# After a run that ran every test file (no TEST_FILE, no --shard) the run prints
+# the "test-budget:" line of "scripts/test-budget.sh check", so a wave sees the
+# ceiling before check.sh; informational only - the gate is check.sh step 4k and
+# it never changes this exit status. Nothing is printed when scripts/test-budget.sh
+# or tests/BUDGET is absent.
 # Lines starting "  n/a  " in a passing test's output (cases that do not apply
 # in this repository) are printed even without -v.
 # Exit: 0 when every test file that ran passed, 1 on any failure, 2 on a usage
@@ -476,6 +481,12 @@ if [[ -n "$timing" ]]; then
 fi
 echo "selftest: wall $((SECONDS - START_SECONDS))s"
 echo "selftest: $passed passed, $failed failed, $quarantined quarantined (${#tests[@]} test files)"
+if [[ "$picked" == " " && -z "$shard_k" && -f scripts/test-budget.sh && -f tests/BUDGET ]]; then
+  budget_out="$(bash scripts/test-budget.sh check 2>/dev/null)" || true
+  while IFS= read -r line; do
+    if [[ "$line" == "test-budget: "* ]]; then echo "$line"; break; fi
+  done <<< "$budget_out"
+fi
 if (( failed > 0 )); then
   echo "selftest: FAILED:$failed_names" >&2
   exit 1

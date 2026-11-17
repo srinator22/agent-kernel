@@ -27,6 +27,7 @@ LS
 reuse_fixture() {
   make_fixture
   cp_script selftest-reuse.sh
+  cp_script find-python.sh
   write_list
   mkdir -p docs src
   printf 'doc a\n' > docs/a.md
@@ -110,6 +111,36 @@ SELFTEST_REUSE_ENV_EXTRA="bash 99" run $REUSE key
 if [[ "$OUT" != "$KEY1" ]]; then t_ok "a changed identity changes the key"; else t_bad "a changed identity changes the key"; fi
 SELFTEST_REUSE_ENV_EXTRA="uname Other" run $REUSE check
 assert_rc "a changed identity misses" 1
+
+# The python and ruff versions are part of the key: a fake python3 (and ruff)
+# on PATH reports a version, and changing it changes the key and misses.
+mkdir -p "$FIX/py1" "$FIX/py2"
+printf '#!/usr/bin/env bash
+[ "${1:-}" = --version ] && echo "Python 3.1.0"
+exit 0
+' > "$FIX/py1/python3"
+printf '#!/usr/bin/env bash
+[ "${1:-}" = --version ] && echo "Python 3.2.0"
+exit 0
+' > "$FIX/py2/python3"
+printf '#!/usr/bin/env bash
+echo "ruff 0.1.0"
+' > "$FIX/py1/ruff"
+printf '#!/usr/bin/env bash
+echo "ruff 0.2.0"
+' > "$FIX/py2/ruff"
+chmod +x "$FIX"/py1/* "$FIX"/py2/*
+run env PATH="$FIX/py1:$PATH" $REUSE key
+PYKEY1="$OUT"
+run env PATH="$FIX/py1:$PATH" $REUSE record
+run env PATH="$FIX/py1:$PATH" $REUSE check
+assert_rc "the same python and ruff reuse" 0
+run env PATH="$FIX/py2:$PATH" $REUSE key
+if [[ "$OUT" != "$PYKEY1" ]]; then t_ok "a changed python or ruff version changes the key"; else t_bad "a changed python or ruff version changes the key"; fi
+run env PATH="$FIX/py2:$PATH" $REUSE check
+assert_rc "a changed python identity misses" 1
+run env PATH="$FIX/py1:$PATH" TEMPLATE_RUFF="$FIX/py2/ruff" $REUSE check
+assert_rc "a changed TEMPLATE_RUFF version misses" 1
 
 # ---- a missing record misses ----
 rm -f "$(git rev-parse --git-path selftest-pass)"
