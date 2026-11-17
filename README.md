@@ -51,7 +51,8 @@ Already have a project? See [Add it to an existing project](#add-it-to-an-existi
 
 - **Start a task.** `scripts/new-task.sh my-feature` makes a branch and a short
   plan in `.work/TASK.md`: the goal, how you will know it is done, and the steps.
-- **While working.** `./scripts/check.sh --quick` runs the fast checks.
+- **While working.** `./scripts/check.sh --fast` runs the fast checks and only
+  the self-tests the changed files touch; it says it is not the full gate.
 - **Before shipping.** `./scripts/check.sh` runs all of them. Work merges only
   after the same checks pass on GitHub.
 - **After the task.** A short retro writes down what the evidence showed.
@@ -150,8 +151,10 @@ Adopt the project template from <TEMPLATE URL> at tag <TAG> into this repository
 - Begin a task: `scripts/new-task.sh <slug> [standard|quick|autopilot]`
   creates the branch and `.work/TASK.md`, and lists the preference areas and
   baselines that match the task name.
-- While working: `./scripts/check.sh --quick` (or `scripts/quickgate.sh`, the
-  same lane). Before shipping: `./scripts/check.sh`. Shipping is a gated
+- While working: `./scripts/check.sh --fast` (the `--quick` lane, with the
+  self-tests cut to those the changed files map to), or `./scripts/check.sh
+  --quick` (or `scripts/quickgate.sh`, the same lane), which runs every
+  self-test. Before shipping: `./scripts/check.sh`, once. Shipping is a gated
   merge: the work goes through a branch and merges only after the gauntlet is
   green on CI.
 - At milestones run `docs/procedures/bughunt.md`; at the end of every task
@@ -234,7 +237,9 @@ contract: `docs/procedures/upstream.md`.
   (`scripts/adr.sh check`); the documentation question table
   (`scripts/doc-eval.sh check`); the preference registers
   (`scripts/preferences.sh check`); `scripts/selftest.sh` whenever
-  `tests/template/` exists. The full gate (not `--quick`) also runs
+  `tests/template/` exists (under `--fast`, only the test files the changed
+  files map to); executable bits of `scripts/` and `tests/template/` in the
+  git index, before the self-tests. The full gate (not `--quick`) also runs
   `scripts/tasklint.sh ship`: no open assumption, and an autopilot task has a
   PASS plan verdict.
 - Claude Code hooks: `scripts/destructive-guard.sh` refuses destructive rm and
@@ -244,8 +249,8 @@ contract: `docs/procedures/upstream.md`.
   loads the mode, the branch, status, recent commits, the live task and the
   preference registers; `scripts/feedback-log.sh` notes each message you send.
 - Template mode (before start): template integrity, including required files,
-  placeholders, skill frontmatter, settings validity, executable bits, ADR
-  references and BLUEPRINT tree parity.
+  placeholders, skill frontmatter, settings validity, ADR references,
+  BLUEPRINT tree parity, and no pipe into head or an early-exit grep.
 - Project mode (after start writes `.start-done`): the stack gauntlet wired by
   start: format, typecheck, lint with boundary rules, tests, secret scan,
   build, mutation on changed files, CHANGELOG freshness, plus each selected

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # check.sh - the single gauntlet. CI runs this exact script, so local and CI
-# cannot diverge. Usage: ./scripts/check.sh [--full-mutation] [--quick]
+# cannot diverge. Usage: ./scripts/check.sh [--full-mutation] [--quick] [--fast]
 # --quick is the working lane: the wired stack block skips mutation and the
 # production build when QUICK=1; the always section (step 4) never skips,
 # except the ship-readiness half of the task lint (4e), which is full-gate only.
+# --fast is --quick with one more cut: the template self-tests (4g) run only
+# for the files changed since the merge base with main (fast_select below).
+# It is not the full gate: the full gate runs once at task finish and in CI.
+# CHECK_FAST_BASE names the diff base for --fast instead of the merge base.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,16 +15,100 @@ cd "$ROOT"
 
 FULL_MUTATION=0
 QUICK=0
+FAST=0
 for arg in "$@"; do
   case "$arg" in
     --full-mutation) FULL_MUTATION=1 ;;
     --quick) QUICK=1 ;;
-    *) echo "unknown flag: $arg (supported: --full-mutation, --quick)" >&2; exit 2 ;;
+    --fast) FAST=1; QUICK=1 ;;
+    *) echo "unknown flag: $arg (supported: --full-mutation, --quick, --fast)" >&2; exit 2 ;;
   esac
 done
 export QUICK
 
 fail() { echo "CHECK FAILED: $*" >&2; exit 1; }
+
+# The --fast notice is printed first and again on exit, pass or fail, so a
+# green --fast run can never be read as the full gate.
+FAST_NOTICE="check --fast: NOT the full gate - self-tests ran only for the changed files; run ./scripts/check.sh once at task finish (CI runs the full gate)"
+if (( FAST )); then
+  echo "$FAST_NOTICE"
+  trap 'rc=$?; echo "$FAST_NOTICE (exit $rc)"' EXIT
+fi
+
+# BEGIN fast-selection
+# fast_changed: print every path changed since the diff base (CHECK_FAST_BASE,
+# else the merge base of HEAD with origin/main or main), committed, staged,
+# unstaged or untracked, one per line. Old and new names of a rename are both
+# printed. Returns 1 when no base resolves, so the caller runs everything.
+fast_changed() {
+  local base="${CHECK_FAST_BASE:-}" ref
+  if [[ -z "$base" ]]; then
+    for ref in origin/main main; do
+      if git rev-parse -q --verify "$ref^{commit}" >/dev/null 2>&1; then
+        base="$(git merge-base HEAD "$ref" 2>/dev/null)" || base=""
+        [[ -n "$base" ]] && break
+      fi
+    done
+  fi
+  [[ -n "$base" ]] || return 1
+  git -c core.quotepath=off diff --name-only --no-renames "$base" -- || return 1
+  git -c core.quotepath=off ls-files --others --exclude-standard || return 1
+}
+# fast_select: read changed paths on stdin and print the self-test files to
+# run, sorted, one per line, or the single word ALL. When unsure it runs more,
+# never fewer: a changed test file runs itself; any other path runs every test
+# file whose text names its basename (a script, fixture, doc or lib.sh); a
+# changed path under scripts/, tests/template/, .claude/ or .codex/ that no
+# test names runs every test, since untested tooling may still break one.
+fast_select() {
+  local f b t hit all=0 sel=()
+  local tests=(tests/template/test_*.sh)
+  while IFS= read -r f || [[ -n "$f" ]]; do
+    [[ -n "$f" ]] || continue
+    case "$f" in
+      tests/template/test_*.sh)
+        if [[ -f "$f" ]]; then sel+=("$f"); fi
+        continue ;;
+    esac
+    b="${f##*/}"
+    hit=0
+    for t in "${tests[@]}"; do
+      [[ -f "$t" ]] || continue
+      if grep -qF -- "$b" "$t"; then hit=1; sel+=("$t"); fi
+    done
+    if (( ! hit )); then
+      case "$f" in scripts/*|tests/template/*|.claude/*|.codex/*) all=1 ;; esac
+    fi
+  done
+  if (( all )); then echo ALL; return 0; fi
+  (( ${#sel[@]} )) || return 0
+  printf '%s\n' "${sel[@]}" | sort -u
+}
+# END fast-selection
+
+# fast_selftest: step 4g under --fast. The selection and its reason are
+# printed so a reader can see which tests did not run.
+fast_selftest() {
+  local changed sel f
+  local -a files=()
+  if ! changed="$(fast_changed)"; then
+    echo "check --fast: no diff base (set CHECK_FAST_BASE or fetch main); running every self-test"
+    ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+    return 0
+  fi
+  sel="$(fast_select <<< "$changed")"
+  if [[ "$sel" == ALL ]]; then
+    echo "check --fast: a changed script or test helper maps to no single test; running every self-test"
+    ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+  elif [[ -z "$sel" ]]; then
+    echo "check --fast: no self-test maps to the changed files; none run"
+  else
+    while IFS= read -r f; do files+=("$f"); done <<< "$sel"
+    echo "check --fast: self-tests for the changed files: ${files[*]}"
+    ./scripts/selftest.sh "${files[@]}" || gerr "scripts/selftest.sh failed"
+  fi
+}
 
 # BEGIN blueprint-parity
 # blueprint_parity BLUEPRINT FILE...: print one problem per line. The tree in
@@ -163,10 +251,24 @@ fi
 # (docs/procedures/doc-eval.md).
 ./scripts/doc-eval.sh check || gerr "scripts/doc-eval.sh check failed"
 
+# 4f2. Shell scripts keep their executable bit in the git index, in both
+# modes, and before the self-tests so a slow local run still reaches it: Git
+# Bash on Windows runs a script without the bit and commits it as 100644, and
+# only Linux then refuses it. Covers scripts/ and tests/template/, except
+# tests/template/fixtures/check.sh (a data copy of this file, 100644 on
+# purpose) and scripts/stack-check.sh (project-owned, run through bash).
+nonexec="$(git ls-files -s -- scripts tests/template | awk '$1 != "100755" && $4 ~ /\.sh$/ && $4 != "tests/template/fixtures/check.sh" && $4 != "scripts/stack-check.sh" {print $4}')"
+[[ -z "$nonexec" ]] || gerr "scripts lost the executable bit in the git index (git update-index --chmod=+x <file>): $(echo $nonexec)"
+
 # 4g. The template's own scripts are tested (docs/procedures/tests.md), in
-# every mode, whenever the tests exist.
+# every mode, whenever the tests exist. --fast runs only the tests the
+# changed files map to (fast_selftest above).
 if [[ -d tests/template ]]; then
-  ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+  if (( FAST )); then
+    fast_selftest
+  else
+    ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+  fi
 fi
 
 # 4h. The "- Template: <url> <ref>" line names the last recorded template
@@ -290,6 +392,13 @@ if [[ ! -f .start-done ]]; then
     scripts/doctor.sh tests/template/test_doctor.sh
     .codex/hooks.json scripts/codex-hook.cmd tests/template/test_codex_hooks.sh
     scripts/private-terms.sh tests/template/test_private_terms.sh
+    scripts/refuse-shell-stdin.sh scripts/hooks-dispatch.sh
+    scripts/hooks/refuse_shell_stdin.py scripts/hooks/ruff.toml
+    scripts/hooks/tests/test_refuse_shell_stdin.py
+    tests/template/test_shell_stdin_hook.sh tests/template/test_hooks_dispatch.sh
+    scripts/tree-id.sh tests/template/test_tree_id.sh
+    scripts/profiles.sh tests/template/test_profiles.sh
+    scripts/start-reset-lessons.sh tests/template/test_start_reset_lessons.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -314,7 +423,7 @@ if [[ ! -f .start-done ]]; then
 
   # 5e. Agent and skill frontmatter is structurally sound.
   for f in .claude/agents/*.md .claude/skills/*/SKILL.md .agents/skills/*/SKILL.md; do
-    head -n 1 "$f" | grep -qx -- '---' || terr "frontmatter must open with ---: $f"
+    [[ "$(sed -n 1p "$f")" == '---' ]] || terr "frontmatter must open with ---: $f"
     grep -q '^name:' "$f" || terr "frontmatter missing name: $f"
     grep -q '^description:' "$f" || terr "frontmatter missing description: $f"
   done
@@ -334,9 +443,7 @@ if [[ ! -f .start-done ]]; then
     echo "WARNING: python not found; settings.json not validated here (CI validates it)."
   fi
 
-  # 5g. Shell scripts keep their executable bit in the git index.
-  nonexec="$(git ls-files -s scripts/ | awk '$1 != "100755" && $4 ~ /\.sh$/ {print $4}')"
-  [[ -z "$nonexec" ]] || terr "scripts lost the executable bit: $nonexec"
+  # 5g. The executable-bit check moved to the always section (step 4f2).
 
   # 5h. Every ADR a procedure or rule cites exists.
   for ref in $(grep -ohE 'docs/decisions/[0-9]{4}' docs/procedures/*.md docs/rules/*.md docs/profiles/*/*.md 2>/dev/null | sort -u); do
@@ -413,12 +520,25 @@ if [[ ! -f .start-done ]]; then
 
   # 5l. No script pipes into head. Under pipefail the writer dies with
   # SIGPIPE (exit 141) once its output outlives head, which turned a long dash
-  # list into a crash; use sed -n '1,Np', which reads all its input. Not
-  # linted, same mechanism: an early-exit grep -q or grep -m on a pipe.
+  # list into a crash; use sed -n '1,Np', which reads all its input.
   heads="$(git grep -nE '\|[[:space:]]*head([[:space:]]|$)' -- 'scripts/*.sh' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
   if [[ -n "$heads" ]]; then
     printf '%s\n' "$heads"
     terr "a script pipes into head (exit 141 under pipefail on long output); use sed -n '1,Np'"
+  fi
+  # Same mechanism: grep -q, --quiet, --silent, -m or --max-count stops
+  # reading at the first match, so a pipe into it can end the writer with
+  # SIGPIPE (the blueprint parity check failed in CI that way). Refused: a pipe
+  # into grep with any of those options, bundled or not (| grep -q, | grep -Fxq,
+  # | grep -E --quiet, | grep -m 1, | grep --max-count=1). Allowed: grep -q on
+  # a file or a here-string (<<<), "|| grep -q", | grep -c, and comment lines.
+  # Use a case match on the newline-framed string (blueprint_parity above).
+  # Limits: a grep option given after a pattern argument, or a pipe continued
+  # on the next line, is not seen.
+  qgreps="$(git grep -nE '(^|[^|])\|[[:space:]]*grep([[:space:]]+-[^[:space:]|]*)*[[:space:]]+(-[A-Za-z]*[qm]|--quiet|--silent|--max-count)' -- 'scripts/*.sh' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
+  if [[ -n "$qgreps" ]]; then
+    printf '%s\n' "$qgreps"
+    terr "a script pipes into an early-exit grep (-q, --quiet, --silent, -m, --max-count; exit 141 under pipefail on long output); match the captured string with case instead"
   fi
 
   # 5m. The template's skills are exactly the core list scripts/lessons.sh
@@ -463,6 +583,9 @@ fi
 #   - CHANGELOG freshness: regenerate with git-cliff to a temp path and diff;
 #     fail on drift
 
+if [[ ! -f .claude/skills/verify/SKILL.md ]] || grep -q '{{' .claude/skills/verify/SKILL.md; then
+  fail "software profile SW-15: .claude/skills/verify/SKILL.md is missing or still holds a {{ wiring placeholder; fill and install it per docs/procedures/start.md step 4"
+fi
 if [[ ! -f scripts/stack-check.sh ]]; then
   fail ".start-done exists but scripts/stack-check.sh is missing. Write the stack steps there (docs/procedures/start.md step 3), or remove .start-done."
 fi

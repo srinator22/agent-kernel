@@ -15,7 +15,14 @@ write_task() { mkdir -p .work; printf '# Task: fixture
 ## Plan
 1. a flat plan
 ' > .work/TASK.md; }
-commit_fixture() { git add -A >/dev/null 2>&1 && git update-index --chmod=+x scripts/*.sh >/dev/null 2>&1 && git commit -q -m fixture >/dev/null 2>&1; }
+# Marks every tracked script executable in the index: where git does not track
+# file modes (core.fileMode false, the Windows default) a fresh add records
+# 100644, which check.sh step 4f2 refuses.
+commit_fixture() {
+  git add -A >/dev/null 2>&1 || return 1
+  git ls-files -z -- 'scripts/*.sh' 'tests/template/*.sh' | xargs -0 git update-index --chmod=+x -- >/dev/null 2>&1
+  git commit -q -m fixture >/dev/null 2>&1
+}
 
 write_agents() {
   cat > AGENTS.md <<'AG'
@@ -28,6 +35,16 @@ write_agents() {
 ## Project decisions
 - Profiles: software
 AG
+  write_verify
+}
+# A started project installs a filled verify skill (software profile SW-15);
+# check.sh refuses project mode without one.
+write_verify() {
+  local d
+  for d in .claude .agents; do
+    mkdir -p "$d/skills/verify"
+    printf -- '---\nname: verify\ndescription: fixture\n---\nRun the fixture.\n' > "$d/skills/verify/SKILL.md"
+  done
 }
 
 sec_project() {
@@ -262,6 +279,27 @@ commit_fixture
 run ./scripts/check.sh --quick
 assert_rc "a failing selftest fails project mode, even with --quick" 1
 assert_contains "the selftest failure is reported" "scripts/selftest.sh failed"
+
+# ---- 4f2: the executable bit in the git index, project mode, before 4g ----
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+mkdir -p tests/template/fixtures
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/fixtures/check.sh
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/fixtures/helper.sh
+printf '#!/usr/bin/env bash\nexit 0\n' > scripts/tool.sh
+chmod +x scripts/tool.sh tests/template/fixtures/helper.sh
+commit_fixture
+run ./scripts/check.sh --quick
+assert_not_contains "every script executable in the index passes the index check" "lost the executable bit"
+for p in tests/template/test_ok.sh tests/template/fixtures/helper.sh scripts/tool.sh tests/template/fixtures/check.sh; do
+  git update-index --chmod=-x -- "$p"
+done
+git commit -q -m "scripts without the executable bit" >/dev/null 2>&1
+run ./scripts/check.sh --quick
+assert_rc "a script without the executable bit in the index fails project mode" 1
+assert_contains "the missing bits are named with the fix" "scripts lost the executable bit in the git index (git update-index --chmod=+x <file>): scripts/tool.sh tests/template/fixtures/helper.sh tests/template/test_ok.sh"
+assert_eq "the index check reports before the self-tests run" "" "$(o="${OUT%%scripts lost the executable bit*}"; [[ "$o" == *"selftest: "* ]] && echo "selftest ran first")"
+assert_contains "the self-tests still run after the index failure" "selftest: 1 passed"
+commit_fixture
 t_check_exec "project mode with tests/template"
 t_cleanup
 }
@@ -402,6 +440,40 @@ assert_contains "the script and line are named" "scripts/pipes.sh:3:"
 assert_not_contains "a comment that mentions it is not flagged" "scripts/pipes.sh:4:"
 git rm -q -f scripts/pipes.sh && git commit -q -m "remove pipes" >/dev/null 2>&1
 
+# ---- 5l: no script pipes into an early-exit grep, same SIGPIPE mechanism ----
+# Lines 3 to 8 are refused forms; lines 9 to 14 are allowed forms.
+cat > scripts/pipes.sh <<'PS'
+#!/usr/bin/env bash
+set -o pipefail
+ls | grep -q x
+ls | grep -Fxq -- x
+ls | grep -E --quiet x
+ls |grep -m 1 x
+ls | grep --max-count=1 x
+ls | grep -i --silent x
+ls | grep -c x
+grep -q x notes.txt
+true || grep -q x notes.txt
+grep -qx x <<< "$PATH"
+# ls | grep -q x in a comment
+ls | grep -v -e y
+PS
+commit_fixture
+run ./scripts/check.sh --quick
+assert_rc "a script that pipes into an early-exit grep fails template mode" 1
+assert_contains "the early-exit grep failure is named" "a script pipes into an early-exit grep"
+# Not "n": t_parallel's local n names this section's counts file.
+for ln in 3 4 5 6 7 8; do assert_contains "refused form on line $ln is named" "scripts/pipes.sh:$ln:"; done
+for ln in 9 10 11 12 13 14; do assert_not_contains "allowed form on line $ln is not flagged" "scripts/pipes.sh:$ln:"; done
+git rm -q -f scripts/pipes.sh && git commit -q -m "remove pipes" >/dev/null 2>&1
+
+# ---- 4f2: the executable bit in the git index covers tests/template here too ----
+git update-index --chmod=-x tests/template/test_selftest.sh && git commit -q -m "test without x" >/dev/null 2>&1
+run ./scripts/check.sh --quick
+assert_rc "a test file without the executable bit in the index fails template mode" 1
+assert_contains "template mode names the test file" "scripts lost the executable bit in the git index (git update-index --chmod=+x <file>): tests/template/test_selftest.sh"
+commit_fixture
+
 printf 'bad %s dash\n' "$EM" > notes.txt
 commit_fixture
 run ./scripts/check.sh
@@ -445,6 +517,7 @@ else
   sed -i.bak -e 's/^- Profiles: {{FILLED_BY_START.*$/- Profiles: software\n- Template: https:\/\/example.invalid\/template.git template-v0.1.0/' -e '/^Status: TEMPLATE/d' AGENTS.md && rm -f AGENTS.md.bak
   echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
   ./scripts/kernel-hash.sh --update >/dev/null
+  write_verify
   touch .start-done
   # Keep the template's index modes: where git does not track file modes
   # (core.fileMode false, the Windows default) a fresh add records 100644 and
@@ -466,9 +539,85 @@ else
 fi
 }
 
-# The four sections build their own fixtures and share nothing, so they run
-# side by side; the slow check.sh runs in each overlap.
+sec_fast() {
+# ---- --fast: only the self-tests the changed files map to ----
+# scripts/selftest.sh here is a stand-in for its contract: "selftest.sh
+# FILE..." runs only FILE..., and no argument runs every test file.
+make_fixture
+cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
+write_agents
+./scripts/kernel-hash.sh --update >/dev/null
+touch .start-done
+write_task
+printf '#!/usr/bin/env bash\necho "stack args: $*"\n' > scripts/stack-check.sh
+printf '#!/usr/bin/env bash\necho "selftest stub args=[$*]"\nexit "${SELFTEST_RC:-0}"\n' > scripts/selftest.sh
+mkdir -p tests/template docs
+printf '#!/usr/bin/env bash\n# exercises scripts/alpha.sh\nexit 0\n' > tests/template/test_alpha.sh
+printf '#!/usr/bin/env bash\n# exercises scripts/beta.sh\nexit 0\n' > tests/template/test_beta.sh
+printf '#!/usr/bin/env bash\necho alpha\n' > scripts/alpha.sh
+printf '#!/usr/bin/env bash\necho beta\n' > scripts/beta.sh
+printf 'helpers\n' > tests/template/lib.sh
+echo "notes" > docs/notes.md
+chmod +x scripts/*.sh tests/template/*.sh
+commit_fixture
+git branch -M main
+git checkout -q -b work
+
+run ./scripts/check.sh --fast
+assert_rc "--fast with nothing changed passes" 0
+assert_contains "--fast says first that it is not the full gate" "check --fast: NOT the full gate"
+assert_contains "--fast repeats the notice on exit with the status" "(CI runs the full gate) (exit 0)"
+assert_contains "nothing changed: no self-test runs" "no self-test maps to the changed files; none run"
+assert_not_contains "nothing changed: the runner is not called" "selftest stub"
+assert_contains "--fast is the quick lane for stack-check.sh" "stack args: --quick"
+
+echo "# edit" >> scripts/alpha.sh
+run ./scripts/check.sh --fast
+assert_contains "an unstaged script change selects the test that names it" "check --fast: self-tests for the changed files: tests/template/test_alpha.sh"
+assert_contains "only that test file is passed to selftest.sh" "selftest stub args=[tests/template/test_alpha.sh]"
+commit_fixture
+run ./scripts/check.sh --fast
+assert_contains "a change committed since the merge base with main still selects it" "selftest stub args=[tests/template/test_alpha.sh]"
+echo "# edit" >> tests/template/test_beta.sh
+run ./scripts/check.sh --fast
+assert_contains "a changed test file runs itself, sorted with the rest" "selftest stub args=[tests/template/test_alpha.sh tests/template/test_beta.sh]"
+SELFTEST_RC=1 run ./scripts/check.sh --fast
+assert_rc "a failing selected self-test fails --fast" 1
+assert_contains "the selftest failure is named" "scripts/selftest.sh failed"
+assert_contains "the notice is repeated on a failing exit" "(CI runs the full gate) (exit 1)"
+
+printf '#!/usr/bin/env bash\n' > scripts/orphan.sh && chmod +x scripts/orphan.sh
+run ./scripts/check.sh --fast
+assert_contains "an untracked script no test names runs every self-test" "maps to no single test; running every self-test"
+assert_contains "every self-test means selftest.sh without arguments" "selftest stub args=[]"
+rm -f scripts/orphan.sh
+commit_fixture
+
+echo "more" >> docs/notes.md
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "CHECK_FAST_BASE sets the base; a doc no test names runs none" "no self-test maps to the changed files; none run"
+echo "more" >> tests/template/lib.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a changed test helper no test names runs every self-test" "selftest stub args=[]"
+CHECK_FAST_BASE=no-such-ref run ./scripts/check.sh --fast
+assert_contains "no diff base runs every self-test" "no diff base (set CHECK_FAST_BASE or fetch main); running every self-test"
+commit_fixture
+
+run ./scripts/check.sh
+assert_rc "the full gate passes" 0
+assert_contains "the full gate runs every self-test" "selftest stub args=[]"
+assert_not_contains "the full gate prints no --fast notice" "check --fast"
+run ./scripts/check.sh --bogus
+assert_rc "an unknown flag is a usage error" 2
+assert_contains "the usage names --fast" "supported: --full-mutation, --quick, --fast"
+t_check_exec "--fast"
+t_cleanup
+}
+
+# The sections build their own fixtures and share nothing, so they run side
+# by side; the slow check.sh runs in each overlap.
 t_parallel "project mode" sec_project
+t_parallel "--fast" sec_fast
 t_parallel "project mode with tests/template" sec_selftest
 t_parallel "template mode" sec_template
 t_parallel "started project" sec_started
