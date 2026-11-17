@@ -3,6 +3,8 @@
 # one line with the install command for the detected system; nothing is ever
 # installed or downloaded. Tools are PATH shims in a sandbox folder that is the
 # whole PATH of the run, so no real winget, brew, apt, gh or curl is reached.
+# The root is found from the script's own path, also when started as
+# "bash doctor.sh" from inside scripts/.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -271,6 +273,15 @@ else
     if grep -qF -- "$name" "$T_ROOT/README.md"; then t_ok "README names $name"; else t_bad "README names $name"; fi
   done <<< "$OUT"
 fi
+
+# Started as "bash doctor.sh" from inside scripts/: the script path has no
+# slash, so the root must still come out as the repository, not empty (an
+# empty root sourced /scripts/find-python.sh and reported Python missing).
+new_sb
+OUT="$(cd "$FIX/scripts" && env PATH="$SB" "$BASH" doctor.sh 2>&1)"; RC=$?
+assert_rc "bash doctor.sh from inside scripts/: exit 0" 0
+assert_not_contains "from inside scripts/: python is not reported missing" "python (required)"
+assert_not_contains "from inside scripts/: no problem line" "(required):"
 
 sb_clean
 t_finish
