@@ -61,7 +61,7 @@ Already have a project? See [Add it to an existing project](#add-it-to-an-existi
 
 <p align="center"><img src="docs/assets/learning.svg" width="100%" alt="You say a preference once in plain words. It is noted on your machine. It becomes a rule with your words and the date, which you can veto. If you have to say it again, the rule becomes a test."></p>
 
-In Claude Code, each message you send is noted on your machine, with what was
+In Claude Code and Codex, each message you send is noted on your machine, with what was
 happening at the time. The note is never committed. When you state a
 preference, the agent adds it as a rule in `docs/preferences/` and shows you
 the line, so you can say no. If you have to repeat yourself, the next dream
@@ -236,18 +236,24 @@ contract: `docs/procedures/upstream.md`.
   name evidence, assumptions carry a status); ADR numbering and format
   (`scripts/adr.sh check`); the documentation question table
   (`scripts/doc-eval.sh check`); the preference registers
-  (`scripts/preferences.sh check`); `scripts/selftest.sh` whenever
+  (`scripts/preferences.sh check`); the recorded template ref
+  (`scripts/template-sync.sh --status`); no private term in the repository
+  (`scripts/private-terms.sh check`); `scripts/selftest.sh` whenever
   `tests/template/` exists (under `--fast`, only the test files the changed
   files map to); executable bits of `scripts/` and `tests/template/` in the
   git index, before the self-tests. The full gate (not `--quick`) also runs
   `scripts/tasklint.sh ship`: no open assumption, and an autopilot task has a
   PASS plan verdict.
-- Claude Code hooks: `scripts/destructive-guard.sh` refuses destructive rm and
+- Hooks (Claude Code and Codex): `scripts/destructive-guard.sh` refuses destructive rm and
   git forms before they run, in every session and subagent;
-  `scripts/stop-gate.sh` blocks a turn end on broken task state and runs the
-  quick gate once every criterion is ticked; `scripts/session-context.sh`
+  `scripts/stop-gate.sh` blocks a turn end on broken task state and starts the
+  quick gate in the background once every criterion is ticked (a later turn
+  end reads its result, so no turn waits for it); `scripts/session-context.sh`
   loads the mode, the branch, status, recent commits, the live task and the
-  preference registers; `scripts/feedback-log.sh` notes each message you send.
+  preference registers; `scripts/feedback-log.sh` notes each message you send;
+  `scripts/refuse-shell-stdin.sh` refuses `python -` and here-documents;
+  `scripts/hooks-dispatch.sh` runs a project's own hooks from `scripts/hooks.d/`;
+  `scripts/worker-git-guard.sh` stops the worker agent from committing or pushing.
 - Template mode (before start): template integrity, including required files,
   placeholders, skill frontmatter, settings validity, ADR references,
   BLUEPRINT tree parity, and no pipe into head or an early-exit grep.
@@ -279,7 +285,7 @@ Selected at start; `software` is always on. Index: `docs/profiles/README.md`.
 Each profile ships its agents (with Codex twins), skills and tested tools in
 its own `agents/`, `skills/` and `tools/` folders, and start copies them in
 when the profile is adopted. Optional items proven in only one project live in
-`docs/library/` (agents, skills, procedures, tools, a shell hook) and are
+`docs/library/` (agents, skills, procedures, tools) and are
 adopted by choice (ADR 0004). `docs/roster/` holds opt-in department agents
 (R&D leadership, programme, mechanical and product, electronics and firmware,
 quality and safety, production, documentation, video, CG render): read-only

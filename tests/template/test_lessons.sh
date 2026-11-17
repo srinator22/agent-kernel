@@ -17,11 +17,11 @@ INDEX_HEAD='# Lessons index
 Format:
 
 - [L001] <one-line, situation-triggered description> - <the lesson, one
-  or two lines> (used: 0, last: -, retire-when: <condition>)
+  or two lines> (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>)
 '
 write_index() { printf '%s\n' "$INDEX_HEAD" > docs/lessons/INDEX.md; }
-add_lesson() { # id used last retire
-  echo "- [$1] When X happens - do Y (used: $2, last: $3, retire-when: $4)" >> docs/lessons/INDEX.md
+add_lesson() { # id used last retire [approved]
+  echo "- [$1] When X happens - do Y (used: $2, last: $3, approved: ${5:-2026-10-01}, retire-when: $4)" >> docs/lessons/INDEX.md
 }
 PENDING_HEAD='# Pending
 
@@ -66,7 +66,7 @@ write_index
 echo "- [L001] When X happens - do Y (used: 0, last: -)" >> docs/lessons/INDEX.md
 run ./scripts/lessons.sh check
 assert_rc "lesson without retire-when fails" 1
-assert_contains "names the lesson and the fields" "L001 lacks the (used: N, last: ..., retire-when: ...) fields"
+assert_contains "names the lesson and the fields" "L001 lacks the (used: N, last: ..., approved: ..., retire-when: ...) fields"
 write_index
 echo "- [L001] When X happens - do Y" >> docs/lessons/INDEX.md
 run ./scripts/lessons.sh check
@@ -77,9 +77,68 @@ add_lesson L001 0 - "never"
 run ./scripts/lessons.sh check
 assert_rc "duplicate lesson id fails" 1
 write_index
-echo "- [L001] When X happens - do Y (used: 0, last: 2026-13-45, retire-when: never)" >> docs/lessons/INDEX.md
+echo "- [L001] When X happens - do Y (used: 0, last: 2026-13-45, approved: 2026-10-01, retire-when: never)" >> docs/lessons/INDEX.md
 run ./scripts/lessons.sh check
 assert_rc "invalid last date fails" 1
+
+# approved: the date a lesson was approved (right after last:). Required and
+# well formed; with used: 0 it must not be more than 45 days old (the
+# mechanized form of the maintain rule "unused > 45 days").
+write_index
+add_lesson L001 0 - "never" 2026-08-25
+run ./scripts/lessons.sh check
+assert_rc "used 0, approved exactly 45 days ago passes" 0
+write_index
+add_lesson L001 0 - "never" 2026-08-24
+run ./scripts/lessons.sh check
+assert_rc "used 0, approved 46 days ago fails" 1
+assert_contains "the stale unused lesson is named with its age" "L001 has used: 0 and was approved 46 days ago (> 45)"
+assert_contains "the message says how to resolve it" "archive it in a maintain pass (scripts/lessons.sh expire --apply) or record a use (scripts/lessons.sh use L001)"
+write_index
+add_lesson L001 1 - "never" 2026-01-01
+add_lesson L002 3 2026-09-01 "never" 2026-01-01
+run ./scripts/lessons.sh check
+assert_rc "an old lesson that was used passes" 0
+write_index
+echo "- [L001] When X happens - do Y (used: 2, last: 2026-10-01, retire-when: never)" >> docs/lessons/INDEX.md
+run ./scripts/lessons.sh check
+assert_rc "a lesson without approved: fails" 1
+assert_contains "the missing approved: field is named" "L001 has no approved: YYYY-MM-DD field"
+write_index
+echo "- [L001] When X happens - do Y (used: 2, last: 2026-10-01, approved: , retire-when: never)" >> docs/lessons/INDEX.md
+run ./scripts/lessons.sh check
+assert_rc "an empty approved: fails" 1
+assert_contains "the empty approved: is called malformed" "L001 has a malformed approved: date ''"
+write_index
+add_lesson L001 2 2026-10-01 "never" 2026-02-30x
+add_lesson L002 2 2026-10-01 "never" 2026-13-01
+add_lesson L003 2 2026-10-01 "never" -
+run ./scripts/lessons.sh check
+assert_rc "malformed approved: dates fail" 1
+assert_contains "text after the date is malformed" "L001 has a malformed approved: date '2026-02-30x'"
+assert_contains "month 13 is malformed" "L002 has a malformed approved: date '2026-13-01'"
+assert_contains "a dash is malformed" "L003 has a malformed approved: date '-'"
+assert_contains "each bad date counts" "check FAILED (3 problem(s))"
+write_index
+add_lesson L001 2 2026-10-01 "ships [met] 2026-10-08" 2026-10-01
+add_lesson L002 2 2026-10-01 "never" 2026-10-01
+run ./scripts/lessons.sh check
+assert_rc "a [met] retire-when is a warning, not a failure" 0
+assert_contains "the [met] warning names the lesson" "lessons: warning - L001 retire-when is marked [met]"
+assert_not_contains "no warning for a lesson that is not [met]" "L002 retire-when"
+write_index
+add_lesson L001 0 - "never" 2026-08-24
+run env LESSONS_TODAY=2026-10-08 ./scripts/lessons.sh check
+assert_rc "LESSONS_TODAY moves the clock: the same lesson at 45 days passes" 0
+run ./scripts/lessons.sh expire
+assert_contains "expire reads a never-used lesson's age from approved:" "L001 - never used, approved 46 days ago (> 45)"
+add_lesson L002 0 - "never" 2026-10-01
+run ./scripts/lessons.sh expire --apply
+assert_file "a stale never-used lesson is archived by expire --apply" .archive/lessons/L001.md
+run ./scripts/lessons.sh check
+assert_rc "check passes once the stale lesson is archived" 0
+rm -f .archive/lessons/L001.md docs/lessons/MAINTENANCE.log
+write_index
 
 # PENDING entries.
 write_index
@@ -477,11 +536,11 @@ add_lesson L001 0 - "never"
 add_lesson L002 4 2026-09-01 "never"
 run ./scripts/lessons.sh use L001
 assert_rc "use succeeds" 0
-assert_file_has "used incremented and last set" docs/lessons/INDEX.md "- [L001] When X happens - do Y (used: 1, last: 2026-10-09, retire-when: never)"
+assert_file_has "used incremented and last set" docs/lessons/INDEX.md "- [L001] When X happens - do Y (used: 1, last: 2026-10-09, approved: 2026-10-01, retire-when: never)"
 run ./scripts/lessons.sh use L001
-assert_file_has "second use increments again" docs/lessons/INDEX.md "(used: 2, last: 2026-10-09, retire-when: never)"
-assert_file_has "other lessons untouched" docs/lessons/INDEX.md "- [L002] When X happens - do Y (used: 4, last: 2026-09-01, retire-when: never)"
-assert_file_has "format placeholder untouched" docs/lessons/INDEX.md "(used: 0, last: -, retire-when: <condition>)"
+assert_file_has "second use increments again" docs/lessons/INDEX.md "(used: 2, last: 2026-10-09, approved: 2026-10-01, retire-when: never)"
+assert_file_has "other lessons untouched" docs/lessons/INDEX.md "- [L002] When X happens - do Y (used: 4, last: 2026-09-01, approved: 2026-10-01, retire-when: never)"
+assert_file_has "format placeholder untouched" docs/lessons/INDEX.md "(used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>)"
 run ./scripts/lessons.sh use L999
 assert_rc "use of an unknown lesson fails" 1
 run ./scripts/lessons.sh use bogus
@@ -523,9 +582,31 @@ assert_contains "stats counts approved lessons" "approved lessons: 2/20"
 run ./scripts/lessons.sh bogus
 assert_rc "unknown subcommand is a usage error" 2
 
+# archive <Lnnn> <reason>: one lesson, with the reason, moved to .archive/lessons.
+rm -f .archive/lessons/L001.md
+write_index
+add_lesson L001 5 2026-10-05 "never"
+add_lesson L002 1 2026-10-05 "never"
+run ./scripts/lessons.sh archive L001 "content lives in docs/x.md"
+assert_rc "archive succeeds" 0
+assert_file "archive writes the lesson file" .archive/lessons/L001.md
+assert_file_has "the archive holds the reason" .archive/lessons/L001.md "reason: content lives in docs/x.md"
+assert_file_has "the archive holds the original line" .archive/lessons/L001.md "- [L001] When X happens - do Y (used: 5"
+assert_file_lacks "the lesson leaves the index" docs/lessons/INDEX.md "- [L001] When X"
+assert_file_has "the other lesson stays" docs/lessons/INDEX.md "- [L002] When X"
+assert_file_has "the log records the archive" docs/lessons/MAINTENANCE.log "archive: L001 archived to .archive/lessons/L001.md - content lives in docs/x.md"
+run ./scripts/lessons.sh archive L001 "again"
+assert_rc "archiving an id that is no longer approved fails" 1
+run ./scripts/lessons.sh archive L002
+assert_rc "archive without a reason is a usage error" 2
+run ./scripts/lessons.sh archive bogus "x"
+assert_rc "archive with a bad id is a usage error" 2
+assert_file_has "a refused archive leaves the index alone" docs/lessons/INDEX.md "- [L002] When X"
+rm -f .archive/lessons/L001.md docs/lessons/MAINTENANCE.log
+
 # Triggers (ADR 0017): the optional last field, validated by check, kept by use.
 add_trig() { # id trigger
-  echo "- [$1] When X happens - do Y (used: 0, last: -, retire-when: never, trigger: $2)" >> docs/lessons/INDEX.md
+  echo "- [$1] When X happens - do Y (used: 0, last: -, approved: 2026-10-01, retire-when: never, trigger: $2)" >> docs/lessons/INDEX.md
 }
 write_index
 add_trig L001 "A:*.sh"
@@ -546,17 +627,17 @@ assert_contains "names an empty glob after the prefix" "trigger token 'A:' is ma
 assert_contains "names an unknown prefix" "trigger token 'X:src/*' is malformed"
 assert_contains "names a colon inside the glob" "trigger token 'src/a:b' is malformed"
 assert_contains "counts each bad token" "check FAILED (3 problem(s))"
-echo "- [L002] When X happens - do Y (used: 0, last: -, retire-when: , trigger: A:*.sh)" >> docs/lessons/INDEX.md
+echo "- [L002] When X happens - do Y (used: 0, last: -, approved: 2026-10-01, retire-when: , trigger: A:*.sh)" >> docs/lessons/INDEX.md
 run ./scripts/lessons.sh check
 assert_contains "a trigger does not hide an empty retire-when" "L002 has an empty retire-when"
 write_index
 add_trig L001 "A:*.sh"
 run ./scripts/lessons.sh use L001
 assert_rc "use on a lesson with a trigger succeeds" 0
-assert_file_has "use keeps the trigger" docs/lessons/INDEX.md "(used: 1, last: 2026-10-09, retire-when: never, trigger: A:*.sh)"
+assert_file_has "use keeps the trigger" docs/lessons/INDEX.md "(used: 1, last: 2026-10-09, approved: 2026-10-01, retire-when: never, trigger: A:*.sh)"
 write_index
 add_trig L001 "A:*.sh"
-echo "- [L002] When X happens - do Y (used: 0, last: -, retire-when: done [met], trigger: src/*)" >> docs/lessons/INDEX.md
+echo "- [L002] When X happens - do Y (used: 0, last: -, approved: 2026-10-01, retire-when: done [met], trigger: src/*)" >> docs/lessons/INDEX.md
 run ./scripts/lessons.sh expire
 assert_contains "expire reads [met] beside a trigger" "L002 - retire-when marked [met]"
 assert_not_contains "a trigger alone never expires a lesson" "L001 -"
@@ -669,5 +750,112 @@ assert_contains "names the missing header" "holds no \"diff --git\" header"
 run ./scripts/lessons.sh match "$FIX.empty"
 assert_rc "an empty diff file fails" 2
 rm -f "$FIX.diff" "$FIX.space.diff" "$FIX.crlf.diff" "$FIX.notdiff" "$FIX.empty"
+
+# Skills pointer layout: .claude/skills/<name>/SKILL.md names the canonical
+# file and repeats its name and description; nothing else is accepted.
+rm -rf .claude/skills/alpha .agents/skills/alpha
+mkdir -p .claude/skills/ptr .agents/skills/ptr
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nbody of the real skill\nmore body\n' > .agents/skills/ptr/SKILL.md
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "an accepted skills pointer passes" 0
+printf -- '---\nname: ptr\ndescription: another words\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer with a different description fails" 1
+assert_contains "the description mismatch is named" "pointer description differs"
+printf -- '---\nname: other\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/ptr/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer with a different name fails" 1
+assert_contains "the name mismatch is named" "pointer name 'other' differs"
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nCanonical file: .agents/skills/gone/SKILL.md\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a pointer naming a missing file fails" 1
+assert_contains "the missing file is named" ".agents/skills/gone/SKILL.md, which does not exist"
+printf -- '---\nname: ptr\ndescription: the canonical one\n---\n\nsome other prose without a path\n' > .claude/skills/ptr/SKILL.md
+run ./scripts/lessons.sh check
+assert_rc "a differing real skill is not a pointer and fails as drift" 1
+assert_contains "drift is named for a non-pointer" "differ"
+rm -rf .claude/skills/ptr .agents/skills/ptr
+mkdir -p .claude/skills/alpha .agents/skills/alpha
+echo "# alpha" > .claude/skills/alpha/SKILL.md
+echo "# alpha" > .agents/skills/alpha/SKILL.md
+
+# UPSTREAM.md entries follow the PENDING rule plus "applies to:".
+UPSTREAM_HEAD='# Upstream
+
+Entry format (all five fields required):
+
+- what happened:
+- what check should have caught it:
+- what was added:
+- retire-when:
+- applies to: core | <profile name>
+'
+printf '%s\n' "$UPSTREAM_HEAD" > docs/lessons/UPSTREAM.md
+run ./scripts/lessons.sh check
+assert_rc "the UPSTREAM placeholder passes" 0
+printf '%s\n' "$UPSTREAM_HEAD" > docs/lessons/UPSTREAM.md
+cat >> docs/lessons/UPSTREAM.md <<'EOT'
+- what happened: a thing
+- what check should have caught it: a check
+- what was added: a script
+- retire-when: the template carries it
+- applies to: core
+EOT
+run ./scripts/lessons.sh check
+assert_rc "a complete UPSTREAM entry passes" 0
+sed -i.bak '/^- what was added: a script$/d' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "an UPSTREAM entry without a field fails" 1
+assert_contains "the missing field is named" "UPSTREAM.md entry at line"
+assert_contains "which field" "'what was added'"
+sed -i.bak -e 's/^- retire-when: the template carries it$/- retire-when: the template carries it\n- what was added: a script/' -e '/^- applies to: core$/d' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "an UPSTREAM entry without applies to fails" 1
+assert_contains "applies to is named" "'applies to'"
+echo "- applies to: nosuchprofile" >> docs/lessons/UPSTREAM.md
+run ./scripts/lessons.sh check
+assert_rc "an unknown applies to fails" 1
+assert_contains "the unknown value is named" "'applies to' is 'nosuchprofile'"
+mkdir -p docs/profiles/known
+sed -i.bak 's/^- applies to: nosuchprofile$/- applies to: known (sent: #12)/' docs/lessons/UPSTREAM.md && rm -f docs/lessons/UPSTREAM.md.bak
+run ./scripts/lessons.sh check
+assert_rc "a profile name with a sent note passes" 0
+rm -rf docs/profiles/known docs/lessons/UPSTREAM.md
+
+# PROFILE.md contract: 60 to 160 lines, the ten headings in order.
+mkdir -p docs/profiles/pc
+PROFILE_BODY() { # heading-list-file-free generator: prints a valid profile of N filler lines
+  local n="$1" h
+  echo "# Profile: pc"
+  for h in "Purpose and risk" "Rules" "Gates" "Tools" "Playbooks" "Agents and skills" "Parameters and records" "Done means" "Lessons carried in" "Sources"; do
+    echo; echo "## $h"
+  done
+  local have=$(( 1 + 20 ))
+  while (( have < n )); do echo "filler line"; have=$((have + 1)); done
+}
+PROFILE_BODY 60 > docs/profiles/pc/PROFILE.md
+printf 'Skills: none\n' >> docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a PROFILE.md at 61 lines with the headings passes" 0
+PROFILE_BODY 59 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a 59-line PROFILE.md fails" 1
+assert_contains "the short length is named" "has 59 lines; a PROFILE.md is 60 to 160 lines"
+PROFILE_BODY 161 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a 161-line PROFILE.md fails" 1
+assert_contains "the long length is named" "has 161 lines"
+PROFILE_BODY 100 | sed 's/^## Tools$/## Toolbox/' > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a renamed heading fails" 1
+assert_contains "the headings are named" "level-2 headings are"
+PROFILE_BODY 100 | sed '/^## Done means$/d' > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a missing heading fails" 1
+PROFILE_BODY 100 > docs/profiles/pc/PROFILE.md
+run ./scripts/lessons.sh check
+assert_rc "a valid 100-line PROFILE.md passes" 0
+rm -rf docs/profiles/pc
 
 t_finish

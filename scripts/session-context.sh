@@ -66,6 +66,14 @@ fi
 if [[ -f .work/TASK.md ]] && ! grep -q '{{title}}' .work/TASK.md; then
   echo "[session-context] In-progress task state (.work/TASK.md):"
   cat .work/TASK.md
+  # Unattended run: one line naming the owner's pre-approved scope and the report path.
+  un="$(grep -m1 -E '^Unattended:[[:space:]]*yes' .work/TASK.md 2>/dev/null || true)"
+  un="${un%$'\r'}"
+  un="${un#Unattended:}"
+  un="${un# }"
+  if [[ -n "$un" ]]; then
+    echo "[session-context] UNATTENDED RUN: ${un} (kernel rule 15 unchanged; stall rule: docs/procedures/longjob.md)"
+  fi
 fi
 
 # Prints each register's rules (ID and Rule) grouped by area, so a session
@@ -159,12 +167,47 @@ preferences_block() {
     # One shared check (preferences.sh wired); without preferences.sh there is
     # nothing to compare against, so no warning.
     if [[ -f scripts/preferences.sh ]] && ! bash scripts/preferences.sh wired >/dev/null 2>&1; then
-      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json or .codex/hooks.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 9)."
+      echo "[session-context] WARNING: scripts/feedback-log.sh is not wired in .claude/settings.json or .codex/hooks.json; owner feedback is not logged. Merge a UserPromptSubmit hook entry running it with \"timeout\": 5 by hand (docs/procedures/upstream.md step 6, item 9)."
     fi
   fi
   return 0
 }
 preferences_block || true
+
+# Maintenance cadence (docs/procedures/maintain.md step 7): one line when
+# docs/lessons/MAINTENANCE.log holds no "YYYY-MM-DD maintain: ..." entry dated
+# within the last 35 days (or no log at all). Pure file read and shell
+# arithmetic: no git, no subprocess beyond awk and date. LESSONS_TODAY
+# overrides today's date, as in scripts/lessons.sh. Guarded: this hook must
+# exit 0.
+maintain_block() {
+  local log="docs/lessons/MAINTENANCE.log" last="" now y m d
+  now="${LESSONS_TODAY:-$(date -u +%F 2>/dev/null || true)}"
+  [[ "$now" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 0
+  if [[ -f "$log" ]]; then
+    last="$(LC_ALL=C awk '
+      { sub(/$/, "") }
+      /^[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] maintain:/ { d = substr($0, 1, 10); if (d > best) best = d }
+      END { print best }' "$log" 2>/dev/null || true)"
+  fi
+  # Days since 1970-01-01 (civil-from-days, as scripts/lessons.sh day_number).
+  daynum() {
+    local yy=$((10#${1:0:4})) mm=$((10#${1:5:2})) dd=$((10#${1:8:2})) era yoe doy doe
+    if (( mm <= 2 )); then yy=$((yy - 1)); fi
+    era=$(( yy / 400 ))
+    yoe=$(( yy - era * 400 ))
+    doy=$(( (153 * (mm > 2 ? mm - 3 : mm + 9) + 2) / 5 + dd - 1 ))
+    doe=$(( yoe * 365 + yoe / 4 - yoe / 100 + doy ))
+    echo $(( era * 146097 + doe - 719468 ))
+  }
+  if [[ -z "$last" ]]; then
+    echo "[session-context] Maintenance: no maintain pass recorded in docs/lessons/MAINTENANCE.log; run the maintain skill (docs/procedures/maintain.md)."
+  elif (( $(daynum "$now") - $(daynum "$last") > 35 )); then
+    echo "[session-context] Maintenance: last maintain pass $last, over 35 days ago; run the maintain skill (docs/procedures/maintain.md)."
+  fi
+  return 0
+}
+maintain_block || true
 
 # Template update awareness. Project mode: tell the human when a newer
 # template-v* tag exists than the last recorded sync. Template mode: tell the

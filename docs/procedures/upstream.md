@@ -73,6 +73,15 @@ last), so check.sh itself stays the template's and syncs cleanly.
    agents, core, header, catalog (a commit that also changes the kernel or rules
    index is agents). fleet.sh counts every line; the release
    notes list agents, core and header under synced and catalog under library.
+   `scripts/fleet-status.sh [--tsv]` is the short form: per project the template
+   ref, the date of the last recorded sync and the number of template-v* tags
+   newer than that ref ("unknown" for a ref this repository does not have), plus
+   uncommitted files and the old repository URL of a renamed template. Read-only,
+   offline; exit 0 even when projects lag.
+   `scripts/rating.sh [--offline]` prints the numbers behind a template rating:
+   open backlog rows by priority, lesson slots, skills against their cap, the
+   last maintain pass, the latest tag, CI of main, merged-PR cycle time and the
+   fleet versions; "N/A - reason" where a number cannot be read.
 
 ## Template sync (down)
 
@@ -136,7 +145,7 @@ last), so check.sh itself stays the template's and syncs cleanly.
         entry that runs `scripts/feedback-log.sh` (with `"timeout": 5`) by
         hand; session-context warns until it is wired;
       - after a sync that brings `.codex/hooks.json`, open the project in
-        Codex once and trust it and its four hooks (`/hooks` lists them).
+        Codex once and trust it and its five hooks (`/hooks` lists them).
         Then confirm they run: Codex quotes the `[session-context]` lines;
         a forced push is reported BLOCKED; "from now on always lead with
         the result" adds a line to `.work/feedback/log.jsonl`;
@@ -207,3 +216,23 @@ skill folder is listed file by file.
    5. Record `- Template: <url> <tag>` and the first sync line in
       `docs/lessons/MAINTENANCE.log`, then the adoption as an ADR (what was
       copied, what was merged, what was deferred, the template tag adopted).
+   6. A long existing agent file (`CLAUDE.md` or `AGENTS.md` over the
+      180-line cap) moves whole, unedited, to a long-form memory file such
+      as `docs/memory/<name>-long-form.md`. The new `AGENTS.md` keeps a
+      resident routing table (one row per topic: when to read it, the
+      section of the long-form file) and links to the file; the long-form
+      file opens with a line linking back to `AGENTS.md`. Nothing is
+      summarized away.
+   7. Older ADRs are normalized to the template header and nothing else:
+      a title line (`# NNNN - Title`), a `Date: YYYY-MM-DD` line taken from
+      the commit that first added the file, and a `Status:` line. Find the
+      date with
+      `git log --diff-filter=A --follow --format=%as -- docs/decisions/<file>.md`
+      (the last line printed is the first commit). Body text is untouched.
+   8. A project may keep `.claude/skills/<name>/SKILL.md` as a pointer to a
+      canonical skill file elsewhere (for example `.agents/skills/<name>/SKILL.md`).
+      `scripts/lessons.sh check` accepts the layout when the pointer is the
+      only file in its folder, its body (at most 4 non-blank lines) names
+      exactly one repo-relative `SKILL.md` path, that file exists, and its
+      frontmatter `name:` and `description:` equal the pointer's. A pointer
+      with a different name or description, or naming a missing file, fails.

@@ -2,6 +2,7 @@
 # session-context.sh: the mode line, the rule-7 reminder, the git priming
 # block (branch, capped status, last 10 commits), the in-progress task, and
 # graceful output outside a git repository.
+# Recorded: none - the gh, winget, brew, curl and python3 shims are tripwires that log the call and exit 1 (python3: exit 0); no real response is replayed
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -37,6 +38,16 @@ printf '# Task: demo\nMode: standard\n' > .work/TASK.md
 run bash scripts/session-context.sh
 assert_contains "a live TASK.md is printed" "In-progress task state"
 assert_contains "its content follows" "# Task: demo"
+assert_not_contains "no Unattended line without the field" "UNATTENDED RUN"
+printf '# Task: demo\nMode: standard\nUnattended: yes - run tests, edit owned files; report: .work/done/night.md\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_contains "the Unattended field prints one line with scope and report" "UNATTENDED RUN: yes - run tests, edit owned files; report: .work/done/night.md"
+printf '# Task: demo\nMode: standard\nUnattended: no\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_not_contains "Unattended: no prints no line" "UNATTENDED RUN"
+printf '# Task: demo\nMode: standard\n<!-- Unattended: yes - x; report: y -->\n' > .work/TASK.md
+run bash scripts/session-context.sh
+assert_not_contains "a commented Unattended line prints no line" "UNATTENDED RUN"
 # MSYS_NO_PATHCONV: warn when it is defined (any value, empty included, since
 # Git Bash checks only that it exists); say nothing when it is not.
 run env -u MSYS_NO_PATHCONV bash scripts/session-context.sh
@@ -392,6 +403,45 @@ assert_rc "all required tools work: exits 0" 0
 assert_not_contains "all required tools work: no Setup line" "Setup:"
 assert_eq "session start calls no gh, winget, brew or curl" "" "$(cat "$SHIMS/log")"
 case "$SHIMS" in */template-selftest.shim.*) rm -rf "$SHIMS" ;; esac
+t_cleanup
+
+# Maintenance cadence: one line when MAINTENANCE.log holds no "YYYY-MM-DD
+# maintain:" entry within 35 days (or no log); silent otherwise. A pure file
+# read; LESSONS_TODAY fixes the date.
+make_fixture
+cp_script session-context.sh
+mkdir -p docs/lessons
+export LESSONS_TODAY=2026-11-17
+LOG=docs/lessons/MAINTENANCE.log
+rm -f "$LOG"
+run bash scripts/session-context.sh
+assert_rc "no log: exits 0" 0
+assert_contains "no log: the cadence line is printed" "[session-context] Maintenance: no maintain pass recorded in docs/lessons/MAINTENANCE.log"
+: > "$LOG"
+run bash scripts/session-context.sh
+assert_contains "empty log: the cadence line is printed" "Maintenance: no maintain pass recorded"
+printf '%s
+' '2026-11-16 expire: L001 archived to .archive/lessons/L001.md - x' 'template-sync: template-v0.1.0 2026-11-16' > "$LOG"
+run bash scripts/session-context.sh
+assert_contains "expire and template-sync lines are not maintain entries" "Maintenance: no maintain pass recorded"
+printf '%s
+' '2026-10-13 maintain: pass' > "$LOG"
+run bash scripts/session-context.sh
+assert_not_contains "a maintain entry 35 days old is fresh" "Maintenance:"
+printf '%s
+' '2026-10-12 maintain: pass' > "$LOG"
+run bash scripts/session-context.sh
+assert_rc "a stale log still exits 0" 0
+assert_contains "a maintain entry 36 days old is stale and its date is named" "Maintenance: last maintain pass 2026-10-12, over 35 days ago"
+printf '%s
+' '2026-01-05 maintain: old' '2026-11-10 maintain: new' '2026-02-01 maintain: older' > "$LOG"
+run bash scripts/session-context.sh
+assert_not_contains "the newest maintain entry counts, wherever it sits" "Maintenance:"
+printf '%s
+' '2026-11-10 maintain: crlf' > "$LOG"
+run bash scripts/session-context.sh
+assert_not_contains "a CRLF log is read" "Maintenance:"
+unset LESSONS_TODAY
 t_cleanup
 
 t_finish

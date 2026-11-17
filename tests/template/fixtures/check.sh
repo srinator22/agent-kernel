@@ -13,6 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+CHECK_START=$SECONDS
 FULL_MUTATION=0
 QUICK=0
 FAST=0
@@ -72,26 +73,52 @@ fast_changed() {
 # run, sorted, one per line, or the single word ALL. When unsure it runs more,
 # never fewer: a changed test file runs itself; any other path runs every test
 # file whose text names its basename (a script, fixture, doc or lib.sh); a
-# changed path under scripts/, tests/template/, .claude/ or .codex/ that no
-# test names runs every test, since untested tooling may still break one.
+# changed path under scripts/, tests/template/, .claude/ or .codex/ widens to
+# every test when no test names it (untested tooling may still break one),
+# when it no longer exists (a deleted or renamed script: tests that reach it
+# indirectly cannot be traced), or when every test names it (lib.sh). One
+# reason line per selection goes to stderr ("changed-test", "owner:<path>",
+# "widen:<path>") so a surprising selection can be traced.
 fast_select() {
-  local f b t hit all=0 sel=()
+  local f b t hit nhit all=0 sel=() ntests=0
   local tests=(tests/template/test_*.sh)
+  for t in "${tests[@]}"; do [[ -f "$t" ]] && ntests=$((ntests + 1)); done
   while IFS= read -r f || [[ -n "$f" ]]; do
     [[ -n "$f" ]] || continue
     case "$f" in
       tests/template/test_*.sh)
-        if [[ -f "$f" ]]; then sel+=("$f"); fi
+        if [[ -f "$f" ]]; then
+          sel+=("$f")
+          echo "check --fast: select $f (changed-test)" >&2
+        fi
         continue ;;
+    esac
+    case "$f" in
+      scripts/*|tests/template/*|.claude/*|.codex/*)
+        if [[ ! -e "$f" ]]; then
+          all=1
+          echo "check --fast: widen to every test (widen:$f, deleted or renamed)" >&2
+          continue
+        fi ;;
     esac
     b="${f##*/}"
     hit=0
+    nhit=0
     for t in "${tests[@]}"; do
       [[ -f "$t" ]] || continue
-      if grep -qF -- "$b" "$t"; then hit=1; sel+=("$t"); fi
+      if grep -qF -- "$b" "$t"; then hit=1; nhit=$((nhit + 1)); sel+=("$t"); fi
     done
-    if (( ! hit )); then
-      case "$f" in scripts/*|tests/template/*|.claude/*|.codex/*) all=1 ;; esac
+    if (( hit && nhit == ntests )); then
+      all=1
+      echo "check --fast: widen to every test (widen:$f, every test names it)" >&2
+    elif (( hit )); then
+      echo "check --fast: select $nhit test(s) that name $b (owner:$f)" >&2
+    else
+      case "$f" in
+        scripts/*|tests/template/*|.claude/*|.codex/*)
+          all=1
+          echo "check --fast: widen to every test (widen:$f, no test names it)" >&2 ;;
+      esac
     fi
   done
   if (( all )); then echo ALL; return 0; fi
@@ -131,10 +158,8 @@ fast_selftest() {
 # under a directory the tree lists as a summary entry (a directory with no
 # children listed, such as .codex/agents/). Reverse: every file the tree lists
 # must exist in the repository.
-blueprint_parity() {
-  local bp="$1" f entry kind path anc ok tree
-  shift
-  tree="$(awk '
+blueprint_tree() {
+  awk '
     function flush(   i, k, ind, isdir, nxt) {
       for (i = 1; i <= n; i++) {
         ind = lvl[i]
@@ -161,7 +186,13 @@ blueprint_parity() {
       n++; lvl[n] = lv; pth[n] = full; isd[n] = (name ~ /\/$/)
       if (isd[n]) stack[lv] = full
     }
-    END { flush() }' "$bp")"
+    END { flush() }' "$1"
+}
+
+blueprint_parity() {
+  local bp="$1" f entry kind path anc ok tree
+  shift
+  tree="$(blueprint_tree "$bp")"
   # Whole-line matches on the newline-framed tree, not printf | grep -q: an
   # early-exit reader can end the writer with SIGPIPE under pipefail once the
   # tree outgrows the pipe buffer ("printf: write error: Broken pipe").
@@ -183,6 +214,34 @@ blueprint_parity() {
     [[ "$kind" == F ]] || continue
     [[ -e "$path" ]] || echo "$bp section 2 lists $path but it does not exist in the repository"
   done <<< "$tree"
+}
+
+# blueprint_core_unlisted BLUEPRINT FILE...: print one problem per line for
+# each FILE under a core folder that section 2 does not list. Rule: a FILE is
+# listed when its full path is a tree entry, or when an ancestor directory is a
+# summary entry (a directory with no children listed, e.g. .codex/agents/).
+# Prefer explicit listing; a summary entry is the documented exception. Files
+# outside the core folders are not checked. There are no other exclusions.
+blueprint_core_unlisted() {
+  local bp="$1" f anc skip tree c
+  shift
+  tree="$(blueprint_tree "$bp")"
+  local nl=$'\n'
+  for f in "$@"; do
+    skip=1
+    for c in scripts/ tests/template/ docs/procedures/ docs/rules/ docs/decisions/ docs/profiles/ .claude/ .codex/ .agents/ .github/; do
+      if [[ "$f" == "$c"* ]]; then skip=0; break; fi
+    done
+    (( skip )) && continue
+    case "$nl$tree$nl" in *"${nl}F $f${nl}"*) continue ;; esac
+    anc="$f"
+    while [[ "$anc" == */* ]]; do
+      anc="${anc%/*}"
+      case "$nl$tree$nl" in *"${nl}L $anc/${nl}"*) skip=1; break ;; esac
+    done
+    (( skip )) && continue
+    echo "$bp section 2 does not list tracked core file $f (add it to docs/BLUEPRINT.md section 2)"
+  done
 }
 # END blueprint-parity
 
@@ -214,31 +273,99 @@ gfail=0
 gerr() { echo "CHECK FAILED: $*" >&2; gfail=1; }
 
 # 4a. Style: plain hyphens only (kernel rule 20), and no typographic or
-# mis-encoded characters. Tracked files only.
-# Needs grep with PCRE (GNU); where unavailable this defers to CI.
+# mis-encoded characters. Scans tracked files and untracked files that are not
+# ignored, so a new file cannot carry a dash past a local run.
+#
+# Exemptions: tests/style-exempt.list (one git pathspec per line, "#" comments,
+# blank lines ignored) names vendored or captured third-party files that skip
+# THESE style scans only. A wildcard is refused: name a file, or a folder with
+# a trailing "/". An entry that matches no tracked file is stale and fails. The
+# secret scan never reads this list, and a file must never be hidden from the
+# style scans with a .gitattributes -diff, which also hides it from every
+# diff-based secret scan.
+#
+# Engine: git grep -P where git has PCRE; otherwise a portable fallback (grep
+# on the literal UTF-8 byte sequences of the same characters) so the scan never
+# silently skips. CHECK_FORCE_NO_PCRE=1 forces the fallback and
+# CHECK_FORCE_NO_FALLBACK=1 also disables it; both are test-only inputs. With
+# neither engine the step fails, except in CI (CI=true), which has PCRE and
+# defers with a warning.
 # The first 20 matches are printed with sed, which reads all its input: a
 # pipe into head ends the writer with SIGPIPE under pipefail (exit 141) once
 # the list outgrows the pipe buffer.
-rc=0
-dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
-if (( rc == 0 )); then
-  printf '%s\n' "$dashes" | sed -n '1,20p'
-  gerr "em or en dash found; plain hyphens only"
-elif (( rc > 1 )); then
-  echo "WARNING: git grep -P unavailable; dash check deferred to CI."
+style_ex=(.)
+style_exempt_list="tests/style-exempt.list"
+if [[ -f "$style_exempt_list" ]]; then
+  while IFS= read -r ent || [[ -n "$ent" ]]; do
+    [[ -z "$ent" || "$ent" == \#* ]] && continue
+    norm="${ent#./}"; norm="${norm%/}"
+    if [[ -z "$norm" || "$norm" == . || "$ent" == /* ]]; then
+      gerr "$style_exempt_list: '$ent' names the whole tree (or an absolute path), which would switch the scans off; name a tracked file, or a folder with a trailing /"
+      continue
+    fi
+    if [[ "$ent" == *[\*\?\[]* || "$ent" == :* ]]; then
+      gerr "$style_exempt_list: '$ent' is a wildcard or pathspec magic; name a tracked file, or a folder with a trailing /"
+      continue
+    fi
+    if [[ -z "$(git ls-files -- ":(literal)$ent")" ]]; then
+      gerr "$style_exempt_list: stale exemption '$ent' matches no tracked file; remove it"
+      continue
+    fi
+    style_ex+=(":(exclude,literal)$ent")
+  done < <(sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$style_exempt_list")
 fi
+
+# The fallback patterns are literal UTF-8 bytes (grep -E under LC_ALL=C), the
+# same characters the PCRE patterns name by code point.
+printf -v S_EN '\xe2\x80\x93'
+printf -v S_EM '\xe2\x80\x94'
+S_DASH_ERE="$S_EN|$S_EM"
+printf -v S_CHARS_ERE '\xe2\x80\x98|\xe2\x80\x99|\xe2\x80\x9c|\xe2\x80\x9d|\xe2\x80\xa6|\xc2\xa0|\xef\xbf\xbd|\xc3\x83\xc2[\x80-\xbf]|\xc3\xa2\xe2\x82\xac'
+
+style_engine="none"
+if [[ "${CHECK_FORCE_NO_PCRE:-}" != 1 ]]; then
+  prc=0
+  git grep -P -q -e x -- . >/dev/null 2>&1 || prc=$?
+  (( prc <= 1 )) && style_engine="pcre"
+fi
+if [[ "$style_engine" == none && "${CHECK_FORCE_NO_FALLBACK:-}" != 1 ]]; then
+  if LC_ALL=C grep -E -q -e "$S_DASH_ERE" <<< "a${S_EN}b" 2>/dev/null; then
+    style_engine="grep"
+  fi
+fi
+
+# style_scan LABEL PCRE_PATTERN ERE_PATTERN MESSAGE
+style_scan() {
+  local label="$1" pcre="$2" ere="$3" msg="$4" found="" rc=0
+  case "$style_engine" in
+    pcre)
+      found="$(git grep --untracked --exclude-standard -IPn -e "$pcre" -- "${style_ex[@]}" 2>/dev/null)" || rc=$?
+      (( rc > 1 )) && { gerr "git grep -P failed while scanning for $label"; return; }
+      ;;
+    grep)
+      # /dev/null keeps grep from reading stdin when the file list is empty.
+      found="$(git ls-files -z -co --exclude-standard -- "${style_ex[@]}" | LC_ALL=C xargs -0 grep -InHE -e "$ere" /dev/null 2>/dev/null)" || true
+      ;;
+    *)
+      if [[ "${CI:-}" == true ]]; then
+        echo "WARNING: no PCRE and no fallback scanner; $label check deferred."
+      else
+        gerr "cannot scan for $label: git grep -P is unavailable and the grep fallback cannot run; install git with PCRE or GNU grep (CI=true only defers this)"
+      fi
+      return
+      ;;
+  esac
+  if [[ -n "$found" ]]; then
+    printf '%s\n' "$found" | sed -n '1,20p'
+    gerr "$msg"
+  fi
+}
+style_scan "dashes" '[\x{2013}\x{2014}]' "$S_DASH_ERE" "em or en dash found; plain hyphens only"
 # Typographic and mis-encoded characters: curly quotes, the ellipsis
 # character, non-breaking space, the replacement character, and UTF-8 that
 # was decoded as Latin-1 or Windows-1252 (an A-tilde or a-circumflex-euro
 # pair). They break greps and diffs and usually mean pasted or mangled text.
-rc=0
-chars="$(git grep -IPn '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' 2>/dev/null)" || rc=$?
-if (( rc == 0 )); then
-  printf '%s\n' "$chars" | sed -n '1,20p'
-  gerr "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
-elif (( rc > 1 )); then
-  echo "WARNING: git grep -P unavailable; character check deferred to CI."
-fi
+style_scan "typographic characters" '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' "$S_CHARS_ERE" "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
 
 # 4b. Memory caps and mirror parity are mechanized (kernel rules 8 to 10):
 # lesson count, entry fields, quarantine age, quarantine list, skills cap,
@@ -276,13 +403,63 @@ nonexec="$(git ls-files -s -- scripts tests/template | awk '$1 != "100755" && $4
 # 4g. The template's own scripts are tested (docs/procedures/tests.md), in
 # every mode, whenever the tests exist. --fast runs only the tests the
 # changed files map to (fast_selftest above).
+#
+# The full run reuses a green result (scripts/selftest-reuse.sh): when no path
+# named in tests/template/selftest-inputs.list changed since the last passing
+# run on this checkout, and neither CI=true nor CHECK_SELFTEST=full is set, the
+# self-tests are skipped and the line says so. Any doubt (no record, a changed
+# input, a missing list) runs them, and a passing run outside CI records the
+# key. A project synced from an older template has neither file and always
+# runs them.
+SELFTEST_DESC="skipped"
 if [[ -d tests/template ]]; then
+  st_start=$SECONDS
   if (( FAST )); then
     fast_selftest
+    SELFTEST_DESC="$((SECONDS - st_start))s"
   else
-    ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+    reuse_out=""
+    reuse_ok=0
+    reuse_able=0
+    if [[ -f scripts/selftest-reuse.sh && -f tests/template/selftest-inputs.list ]]; then
+      reuse_able=1
+      if [[ "${CHECK_SELFTEST:-}" != full && "${CI:-}" != true ]] && reuse_out="$(bash scripts/selftest-reuse.sh check 2>&1)"; then
+        reuse_ok=1
+      fi
+    fi
+    if (( reuse_ok )); then
+      echo "$reuse_out (CHECK_SELFTEST=full forces a run)"
+      SELFTEST_DESC="reused"
+    else
+      # The key is taken before the run and recorded only if it is the same
+      # after it: an input edited while the suite ran (the detached stop gate
+      # lets work continue) was never tested, so it is never recorded (ADR 0019).
+      pre_key=""
+      if (( reuse_able )) && [[ "${CI:-}" != true ]]; then
+        pre_key="$(bash scripts/selftest-reuse.sh key 2>/dev/null)" || pre_key=""
+      fi
+      if ./scripts/selftest.sh; then
+        if [[ -n "$pre_key" ]]; then
+          if [[ "$(bash scripts/selftest-reuse.sh key 2>/dev/null)" == "$pre_key" ]]; then
+            bash scripts/selftest-reuse.sh record "$pre_key" || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
+          else
+            echo "selftest-reuse: an input changed while the self-tests ran; not recorded, so the next run tests it"
+          fi
+        fi
+      else
+        gerr "scripts/selftest.sh failed"
+      fi
+      SELFTEST_DESC="$((SECONDS - st_start))s"
+    fi
   fi
 fi
+# timing_line: one line per successful full or fast run, so a slow step shows.
+timing_line() {
+  local stack="${1:-}" line
+  line="check.sh: timing: selftest $SELFTEST_DESC"
+  [[ -z "$stack" ]] || line="$line, stack ${stack}s"
+  echo "$line, total $((SECONDS - CHECK_START))s"
+}
 
 # 4h. The "- Template: <url> <ref>" line names the last recorded template
 # sync (docs/procedures/upstream.md). Offline; nothing to check in template
@@ -306,6 +483,14 @@ fi
 # passes. Skipped where the project does not carry the script.
 if [[ -f scripts/private-terms.sh ]]; then
   bash scripts/private-terms.sh check || gerr "scripts/private-terms.sh check failed (a private term is in the repository; the lines above name where, masked)"
+fi
+
+# 4k. Test-code growth stays visible: past tests/BUDGET's ceiling plus its
+# allowance, consolidate tests or raise the ceiling with a dated reason
+# (docs/procedures/tests.md, "Test audit"). The script skips when tests/BUDGET
+# is absent; skipped where the project does not carry the script.
+if [[ -f scripts/test-budget.sh ]]; then
+  bash scripts/test-budget.sh check || gerr "scripts/test-budget.sh check failed (the lines above say how far over tests/BUDGET the test code is)"
 fi
 
 # The tree line is armed here: both modes exit below, and on_exit prints it on a clean full run (ADR 0017).
@@ -387,6 +572,7 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_taskgraph.sh tests/template/test_template_sync.sh
     tests/template/test_quickgate.sh tests/template/test_check_always.sh
     tests/template/test_blueprint_parity.sh tests/template/fixtures/check.sh
+    tests/template/test_style_scan.sh
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
@@ -416,6 +602,14 @@ if [[ ! -f .start-done ]]; then
     scripts/dream/fleet.py tests/template/test_dream_fleet.sh
     scripts/profiles.sh tests/template/test_profiles.sh
     scripts/start-reset-lessons.sh tests/template/test_start_reset_lessons.sh
+    scripts/selftest-reuse.sh tests/template/selftest-inputs.list
+    tests/template/test_selftest_reuse.sh
+    scripts/test-budget.sh tests/BUDGET tests/template/test_test_budget.sh
+    scripts/fleet-status.sh tests/template/test_fleet_status.sh
+    scripts/rating.sh tests/template/test_rating.sh
+    tests/template/selftest-weights.txt docs/procedures/ci-cost.md
+    docs/profiles/product-render/PROFILE.md
+    scripts/push-scan.sh tests/template/test_push_scan.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -476,6 +670,14 @@ if [[ ! -f .start-done ]]; then
   while IFS= read -r msg; do
     if [[ -n "$msg" ]]; then terr "$msg"; fi
   done < <(blueprint_parity docs/BLUEPRINT.md "${required[@]}")
+
+  # 5j2. Reverse direction: every tracked file under a core folder is listed
+  # in section 2 (ADRs and scripts added without a tree line went unnoticed).
+  tracked_core=()
+  while IFS= read -r f; do tracked_core+=("$f"); done < <(git ls-files -- scripts tests/template docs/procedures docs/rules docs/decisions docs/profiles .claude .codex .agents .github)
+  while IFS= read -r msg; do
+    if [[ -n "$msg" ]]; then terr "$msg"; fi
+  done < <(blueprint_core_unlisted docs/BLUEPRINT.md "${tracked_core[@]+"${tracked_core[@]}"}")
 
   # 5k. Template Python carries its own ruff contract. Projects that run
   # "ruff check ." or "ruff format --check ." with stricter rules must not
@@ -567,7 +769,8 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers, private terms)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format and refs, test budget, doc questions, selftest, preference registers, private terms)"
+  timing_line
   exit 0
 fi
 
@@ -606,5 +809,7 @@ fi
 stack_args=()
 if (( FULL_MUTATION )); then stack_args+=(--full-mutation); fi
 if (( QUICK )); then stack_args+=(--quick); fi
+stack_start=$SECONDS
 bash ./scripts/stack-check.sh ${stack_args[@]+"${stack_args[@]}"} || fail "scripts/stack-check.sh failed"
 echo "check: OK (always section and scripts/stack-check.sh)"
+timing_line "$((SECONDS - stack_start))"

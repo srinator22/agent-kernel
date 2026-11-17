@@ -7,6 +7,14 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# A started (adopted) project: .start-done exists, or AGENTS.md no longer
+# carries the template's "Status: TEMPLATE" line. Real-tree assertions about
+# the template's own tree skip there.
+t_started() {
+  [[ -f "$T_ROOT/.start-done" ]] && return 0
+  [[ -f "$T_ROOT/AGENTS.md" ]] && ! grep '^Status: TEMPLATE' "$T_ROOT/AGENTS.md" >/dev/null 2>&1
+}
+
 EM="$(printf '\xe2\x80\x94')"
 STACK_MSG="scripts/stack-check.sh is missing"
 
@@ -325,6 +333,78 @@ t_check_exec "project mode with tests/template"
 t_cleanup
 }
 
+sec_reuse() {
+# ---- step 4g reuses a green self-test result while the inputs are unchanged ----
+# CI=true and CHECK_SELFTEST=full refuse reuse by design; every case below
+# sets them itself.
+unset CI CHECK_SELFTEST SELFTEST_REUSE_ENV_EXTRA
+make_fixture
+cp_script check.sh kernel-hash.sh lessons.sh profiles.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh selftest.sh tree-id.sh selftest-reuse.sh
+write_agents
+./scripts/kernel-hash.sh --update >/dev/null
+touch .start-done
+write_task
+mkdir -p tests/template
+printf 'scripts\ntests/template\nAGENTS.md\n' > tests/template/selftest-inputs.list
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+chmod +x tests/template/test_ok.sh
+printf '#!/usr/bin/env bash\necho "stack ran"\n' > scripts/stack-check.sh
+chmod +x scripts/stack-check.sh
+commit_fixture
+RAN="selftest: 1 passed, 0 failed, 0 quarantined (1 test files)"
+
+run ./scripts/check.sh
+assert_rc "the first full run passes" 0
+assert_contains "the first full run runs the self-tests" "$RAN"
+assert_not_contains "the first full run reuses nothing" "inputs unchanged since"
+assert_contains "the first full run prints the timing line with a stack time" "check.sh: timing: selftest "
+assert_contains "the timing line names the stack and the total" "s, stack "
+assert_contains "the timing line ends with the total" "s, total "
+run ./scripts/check.sh
+assert_rc "the second full run passes" 0
+assert_contains "the second full run reuses the result and says so" "selftest-reuse: inputs unchanged since "
+assert_contains "the reuse line names the override" "(CHECK_SELFTEST=full forces a run)"
+assert_not_contains "the second full run does not run the self-tests" "$RAN"
+assert_contains "the timing line says reused" "check.sh: timing: selftest reused, stack "
+CHECK_SELFTEST=full run ./scripts/check.sh
+assert_rc "CHECK_SELFTEST=full run passes" 0
+assert_contains "CHECK_SELFTEST=full runs the self-tests" "$RAN"
+assert_not_contains "CHECK_SELFTEST=full prints no reuse line" "inputs unchanged since"
+CI=true run ./scripts/check.sh
+assert_contains "CI=true runs the self-tests" "$RAN"
+assert_not_contains "CI=true prints no reuse line" "inputs unchanged since"
+printf '#!/usr/bin/env bash\n# changed\nexit 0\n' > tests/template/test_ok.sh
+run ./scripts/check.sh
+assert_contains "a changed input runs the self-tests again" "$RAN"
+run ./scripts/check.sh
+assert_contains "and the result is reused after that" "inputs unchanged since"
+printf '#!/usr/bin/env bash\nexit 1\n' > tests/template/test_ok.sh
+run ./scripts/check.sh
+assert_rc "a failing self-test fails the run" 1
+assert_contains "the failure is reported" "scripts/selftest.sh failed"
+run ./scripts/check.sh
+assert_not_contains "a failed run recorded nothing to reuse" "inputs unchanged since"
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+# An input edited while the suite runs (the detached stop gate lets the agent
+# keep working) must not be recorded as tested: the next run tests it.
+printf '#!/usr/bin/env bash\n[[ -f edit.mark ]] || { : > edit.mark; printf "%s\\n" "# edited mid-run" >> tests/template/test_ok.sh; }\nexit 0\n' > tests/template/test_edit.sh
+chmod +x tests/template/test_edit.sh
+RAN2="selftest: 2 passed, 0 failed, 0 quarantined (2 test files)"
+run ./scripts/check.sh
+assert_contains "a run whose input is edited mid-run still runs the self-tests" "$RAN2"
+run ./scripts/check.sh
+assert_contains "an input edited mid-run is tested again on the next run" "$RAN2"
+assert_not_contains "an input edited mid-run is never reused" "inputs unchanged since"
+rm -f tests/template/test_edit.sh edit.mark
+printf '#!/usr/bin/env bash\nexit 0\n' > tests/template/test_ok.sh
+git rm -q -f --cached scripts/selftest-reuse.sh >/dev/null 2>&1
+rm -f scripts/selftest-reuse.sh
+run ./scripts/check.sh
+assert_contains "without scripts/selftest-reuse.sh (an older sync) the self-tests just run" "$RAN"
+t_check_exec "reuse"
+t_cleanup
+}
+
 sec_template() {
 # ---- template mode: a clean fixture still exits 0 ----
 make_fixture
@@ -420,7 +500,7 @@ done
 # A13: the shipped settings wire the feedback hook for UserPromptSubmit with a
 # 5 second budget. Read from the real tree: a started project customises its
 # own settings and merges the entry by hand (docs/procedures/upstream.md).
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "the real settings.json wires the feedback hook with timeout 5: this repository is a started project (.start-done); its settings are its own"
 else
   wired="$(awk '/"UserPromptSubmit"/{u=1} /"PreToolUse"/{u=0} u && /scripts\/feedback-log\.sh/{f=1} f && /"timeout": 5,?$/{print "wired"; exit}' "$T_ROOT/.claude/settings.json")"
@@ -518,7 +598,7 @@ sec_started() {
 # started project this repository IS the started project, and its own
 # ./scripts/check.sh run is the proof; copying it again would recurse and test
 # the project's tree against the template's expectations.
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "a started project passes check.sh with tests/template kept: this repository is a started project (.start-done); covered by its own ./scripts/check.sh run"
 else
   # Both branches of the real-tree parity case are asserted: here, on the
@@ -626,6 +706,54 @@ CHECK_FAST_BASE=no-such-ref run ./scripts/check.sh --fast
 assert_contains "no diff base runs every self-test" "no diff base (set CHECK_FAST_BASE or fetch main); running every self-test"
 commit_fixture
 
+# ---- --fast selection reasons and widening (CHECK_FAST_BASE=HEAD isolates each case) ----
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_not_contains "nothing changed since HEAD: no reason line" "check --fast: select"
+echo "# edit" >> tests/template/test_beta.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a changed test names the reason changed-test" "check --fast: select tests/template/test_beta.sh (changed-test)"
+commit_fixture
+echo "# edit" >> scripts/alpha.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a script a test names gets the reason owner:<path>" "(owner:scripts/alpha.sh)"
+assert_contains "and selects only that test" "selftest stub args=[tests/template/test_alpha.sh]"
+commit_fixture
+git rm -q scripts/beta.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a deleted script widens to every test with its reason" "widen:scripts/beta.sh, deleted or renamed"
+assert_contains "a deleted script runs every self-test" "selftest stub args=[]"
+git checkout -q HEAD -- scripts/beta.sh
+git mv scripts/alpha.sh scripts/alpha2.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a renamed script widens (the old name is gone)" "widen:scripts/alpha.sh, deleted or renamed"
+assert_contains "a renamed script runs every self-test" "selftest stub args=[]"
+git mv scripts/alpha2.sh scripts/alpha.sh
+# lib.sh: every test names it, so a change to it widens.
+echo "# uses lib.sh" >> tests/template/test_alpha.sh
+echo "# uses lib.sh" >> tests/template/test_beta.sh
+commit_fixture
+echo "more" >> tests/template/lib.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a lib.sh every test names widens, with the reason" "widen:tests/template/lib.sh, every test names it"
+assert_contains "a lib.sh change runs every self-test" "selftest stub args=[]"
+commit_fixture
+# fixtures: a data file one test names selects that test; an unnamed one widens.
+mkdir -p tests/template/fixtures
+echo "one" > tests/template/fixtures/named.txt
+echo "two" > tests/template/fixtures/unnamed.txt
+echo "# uses named.txt" >> tests/template/test_alpha.sh
+commit_fixture
+echo "changed" >> tests/template/fixtures/named.txt
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a fixture a test names selects that test" "(owner:tests/template/fixtures/named.txt)"
+assert_contains "only the test using the fixture runs" "selftest stub args=[tests/template/test_alpha.sh]"
+commit_fixture
+echo "changed" >> tests/template/fixtures/unnamed.txt
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a fixture no test names widens, with the reason" "widen:tests/template/fixtures/unnamed.txt, no test names it"
+assert_contains "an unnamed fixture runs every self-test" "selftest stub args=[]"
+commit_fixture
+
 run ./scripts/check.sh
 assert_rc "the full gate passes" 0
 assert_contains "the full gate runs every self-test" "selftest stub args=[]"
@@ -642,6 +770,7 @@ t_cleanup
 t_parallel "project mode" sec_project
 t_parallel "--fast" sec_fast
 t_parallel "project mode with tests/template" sec_selftest
+t_parallel "selftest reuse" sec_reuse
 t_parallel "template mode" sec_template
 t_parallel "started project" sec_started
 t_parallel_wait

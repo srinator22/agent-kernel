@@ -44,6 +44,11 @@ LIST="$FIX/fleet.local.list"
   for p in okproj behindproj badproj nobaseproj gone upproj "Project With Space"; do printf '%s\r\n' "$PRJ/$p"; done
 } > "$LIST"
 
+# git's detached auto maintenance once left .git/objects/maintenance.lock in
+# the before listing and removed it before the after listing (CI run
+# 44092893785); fixture repos must never start it (lib.sh).
+assert_eq "fixture repos never start auto maintenance" "false 0" \
+  "$(git -C "$PRJ/okproj" config --get maintenance.auto) $(git -C "$PRJ/okproj" config --get gc.auto)"
 before="$(cd "$PRJ" && find . | sort)"
 run scripts/fleet.sh
 assert_rc "fleet runs" 0

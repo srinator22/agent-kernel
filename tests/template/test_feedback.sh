@@ -5,6 +5,7 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# Recorded: git -C <root> symbolic-ref --short HEAD -> b18/recorded, exit 0 (real, 2026-11-18); the subprocess.run replacements below keep only the timeout argument and a returncode/stdout pair
 # winpath P: the native form of a path where git bash can give one (python is a
 # native program on Windows and cannot open an msys /tmp path).
 winpath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }

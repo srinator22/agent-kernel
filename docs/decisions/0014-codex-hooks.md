@@ -47,9 +47,8 @@ hooks"); the rest of ADR 0006 stands.
 ## Consequences
 
 - After a template sync, the owner opens the project in Codex once, trusts
-  it, and approves the four hooks (`/hooks` lists them; since ADR 0015 a
-  fifth, the shell-stdin hook, runs as a second PreToolUse hook). Until then
-  Codex runs none of them.
+  it, and approves the four hooks (`/hooks` lists them). Until then Codex
+  runs none of them.
 - Codex has no per-agent hooks, so the worker's no-commit rule stays prose
   plus the advisor gate under Codex.
 - Limits:
@@ -71,7 +70,7 @@ hooks"); the rest of ADR 0006 stands.
 
 Owner checklist for the first Codex session in a project:
 
-1. `/hooks` lists the project hooks (five since ADR 0015); trust them.
+1. `/hooks` lists the four project hooks; trust them.
 2. Ask Codex to quote the `[session-context]` lines it received; it names
    the branch and the preference rules.
 3. Ask it to run a command the guard blocks, such as `git push --force`;
@@ -82,3 +81,9 @@ Owner checklist for the first Codex session in a project:
    continues it once. Look at how the rollout records that continuation;
    `scripts/dream.sh digest` must show no signal for it.
 6. `scripts/dream.sh digest` lists signals from the Codex session.
+
+## Amendment 2026-11-18
+
+The Decision's "four scripts" and the Consequences' "four hooks" read five
+since ADR 0015 added the shell-stdin hook as a second PreToolUse hook; in the
+owner checklist, `/hooks` lists five project hooks to trust.

@@ -5,6 +5,17 @@
 # whole PATH of the run, so no real winget, brew, apt, gh or curl is reached.
 # The root is found from the script's own path, also when started as
 # "bash doctor.sh" from inside scripts/.
+# Recorded: python3 --version -> Python 3.13.5 (real, 2026-11-18, Windows 11 Git Bash)
+# Recorded: gh --version -> gh version 2.90.0 (2026-04-16) (real, 2026-11-18)
+# Recorded: gitleaks version -> 8.30.1 (real, 2026-11-18)
+# Recorded: git-cliff --version -> git-cliff 2.14.1 (real, 2026-11-18)
+# Recorded: ruff --version -> ruff 0.17.3 (real, 2026-11-18, via uvx --offline ruff; the 0.16.10 in the shims is the pinned version recorded in .work/done/2026-11-08-fleet-sync-fixes.md)
+# Recorded: uvx --version -> uvx 0.11.17 (a33a629d6 2026-05-28 x86_64-pc-windows-msvc) (real, 2026-11-18)
+# Recorded: winget --version -> v1.29.380 (real, 2026-11-18)
+# Recorded: curl --version -> curl 8.18.0 (x86_64-w64-mingw32) libcurl/8.18.0 Schannel (real, 2026-11-18)
+# Recorded: git --version -> git version 2.53.0.windows.3 (real, 2026-11-18)
+# Recorded: python3 as the Microsoft Store stub -> exits 49 (documented at scripts/find-python.sh lines 4-5; the stub was not reproducible on the recording host, Python was installed)
+# Recorded: none - pipx, brew, apt, apt-get, sudo, uname: not on the recording host (Windows 11 Git Bash, 2026-11-18); those shims only log the call and print a name
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

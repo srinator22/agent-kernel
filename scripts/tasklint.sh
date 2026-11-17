@@ -6,6 +6,10 @@
 # Usage:
 #   scripts/tasklint.sh check    problems that are wrong at any time
 #   scripts/tasklint.sh ship     check, plus problems that block calling the task done
+#   scripts/tasklint.sh final    ship, plus a required PASS review verdict (any
+#                                mode but quick); run once the reviewer has recorded it.
+#                                ship cannot demand it: check.sh runs ship before the
+#                                review, and the reviewer needs check.sh's tree line.
 # Set TASKLINT_FILE to read another file (default .work/TASK.md, resolved from
 # the repo root). Evidence paths also resolve from the repo root.
 #
@@ -13,6 +17,11 @@
 # stripped first; CRLF is tolerated; a section runs from "## Name" to the next "## "):
 #   Mode:        first line starting "Mode:"; standard|quick|autopilot (any case).
 #                Absent, or a value holding "|" (the unfilled template line), is standard.
+#   Unattended:  optional first line starting "Unattended:": "yes - <pre-approved actions>;
+#                report: <path>" or "no". It records the owner's per-task approval scope for
+#                an unattended run (kernel rule 15 is unchanged). Absent is fine; any other
+#                shape is a problem, and actions naming deleting data, force-push or kernel
+#                files (AGENTS.md, CLAUDE.md) are refused.
 #   Criteria     in "## Acceptance criteria", each "- [x]" or "- [X]" line is ticked.
 #                Evidence is the text after the last "->". It is either
 #                "judgment: <reason>" or names at least one path that exists
@@ -34,7 +43,7 @@
 #                verdict (rounds newest first), PASS or FAIL as a word. The first
 #                "Reviewed tree: <id>" line in the section (a leading "- " or
 #                bold markers allowed) names the tree the reviewer saw.
-# ship also fails every [open] assumption unless the mode is quick, and a PASS
+# ship (and final) also fail every [open] assumption unless the mode is quick, and a PASS
 # review verdict whose tree is missing or differs from scripts/tree-id.sh now
 # (a change after the review); a FAIL or other first line is not compared, nor
 # is a record under .work/done/.
@@ -47,13 +56,13 @@ cd "$ROOT"
 FILE="${TASKLINT_FILE:-.work/TASK.md}"
 
 usage() {
-  echo "usage: scripts/tasklint.sh check | ship" >&2
+  echo "usage: scripts/tasklint.sh check | ship | final" >&2
   exit 2
 }
 
 [[ $# -eq 1 ]] || usage
 case "$1" in
-  check|ship) MODE="$1" ;;
+  check|ship|final) MODE="$1" ;;
   *) usage ;;
 esac
 
@@ -143,7 +152,7 @@ function flush() {
   emit(pk, pa, pb)
   pend = 0
 }
-BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
+BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasun = 0; hasassume = 0; ticked = 0; nas = 0; nopen = 0; vseen = 0; startedid = "" }
 /^## / {
   flush()
   sec = tolower(trim(substr($0, 4)))
@@ -151,6 +160,7 @@ BEGIN { SEP = "\037"; sec = ""; hasmode = 0; hasassume = 0; ticked = 0; nas = 0;
   next
 }
 !hasmode && /^Mode:/ { hasmode = 1; modeval = trim(substr($0, 6)) }
+!hasun && /^Unattended:/ { hasun = 1; unval = trim(substr($0, 12)) }
 sec == "acceptance criteria" && pend && /^[ \t]+[^ \t]/ && !/^[ \t]*-([ \t]|$)/ {
   if (!contline) contline = NR
   next
@@ -223,6 +233,14 @@ END {
     if (m == "standard" || m == "quick" || m == "autopilot") taskmode = m
     else emit("PROB", "Mode must be standard, quick or autopilot: " substr(modeval, 1, 60))
   }
+  if (hasun) {
+    ul = tolower(unval)
+    if (ul == "no") { }
+    else if (ul !~ /^yes[ \t]+-[ \t]+[^;]*[^; \t][^;]*;[ \t]*report:[ \t]*[^ \t]/)
+      emit("PROB", "Unattended must be \"yes - <pre-approved actions>; report: <path>\" or \"no\": " substr(unval, 1, 60))
+    else if (ul ~ /delet|force[- ]push|--force|kernel|agents\.md|claude\.md/)
+      emit("PROB", "Unattended actions must not name deleting data, force-push or kernel edits (kernel rule 15): " substr(unval, 1, 60))
+  }
   if (lintmode == "ship" && taskmode != "quick") {
     for (i = 1; i <= nopen; i++) emit("PROB", "open assumption (settle it: confirmed or verified): " openl[i])
     if (!hasassume) emit("NOTE", "no Assumptions section (older task file)")
@@ -260,7 +278,7 @@ problem() {
   probs=$((probs + 1))
 }
 
-analysis="$(awk "$AWK_STRIP" "$FILE" | awk -v lintmode="$MODE" "$AWK_ANALYZE")"
+analysis="$(awk "$AWK_STRIP" "$FILE" | awk -v lintmode="${MODE/final/ship}" "$AWK_ANALYZE")"
 
 while IFS= read -r rec; do
   IFS="$SEP" read -r kind a b c <<< "$rec"
@@ -305,7 +323,7 @@ done <<< "$analysis"
 case "$FILE" in
   .work/done/*|*/.work/done/*) rvstate=archived ;;
 esac
-if [[ "$MODE" == ship && "${rvstate:-empty}" == pass ]]; then
+if [[ "$MODE" != check && "${rvstate:-empty}" == pass ]]; then
   if [[ -z "${rvtree:-}" ]]; then
     problem "review verdict is PASS but names no reviewed tree; the reviewer copies the \"check.sh: verified tree <id>\" line of the verify output into its verdict as \"Reviewed tree: <id>\" (docs/procedures/ship.md step 4)"
   elif ! now_tree="$(bash "$ROOT/scripts/tree-id.sh" 2>&1)"; then
@@ -313,6 +331,12 @@ if [[ "$MODE" == ship && "${rvstate:-empty}" == pass ]]; then
   elif [[ "$now_tree" != "$rvtree" ]]; then
     problem "review verdict covers tree $rvtree but the working tree is now $now_tree: files changed after the review. Re-review: make \"Pending re-review\" the first line of the Review verdict section, run ./scripts/check.sh, and record the new verdict first (docs/procedures/ship.md step 4)"
   fi
+fi
+
+# final: kernel rule 5 wants an independent PASS verdict; only a quick-mode task
+# may go without one. A record under .work/done/ was judged when it shipped.
+if [[ "$MODE" == final && "$taskmode" != quick && "${rvstate:-empty}" != pass && "${rvstate:-empty}" != archived ]]; then
+  problem "no PASS review verdict (the first line of \"## Review verdict\" is ${rvstate:-empty}); hand the reviewer the diff, .work/TASK.md and the verify output and record its verdict, or set Mode: quick for a change that touches no logic (docs/procedures/ship.md step 4)"
 fi
 
 if (( probs > 0 )); then

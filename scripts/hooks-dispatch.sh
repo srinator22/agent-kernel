@@ -51,7 +51,9 @@ for f in "${files[@]}"; do
     failed=1
     continue
   fi
-  printf '%s' "$payload" | "$f"
+  # A hook may ignore stdin and exit; the write then fails with EPIPE, which is
+  # not the hook's output and must not reach it (no pipefail: rc is the hook's).
+  printf '%s' "$payload" 2>/dev/null | "$f"
   rc=$?
   if (( rc == 2 )); then
     blocked=1

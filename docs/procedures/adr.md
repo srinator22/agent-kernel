@@ -50,9 +50,11 @@ instead of passing unchecked.
 4. If the decision changes how the system is built, update
    `docs/ARCHITECTURE.md` in the same commit.
 5. If it reverses an earlier ADR, change the old one's status line to
-   `Status: superseded by NNNN (YYYY-MM-DD)`. That status line is the only
-   edit ever made to an accepted ADR; its body is never rewritten. The
-   check verifies that the superseding ADR exists.
+   `Status: superseded by NNNN (YYYY-MM-DD)`. An accepted ADR's body is never
+   rewritten; the status line is the only in-place edit. A later change to
+   what it says is a dated `## Amendment YYYY-MM-DD` section appended at the
+   end, or a superseding ADR. The check verifies that the superseding ADR
+   exists.
 6. Anything that cites the ADR (a procedure, rule or profile file) names it
    as `docs/decisions/NNNN`; `scripts/adr.sh check` verifies the cited file
    exists, in template mode and after start alike, so create the ADR in the

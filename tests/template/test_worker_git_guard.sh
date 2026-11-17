@@ -66,10 +66,20 @@ OUT="$(printf '' | bash "$GUARD" 2>&1)"; RC=$?
 assert_rc "an empty payload is allowed" 0
 
 # Wiring: the worker agent's hook covers both shells and runs this script.
+# A started project owns its agents: a missing worker agent file skips the
+# wiring cases, and a quoted matcher ("Bash|PowerShell") is accepted.
 assert_file "the guard script exists" "$GUARD"
-assert_file_has "the worker hook matcher covers Bash and PowerShell" "$WORKER" "matcher: Bash|PowerShell"
-assert_file_has "the worker hook runs the guard script" "$WORKER" 'scripts/worker-git-guard.sh'
-assert_file_lacks "the worker hook carries no inline copy of the logic" "$WORKER" 'case "$in"'
+if [[ ! -f "$WORKER" ]]; then
+  t_na "the worker hook wiring: .claude/agents/worker.md is absent (a started project owns its agents)"
+else
+  if grep -E "matcher: ['\"]?Bash\|PowerShell['\"]?[[:space:]]*$" "$WORKER" >/dev/null 2>&1; then
+    t_ok "the worker hook matcher covers Bash and PowerShell"
+  else
+    t_bad "the worker hook matcher covers Bash and PowerShell (no matcher line naming Bash|PowerShell in $WORKER)"
+  fi
+  assert_file_has "the worker hook runs the guard script" "$WORKER" 'scripts/worker-git-guard.sh'
+  assert_file_lacks "the worker hook carries no inline copy of the logic" "$WORKER" 'case "$in"'
+fi
 mode="$(cd "$T_ROOT" && git ls-files -s scripts/worker-git-guard.sh | awk '{print $1}')"
 if [[ -n "$mode" ]]; then
   assert_eq "the guard script is executable in the index" "100755" "$mode"

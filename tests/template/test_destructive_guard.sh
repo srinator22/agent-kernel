@@ -186,7 +186,10 @@ for shell in Bash PowerShell; do
   blocked "$shell" "git restore :/ is blocked" 'git restore :/'
   blocked "$shell" "git stash drop is blocked" 'git stash drop'
   blocked "$shell" "git stash clear is blocked" 'git stash clear'
-  blocked "$shell" "git stash drop stash@{0} is blocked" 'git stash drop stash@{0}'
+  blocked "$shell" "git stash drop var is blocked" 'git stash drop $REF'
+  blocked "$shell" "git stash drop substitution is blocked" 'git stash drop $(git stash list)'
+  blocked "$shell" "git stash drop sha prefix is blocked" 'git stash drop abc1234'
+  blocked "$shell" "git stash drop two refs is blocked" 'git stash drop stash@{0} stash@{1}'
 
   # git: allowed.
   allowed "$shell" "git status is allowed" 'git status'
@@ -213,6 +216,8 @@ for shell in Bash PowerShell; do
   allowed "$shell" "git restore -S . is allowed" 'git restore -S .'
   allowed "$shell" "git stash is allowed" 'git stash'
   allowed "$shell" "git stash pop is allowed" 'git stash pop'
+  allowed "$shell" "git stash drop literal ref is allowed" 'git stash drop stash@{2}'
+  allowed "$shell" "git stash drop literal sha is allowed" 'git stash drop 0123456789abcdef0123456789abcdef01234567'
   allowed "$shell" "git stash list is allowed" 'git stash list'
   allowed "$shell" "git -C repo status is allowed" 'git -C repo status'
   allowed "$shell" "git -C quoted path status is allowed" 'git -C \"C:\\my repo\" status'

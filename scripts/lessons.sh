@@ -5,6 +5,8 @@
 #   use <Lnnn>     increment used: and set last: to today for one lesson
 #   expire         list lessons whose last: is older than 45 days or whose
 #                  retire-when contains [met]; --apply archives them
+#   archive <Lnnn> <reason>
+#                  archive one lesson with a one-line reason (kernel rule 11)
 #   stats          print counts
 #   skills         print the skills count and cap; exit 1 when over the cap
 #                  (scripts/template-sync.sh runs it after a sync)
@@ -15,22 +17,30 @@
 #                  over the given revisions (--staged and --cached allowed)
 #
 # INDEX.md line format (exactly as documented in docs/lessons/INDEX.md):
-#   - [L001] <description> - <lesson> (used: 0, last: -, retire-when: <condition>)
+#   - [L001] <description> - <lesson> (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>)
 # with an optional trigger as the last field (ADR 0017):
-#   (used: 0, last: -, retire-when: <condition>, trigger: <token> <token>...)
+#   (used: 0, last: -, approved: YYYY-MM-DD, retire-when: <condition>, trigger: <token> <token>...)
 # A token is <glob> or A:<glob>, M:<glob>, D:<glob>: a changed path matching the
 # glob, for A only an added path (a rename or copy adds its new path), M only a
 # modified one, D only a deleted one (a rename deletes its old path). The glob
 # is a bash pattern over the whole repo-relative path, so * also crosses "/".
-# last: is YYYY-MM-DD or "-". A lesson with last: "-" has no age and never
-# expires by age; set last: to the approval date when approving a lesson if you
-# want the 45-day clock to run. Lines inside code fences and the documented
+# last: is YYYY-MM-DD or "-". approved: is the YYYY-MM-DD date the lesson was
+# approved; it measures the age of a lesson that was never used (last: "-"), so
+# check and expire need it. Lines inside code fences and the documented
 # format placeholder (description starting with "<") are not lessons.
 #
-# check enforces: <= 20 approved lessons; every one carries all three fields
-# and a unique id; every PENDING.md entry carries its four fields; no
-# QUARANTINE.md entry older than 30 days without an owner task; .claude/skills
-# and .agents/skills identical; skill directories <= the template core skills
+# check enforces: <= 20 approved lessons; every one carries all four fields
+# (a missing or malformed approved: date is an error) and a unique id; a lesson
+# with used: 0 more than 45 days after its approved: date is an error (archive
+# it with expire --apply or record a use); a retire-when carrying [met] prints a
+# warning and does not fail; every PENDING.md entry carries its four fields; no
+# QUARANTINE.md entry older than 30 days without an owner task; every
+# UPSTREAM.md entry carries those four fields plus "applies to:" (core or a
+# docs/profiles/ folder); every docs/profiles/*/PROFILE.md opening with
+# "# Profile: " has 60 to 160 lines and exactly the ten README.md headings;
+# .claude/skills and .agents/skills identical, except that a pointer SKILL.md
+# (sole file, body names one canonical SKILL.md with the same name and
+# description) may stand in one mirror; skill directories <= the template core skills
 # present (CORE_SKILLS, at most 8) + 2 project skills + profile skill sets
 # (the number of skills listed on the "Skills:" or "- Skills:" line of each
 # docs/profiles/*/PROFILE.md, comma-separated; when AGENTS.md has a
@@ -69,7 +79,7 @@ PROJECT_SKILLS=2
 US=$'\037'
 
 usage() {
-  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | stats | skills | core-skills | match <diff file | git revisions>" >&2
+  echo "usage: scripts/lessons.sh check | use <Lnnn> | expire [--apply] | archive <Lnnn> <reason> | stats | skills | core-skills | match <diff file | git revisions>" >&2
   exit 2
 }
 
@@ -130,7 +140,10 @@ trigger_token_ok() {
   [[ -n "$g" && "$g" != *:* ]]
 }
 
-FIELD_RE='^-[[:space:]]\[(L[0-9]+)\][[:space:]](.*)\(used:[[:space:]]([0-9]+),[[:space:]]last:[[:space:]]([0-9]{4}-[0-9]{2}-[0-9]{2}|-),[[:space:]]retire-when:[[:space:]](.+)\)[[:space:]]*$'
+# Groups: 1 id, 2 text, 3 used, 4 last, 5 the whole "approved: X, " clause (empty
+# when absent, which check reports), 6 the approved value, 7 retire-when (with
+# any trigger).
+FIELD_RE='^-[[:space:]]\[(L[0-9]+)\][[:space:]](.*)\(used:[[:space:]]([0-9]+),[[:space:]]last:[[:space:]]([0-9]{4}-[0-9]{2}-[0-9]{2}|-),[[:space:]](approved:[[:space:]]*([^,]*),[[:space:]])?retire-when:[[:space:]](.+)\)[[:space:]]*$'
 
 # Entry blocks of PENDING/QUARANTINE: one line per entry,
 # "start<US>p1<US>v1<US>p2<US>v2..." where p is 1 when the label is present.
@@ -473,6 +486,92 @@ file_lines() { awk 'END { print NR }' "$1"; }
 # value is empty.
 is_placeholder() { [[ "$1$3$5$7" == "1111" && -z "$2$4$6$8" ]]; }
 
+# skills_pointer_target FILE: prints the canonical SKILL.md path and returns 0
+# when FILE is a skills pointer (a SKILL.md with frontmatter and a body of at
+# most 4 non-blank lines naming exactly one *SKILL.md path); returns 1 for a
+# real skill. The path is repo-relative.
+skills_pointer_target() {
+  local body paths
+  body="$(awk '
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") exit; next }
+    fm == 0 { if ($0 == "---") fm = 1; next }
+    $0 ~ /[^ \t]/ { print }' "$1" || true)"
+  [[ -n "$body" ]] || return 1
+  if (( $(printf '%s\n' "$body" | awk 'END { print NR }') > 4 )); then return 1; fi
+  paths="$(printf '%s\n' "$body" | grep -oE '[A-Za-z0-9_./-]*SKILL\.md' | sort -u || true)"
+  [[ -n "$paths" ]] || return 1
+  if (( $(printf '%s\n' "$paths" | awk 'END { print NR }') != 1 )); then return 1; fi
+  printf '%s\n' "${paths#./}"
+}
+
+# skills_pointer_errors FILE: one problem per line when a pointer FILE does not
+# resolve to a canonical skill with the same name and description. Prints
+# nothing for a real skill or a valid pointer.
+skills_pointer_errors() {
+  local f="$1" target pn pd cn cd
+  target="$(skills_pointer_target "$f")" || return 0
+  if [[ ! -f "$target" ]]; then
+    echo "$f is a skills pointer naming $target, which does not exist"
+    return 0
+  fi
+  pn="$(frontmatter_field "$f" name)"; pd="$(frontmatter_field "$f" description)"
+  cn="$(frontmatter_field "$target" name)"; cd="$(frontmatter_field "$target" description)"
+  if [[ -z "$pn" || -z "$pd" ]]; then
+    echo "$f is a skills pointer without a name: and description: in its frontmatter"
+  elif [[ "$pn" != "$cn" ]]; then
+    echo "$f pointer name '$pn' differs from $target name '$cn'"
+  elif [[ "$pd" != "$cd" ]]; then
+    echo "$f pointer description differs from the description in $target"
+  fi
+}
+
+# skills_mirror_errors: .claude/skills and .agents/skills must match entry by
+# entry; the one accepted difference is a pointer SKILL.md (the only file of
+# its folder) on one side whose counterpart is the canonical file it names.
+# Pointer validity itself is checked by skills_pointer_errors.
+skills_mirror_errors() {
+  local n side other target rest="" d names
+  names="$( { ls -A .claude/skills; ls -A .agents/skills; } | sort -u)"
+  while IFS= read -r n; do
+    [[ -n "$n" ]] || continue
+    if diff -rq ".claude/skills/$n" ".agents/skills/$n" >/dev/null 2>&1; then continue; fi
+    for side in .claude .agents; do
+      other=".agents"; [[ "$side" == ".agents" ]] && other=".claude"
+      [[ -f "$side/skills/$n/SKILL.md" ]] || continue
+      [[ "$(find "$side/skills/$n" -type f | awk 'END { print NR }')" == "1" ]] || continue
+      target="$(skills_pointer_target "$side/skills/$n/SKILL.md")" || continue
+      if [[ "$target" == "$other/skills/$n/SKILL.md" ]]; then continue 2; fi
+    done
+    d="$(diff -rq ".claude/skills/$n" ".agents/skills/$n" 2>&1 | sed -n '1,3p' | tr '\n' ';' || true)"
+    rest="$rest$d"
+  done <<< "$names"
+  if [[ -n "$rest" ]]; then echo "$rest"; fi
+}
+
+# profile_contract_errors PROFILE.md: the file contract of
+# docs/profiles/README.md - 60 to 160 lines and exactly these level-2
+# headings in this order (headings inside code fences are ignored).
+PROFILE_HEADINGS="Purpose and risk|Rules|Gates|Tools|Playbooks|Agents and skills|Parameters and records|Done means|Lessons carried in|Sources"
+profile_contract_errors() {
+  local f="$1" n found first
+  # Only a file that opens with the contract title line is held to the contract.
+  first="$(sed -n 1p "$f")"
+  [[ "$first" == "# Profile: "* ]] || return 0
+  n="$(file_lines "$f")"
+  if (( n < 60 || n > 160 )); then echo "$f has $n lines; a PROFILE.md is 60 to 160 lines (docs/profiles/README.md)"; fi
+  found="$(awk '
+    { sub(/\r$/, "") }
+    /^```/ { fence = !fence; next }
+    !fence && /^## / { sub(/^## /, ""); sub(/[ \t]+$/, ""); printf "%s%s", (c++ ? "|" : ""), $0 }' "$f")"
+  if [[ "$found" != "$PROFILE_HEADINGS" ]]; then
+    echo "$f level-2 headings are '$found'; expected exactly, in order: '$PROFILE_HEADINGS' (docs/profiles/README.md)"
+  fi
+}
+
+UPSTREAM="docs/lessons/UPSTREAM.md"
+UPSTREAM_LABELS="what happened|what check should have caught it|what was added|retire-when|applies to"
+
 cmd_check() {
   local errs=() approved_count=0 line lineno id seen=" "
 
@@ -488,7 +587,7 @@ cmd_check() {
     approved_count=$((approved_count + 1))
     if [[ "$line" =~ $FIELD_RE ]]; then
       id="${BASH_REMATCH[1]}"
-      local last="${BASH_REMATCH[4]}" retire="${BASH_REMATCH[5]}"
+      local used="${BASH_REMATCH[3]}" last="${BASH_REMATCH[4]}" aclause="${BASH_REMATCH[5]}" approved="${BASH_REMATCH[6]}" retire="${BASH_REMATCH[7]}"
       if [[ "$seen" == *" $id "* ]]; then errs+=("INDEX.md line $lineno: duplicate lesson id $id"); fi
       seen="$seen$id "
       split_retire "$retire"
@@ -503,9 +602,22 @@ cmd_check() {
         done
       fi
       if [[ "$last" != "-" ]] && ! valid_date "$last"; then errs+=("INDEX.md line $lineno: $id has an invalid last: date '$last'"); fi
+      if [[ -z "$aclause" ]]; then
+        errs+=("INDEX.md line $lineno: $id has no approved: YYYY-MM-DD field (put it right after last:)")
+      elif ! valid_date "$approved"; then
+        errs+=("INDEX.md line $lineno: $id has a malformed approved: date '$approved' (expected YYYY-MM-DD)")
+      elif [[ "$used" == "0" ]]; then
+        local age=$(( $(day_number "$(today)") - $(day_number "$approved") ))
+        if (( age > EXPIRE_DAYS )); then
+          errs+=("INDEX.md line $lineno: $id has used: 0 and was approved $age days ago (> $EXPIRE_DAYS); archive it in a maintain pass (scripts/lessons.sh expire --apply) or record a use (scripts/lessons.sh use $id)")
+        fi
+      fi
+      if [[ "$retire" == *"[met]"* ]]; then
+        echo "lessons: warning - $id retire-when is marked [met]; archive it in a maintain pass (scripts/lessons.sh expire --apply)"
+      fi
     else
       id="$(printf '%s' "$line" | sed -n 's/^- \[\(L[0-9]*\)\].*/\1/p')"
-      errs+=("INDEX.md line $lineno: approved lesson ${id:-?} lacks the (used: N, last: ..., retire-when: ...) fields")
+      errs+=("INDEX.md line $lineno: approved lesson ${id:-?} lacks the (used: N, last: ..., approved: ..., retire-when: ...) fields")
     fi
   done < <(approved_lines)
   if (( approved_count > MAX_LESSONS )); then
@@ -524,6 +636,28 @@ cmd_check() {
     [[ "$p4" == 1 && -n "$v4" ]] || missing="$missing 'retire-when'"
     [[ -z "$missing" ]] || errs+=("PENDING.md entry at line $start is missing or has empty:$missing")
   done < <(entries "$PENDING" "$PENDING_LABELS")
+
+  # UPSTREAM entries: the PENDING four fields plus "applies to:", which names
+  # core or a profile folder under docs/profiles/ (docs/procedures/upstream.md).
+  local p5 v5 applies
+  while IFS="$US" read -r start p1 v1 p2 v2 p3 v3 p4 v4 p5 v5; do
+    [[ -n "$start" ]] || continue
+    # The documented format placeholder leaves the four fields empty.
+    if is_placeholder "$p1" "$v1" "$p2" "$v2" "$p3" "$v3" "$p4" "$v4"; then continue; fi
+    missing=""
+    [[ "$p1" == 1 && -n "$v1" ]] || missing="$missing 'what happened'"
+    [[ "$p2" == 1 && -n "$v2" ]] || missing="$missing 'what check should have caught it'"
+    [[ "$p3" == 1 && -n "$v3" ]] || missing="$missing 'what was added'"
+    [[ "$p4" == 1 && -n "$v4" ]] || missing="$missing 'retire-when'"
+    [[ "$p5" == 1 && -n "$v5" ]] || missing="$missing 'applies to'"
+    [[ -z "$missing" ]] || errs+=("UPSTREAM.md entry at line $start is missing or has empty:$missing")
+    if [[ "$p5" == 1 && -n "$v5" ]]; then
+      applies="${v5%%[[:space:]]*}"
+      if [[ "$applies" != "core" && ! -d "docs/profiles/$applies" ]]; then
+        errs+=("UPSTREAM.md entry at line $start: 'applies to' is '$v5'; expected core or a profile folder name under docs/profiles/")
+      fi
+    fi
+  done < <(entries "$UPSTREAM" "$UPSTREAM_LABELS")
 
   # QUARANTINE entries: an owner task is required once older than 30 days.
   local now_dn owner_lc age
@@ -589,10 +723,17 @@ cmd_check() {
     else
       # The substitution can fail (diff exits 1 on a difference); under set -e a
       # failing substitution inside an assignment would end the script silently.
-      drift="$(diff -rq .claude/skills .agents/skills 2>&1 | sed -n '1,3p' | tr '\n' ';' || true)"
+      drift="$(skills_mirror_errors)"
       if [[ -n "$drift" ]]; then
         errs+=(".claude/skills and .agents/skills differ: $drift")
       fi
+      local sk
+      for sk in .claude/skills/*/SKILL.md .agents/skills/*/SKILL.md; do
+        [[ -f "$sk" ]] || continue
+        while IFS= read -r msg; do
+          if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+        done < <(skills_pointer_errors "$sk")
+      done
     fi
     skills_cap
     if (( SK_COUNT > SK_CAP )); then errs+=("$(skills_over_msg)"); fi
@@ -624,6 +765,9 @@ cmd_check() {
     while IFS= read -r msg; do
       if [[ -n "$msg" ]]; then errs+=("$msg"); fi
     done < <(shipped_set_check "$(dirname "$pf")" "$pf")
+    while IFS= read -r msg; do
+      if [[ -n "$msg" ]]; then errs+=("$msg"); fi
+    done < <(profile_contract_errors "$pf")
   done
   local optdir
   for optdir in docs/library docs/roster; do
@@ -673,16 +817,16 @@ rewrite_line() {
 cmd_use() {
   local want="${1:-}"
   [[ "$want" =~ ^L[0-9]+$ ]] || { echo "usage: scripts/lessons.sh use <Lnnn>" >&2; exit 2; }
-  local lineno line used last retire trimmed tail head now
+  local lineno line used last aclause retire trimmed tail head now
   while IFS="$US" read -r lineno line; do
     [[ -n "$lineno" ]] || continue
     if [[ "$line" =~ $FIELD_RE ]] && [[ "${BASH_REMATCH[1]}" == "$want" ]]; then
-      used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; retire="${BASH_REMATCH[5]}"
+      used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; aclause="${BASH_REMATCH[5]}"; retire="${BASH_REMATCH[7]}"
       trimmed="${line%"${line##*[![:space:]]}"}"
-      tail="(used: $used, last: $last, retire-when: $retire)"
+      tail="(used: $used, last: $last, ${aclause}retire-when: $retire)"
       head="${trimmed%"$tail"}"
       now="$(today)"
-      rewrite_line "$INDEX" "$lineno" "${head}(used: $((used + 1)), last: $now, retire-when: $retire)"
+      rewrite_line "$INDEX" "$lineno" "${head}(used: $((used + 1)), last: $now, ${aclause}retire-when: $retire)"
       echo "lessons: $want used: $((used + 1)), last: $now"
       return 0
     fi
@@ -698,7 +842,7 @@ cmd_expire() {
     --apply) apply=1 ;;
     *) usage ;;
   esac
-  local now now_dn lineno line found=0 never="" id last retire reason age
+  local now now_dn lineno line found=0 never="" id last approved retire reason age used
   now="$(today)"
   now_dn="$(day_number "$now")"
   # Collect first, apply bottom-up so line numbers stay valid.
@@ -706,12 +850,17 @@ cmd_expire() {
   while IFS="$US" read -r lineno line; do
     [[ -n "$lineno" ]] || continue
     [[ "$line" =~ $FIELD_RE ]] || continue
-    id="${BASH_REMATCH[1]}"; last="${BASH_REMATCH[4]}"; retire="${BASH_REMATCH[5]}"; reason=""
+    id="${BASH_REMATCH[1]}"; used="${BASH_REMATCH[3]}"; last="${BASH_REMATCH[4]}"; approved="${BASH_REMATCH[6]}"; retire="${BASH_REMATCH[7]}"; reason=""
     if [[ "$last" != "-" ]] && valid_date "$last"; then
       age=$(( now_dn - $(day_number "$last") ))
       if (( age > EXPIRE_DAYS )); then reason="last used $age days ago (> $EXPIRE_DAYS)"; fi
     else
-      never="$never $id"
+      # Never used: the approval date is the only age there is.
+      if [[ "$used" == "0" ]] && valid_date "$approved"; then
+        age=$(( now_dn - $(day_number "$approved") ))
+        if (( age > EXPIRE_DAYS )); then reason="never used, approved $age days ago (> $EXPIRE_DAYS)"; fi
+      fi
+      [[ -n "$reason" ]] || never="$never $id"
     fi
     if [[ "$retire" == *"[met]"* ]]; then
       reason="${reason:+$reason; }retire-when marked [met]"
@@ -730,24 +879,52 @@ cmd_expire() {
   fi
   (( found )) || return 0
 
-  mkdir -p .archive/lessons
-  local i h hl hid hreason hline dest
+  local i h hl hid hreason hline
   for (( i = ${#hits[@]} - 1; i >= 0; i-- )); do
     h="${hits[$i]}"
     IFS="$US" read -r hl hid hreason hline <<< "$h"
-    dest=".archive/lessons/$hid.md"
-    [[ ! -e "$dest" ]] || dest=".archive/lessons/$hid-$now.md"
-    {
-      echo "# $hid archived $now"
-      echo
-      echo "reason: $hreason"
-      echo
-      echo "$hline"
-    } > "$dest"
-    rewrite_line "$INDEX" "$hl"
-    echo "$now expire: $hid archived to $dest - $hreason" >> "$LOG"
-    echo "expire: archived $hid -> $dest"
+    archive_line "$hl" "$hid" "$hreason" "$hline" expire
   done
+}
+
+# archive_line LINENO ID REASON LINE TAG: move one approved lesson to
+# .archive/lessons/ with its one-line reason (kernel rule 11), drop it from
+# INDEX.md and log it. A second archive of the same id gets a dated name.
+archive_line() {
+  local hl="$1" hid="$2" hreason="$3" hline="$4" tag="$5" now dest
+  now="$(today)"
+  mkdir -p .archive/lessons
+  dest=".archive/lessons/$hid.md"
+  [[ ! -e "$dest" ]] || dest=".archive/lessons/$hid-$now.md"
+  {
+    echo "# $hid archived $now"
+    echo
+    echo "reason: $hreason"
+    echo
+    echo "$hline"
+  } > "$dest"
+  rewrite_line "$INDEX" "$hl"
+  echo "$now $tag: $hid archived to $dest - $hreason" >> "$LOG"
+  echo "$tag: archived $hid -> $dest"
+}
+
+# archive <Lnnn> <reason>: archive one lesson on evidence the retire-when
+# marker cannot carry (for example its content now lives in a repo file).
+cmd_archive() {
+  local want="${1:-}" reason="${2:-}" lineno line
+  if [[ ! "$want" =~ ^L[0-9]+$ || -z "${reason//[[:space:]]/}" || $# -ne 2 ]]; then
+    echo "usage: scripts/lessons.sh archive <Lnnn> <one-line reason>" >&2; exit 2
+  fi
+  case "$reason" in *$'\n'*) echo "lessons: the reason must be one line" >&2; exit 2 ;; esac
+  while IFS="$US" read -r lineno line; do
+    [[ -n "$lineno" ]] || continue
+    if [[ "$line" =~ ^-[[:space:]]\[($want)\][[:space:]] ]]; then
+      archive_line "$lineno" "$want" "$reason" "$line" archive
+      return 0
+    fi
+  done < <(approved_lines)
+  echo "lessons: $want not found in $INDEX" >&2
+  exit 1
 }
 
 cmd_stats() {
@@ -850,7 +1027,7 @@ cmd_match() {
     [[ -n "$lineno" ]] || continue
     [[ "$line" =~ $FIELD_RE ]] || continue
     id="${BASH_REMATCH[1]}"
-    split_retire "${BASH_REMATCH[5]}"
+    split_retire "${BASH_REMATCH[7]}"
     [[ -n "$TRIG" ]] || continue
     ntrig=$((ntrig + 1))
     hit=""
@@ -886,6 +1063,7 @@ case "${1:-}" in
   core-skills) printf '%s\n' "${CORE_SKILLS[@]}" ;;
   use) shift; cmd_use "$@" ;;
   expire) shift; cmd_expire "$@" ;;
+  archive) shift; cmd_archive "$@" ;;
   stats) cmd_stats ;;
   match) shift; cmd_match "$@" ;;
   *) usage ;;

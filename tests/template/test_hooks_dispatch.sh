@@ -91,6 +91,14 @@ hook SessionStart 10-context 'echo "[project] context line"'
 dispatch SessionStart '{"source":"startup"}'
 assert_rc "SessionStart: exit 0" 0
 assert_eq "SessionStart: stdout passes through" "[project] context line" "$OUT"
+# A hook that never reads stdin closes the pipe; writing a payload larger than
+# the pipe buffer then fails with EPIPE every time (CI run on c9068bd showed
+# "printf: write error: Broken pipe" in the hook output by chance). The
+# dispatcher's own write error must not reach the output.
+big="$(printf '{"pad":"%0200000d"}' 0)"
+dispatch SessionStart "$big"
+assert_rc "SessionStart, large payload, hook ignores stdin: exit 0" 0
+assert_eq "SessionStart, large payload: only the hook's output" "[project] context line" "$OUT"
 hook UserPromptSubmit 10-log 'cat > /dev/null; exit 0'
 dispatch UserPromptSubmit '{"prompt":"hi"}'
 assert_rc "UserPromptSubmit: exit 0" 0

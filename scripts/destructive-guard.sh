@@ -47,7 +47,8 @@
 #     --mirror/--prune/-f/-d or a +ref or :ref refspec; reset --hard;
 #     clean -f (unless a dry run); branch -D or -d with -f; checkout -f or a
 #     whole-tree target; restore of the whole tree (unless --staged only);
-#     stash drop and stash clear; -c core.hooksPath= (or --config-env of it);
+#     stash clear and stash drop unless it names one literal stash@{N} or
+#     40-hex sha; -c core.hooksPath= (or --config-env of it);
 #     git config writing core.hooksPath (reads and --unset pass); a segment
 #     naming both a GIT_CONFIG_ variable and core.hooksPath (NAME=value
 #     prefixes, env, export, $env:, set); an inline alias, -c alias.X=...
@@ -416,14 +417,36 @@ check_git() { # arguments in ARGS
       fi
       ;;
     stash)
-      if g_first drop || g_first clear; then
-        block "git stash drop/clear destroys stashed work (kernel rule 6)" "$SEG"
-      fi
+      g_first clear && block "git stash clear destroys every stash (kernel rule 6)" "$SEG"
+      g_first drop && check_stash_drop
       ;;
     config)
       check_git_config
       ;;
   esac
+}
+
+# A drop is allowed only when the command line names exactly one literal stash
+# (stash@{N} or a 40-hex sha, optionally with -q/--quiet): the guard cannot read
+# the stash message, so the literal ref is the one thing it can check. A bare
+# drop (drops the newest stash), a variable or command substitution, a range,
+# or several refs is refused; the caller resolves the ref first.
+check_stash_drop() {
+  local a refs=0 i
+  for (( i = 1; i < ${#GARGS[@]}; i++ )); do
+    a="${GARGS[i]}"
+    case "$a" in
+      -q | --quiet) ;;
+      *)
+        if [[ "$a" =~ ^stash@#[0-9]+$ || "$a" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          refs=$((refs + 1))
+        else
+          block "git stash drop needs a literal stash@{N} or 40-hex sha, not '$a' (kernel rule 6)" "$SEG"
+        fi
+        ;;
+    esac
+  done
+  (( refs == 1 )) || block "git stash drop needs exactly one literal stash@{N} or 40-hex sha (kernel rule 6)" "$SEG"
 }
 
 # git config core.hooksPath X stores what -c core.hooksPath= gives one command,
@@ -701,6 +724,14 @@ check_text() {
   while [[ "$in" =~ $re_brace ]]; do
     m="${BASH_REMATCH[0]}"
     r='$'"${BASH_REMATCH[1]}"
+    in=${in/"$m"/$r}
+  done
+  # stash@{N} is the one literal stash ref a drop may name; the brace split
+  # below would cut it to "stash@", so it is rewritten to stash@#N first.
+  local re_stash='stash@\{([0-9]+)\}'
+  while [[ "$in" =~ $re_stash ]]; do
+    m="${BASH_REMATCH[0]}"
+    r="stash@#${BASH_REMATCH[1]}"
     in=${in/"$m"/$r}
   done
   # An escaped space (bash New\ Project, PowerShell New` Project) is part of

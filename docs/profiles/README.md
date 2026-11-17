@@ -16,6 +16,7 @@ real projects; each rule states the failure it prevents.
 | embedded-firmware | `docs/profiles/embedded-firmware/` | Code runs on a microcontroller that drives physical outputs. |
 | hardware-pcb | `docs/profiles/hardware-pcb/` | A printed circuit board or electronics design is a deliverable. |
 | data-analysis | `docs/profiles/data-analysis/` | Raw instrument files or logs are imported and analysed. |
+| product-render | `docs/profiles/product-render/` | Stills, turntables, mechanism demos or films are rendered in Blender from CAD. |
 
 ## How start selects profiles
 
@@ -26,7 +27,8 @@ real projects; each rule states the failure it prevents.
    embedded adds `embedded-firmware`; safety-sensitive adds the profile of the
    hardware involved (`embedded-firmware`, `hardware-pcb`, or both) and
    `scientific` if a claim is quantitative; a project that imports test logs
-   adds `data-analysis`. When the answer is unclear, start asks one follow-up.
+   adds `data-analysis`; a project that renders product stills or films from CAD adds
+   `product-render`. When the answer is unclear, start asks one follow-up.
 3. For each selected profile start, in order: copies its Rules into the
    AGENTS.md rules index as one line per rule file or ID range (the 180-line
    budget holds); wires every Gates row into `scripts/stack-check.sh` and
@@ -52,7 +54,7 @@ Parameters and records; Done means; Lessons carried in; Sources.
 
 - Length is 60 to 160 lines. Longer material goes in a sibling file linked
   from Playbooks (for example `hardware-pcb/LAYOUT_PROCESS.md`).
-- Each rule has an ID (`SW-n`, `SC-n`, `FW-n`, `PCB-n`, `DA-n`) and is one
+- Each rule has an ID (`SW-n`, `SC-n`, `FW-n`, `PCB-n`, `DA-n`, `RND-n`) and is one
   sentence a script or a test could enforce. A rule with no mechanical form
   says so in its Gates row as `review`.
 - Each Gates row names the command, the pass criterion, and the profile rule
@@ -70,7 +72,8 @@ Parameters and records; Done means; Lessons carried in; Sources.
   verified are labelled `unverified`.
 - Sources is one fixed line: distilled from four prior projects of the template
   owner (embedded firmware, controller PCB, vibration data analysis, CAD
-  add-in); project records stay in those repositories, with no paths.
+  add-in); project records stay in those repositories, with no paths. The
+  `product-render` profile names its own two render projects in the same form.
 - Text uses plain hyphens only; the no-dash check of the software profile
   applies to profile files too.
 

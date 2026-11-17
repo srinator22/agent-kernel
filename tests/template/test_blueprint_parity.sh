@@ -7,6 +7,14 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# A started (adopted) project: .start-done exists, or AGENTS.md no longer
+# carries the template's "Status: TEMPLATE" line. Real-tree assertions about
+# the template's own tree skip there.
+t_started() {
+  [[ -f "$T_ROOT/.start-done" ]] && return 0
+  [[ -f "$T_ROOT/AGENTS.md" ]] && ! grep '^Status: TEMPLATE' "$T_ROOT/AGENTS.md" >/dev/null 2>&1
+}
+
 make_fixture
 FUNC="$(sed -n '/^# BEGIN blueprint-parity/,/^# END blueprint-parity/p' "$T_CHECK")"
 if [[ -z "$FUNC" ]]; then t_bad "check.sh has no blueprint-parity function"; t_finish; fi
@@ -80,6 +88,21 @@ assert_not_contains "an existing listed file is not reported" "lists scripts/che
 assert_not_contains "a summary directory entry is not required to exist as a file" "lists .codex"
 touch_files docs/rules/a.md
 
+# Reverse for tracked core files: a core file the tree never lists is reported
+# by name; listed files, files under a summary directory entry and files
+# outside the core folders are not.
+unlisted() { OUT="$(blueprint_core_unlisted "$@" 2>&1)"; RC=$?; }
+unlisted docs/BLUEPRINT.md AGENTS.md .github/workflows/ci.yml docs/rules/a.md docs/profiles/hardware/PROFILE.md scripts/check.sh .codex/agents/monitor.toml
+assert_eq "listed core files and a summary-covered file report nothing" "" "$OUT"
+unlisted docs/BLUEPRINT.md docs/decisions/0099-new.md scripts/newtool.sh
+assert_contains "an unlisted core file is reported by name (1)" "does not list tracked core file docs/decisions/0099-new.md"
+assert_contains "an unlisted core file is reported by name (2)" "does not list tracked core file scripts/newtool.sh"
+assert_contains "the message says where to add it" "add it to docs/BLUEPRINT.md section 2"
+unlisted docs/BLUEPRINT.md README.md src/app.py docs/other/x.md dir/other.md
+assert_eq "files outside the core folders are ignored" "" "$OUT"
+unlisted docs/BLUEPRINT.md scripts/a.md
+assert_contains "a name listed under another directory does not cover a core file" "tracked core file scripts/a.md"
+
 # Only section 2 counts.
 parity docs/BLUEPRINT.md AGENTS.md
 assert_not_contains "section 1 fences are not read" "before.md"
@@ -104,7 +127,7 @@ assert_eq "a large tree and its first and last entries agree, no broken pipe" ""
 # like check.sh step 5j it holds only in template mode: a started project
 # carries a different tree (no docs/library, its own ADRs) and checks it with
 # its own ./scripts/check.sh run.
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "the real blueprint and required list agree: this repository is a started project (.start-done); covered by check.sh step 5j in the template"
 else
   cd "$T_ROOT" || exit 1

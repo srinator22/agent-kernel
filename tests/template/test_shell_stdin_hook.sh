@@ -9,6 +9,7 @@
 # and the launcher with a Store-stub python3 first on PATH and with no working
 # Python (a non-blocking exit 1, never 2). The Codex wiring is covered in
 # test_codex_hooks.sh.
+# Recorded: python3 as the Microsoft Store stub -> prints "Python was not found; run without arguments to install from the Microsoft Store" and exits 49 (documented at scripts/find-python.sh lines 4-5; not reproducible on the recording host, Python was installed)
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

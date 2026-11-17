@@ -42,11 +42,29 @@ else
 fi
 assert_eq "--check writes nothing" "$(cd "$FIX.orig" && for f in "${FILES[@]}"; do cksum < "$f"; done)" "$(hashes)"
 
+export START_RESET_TODAY=2026-11-17
 run ./scripts/start-reset-lessons.sh
 assert_rc "reset on the template files passes" 0
+dropped=0
+for f in "${FILES[@]}"; do
+  if [[ -f "$FIX.orig/$f" ]] && (( $(wc -l < "$FIX.orig/$f") > $( [[ -f "$L/$f" ]] && wc -l < "$L/$f" || echo 0) )); then dropped=1; fi
+done
+if (( dropped )); then
+  assert_file "the dropped template lessons are archived (kernel rule 11)" .archive/lessons/template-2026-11-17.md
+  assert_contains "the archive is announced" "the dropped lines are archived in .archive/lessons/template-2026-11-17.md"
+else
+  # A started project already reset its lessons files (CI job adopted-project),
+  # so its real files hold nothing to drop; the synthetic cases below cover it.
+  t_na "archive of dropped template lessons: these lessons files hold only their format headers"
+fi
+for f in "${FILES[@]}"; do
+  n=$(( $(wc -l < "$FIX.orig/$f") - $(wc -l < "$L/$f") ))
+  if (( n > 0 )); then assert_file_has "the archive names $f" .archive/lessons/template-2026-11-17.md "## $L/$f"; fi
+done
 for f in "${FILES[@]}"; do is_prefix "$f keeps a leading part of the template file" "$L/$f" "$FIX.orig/$f"; done
 assert_eq "INDEX.md keeps no lesson line except the format example" "1" "$(grep -c '^- \[L[0-9]' "$L/INDEX.md")"
 assert_file_has "INDEX.md keeps the format example" "$L/INDEX.md" "retire-when: <condition>"
+assert_file_has "INDEX.md keeps the approved: field in the format example" "$L/INDEX.md" "last: -, approved: YYYY-MM-DD, retire-when: <condition>"
 assert_eq "PENDING.md keeps no entry heading" "0" "$(grep -c '^### ' "$L/PENDING.md")"
 assert_eq "PENDING.md ends with the last format field" "- retire-when:" "$(tail -n 1 "$L/PENDING.md")"
 assert_eq "UPSTREAM.md keeps no entry heading" "0" "$(grep -c '^### ' "$L/UPSTREAM.md")"
@@ -64,20 +82,45 @@ run ./scripts/start-reset-lessons.sh
 assert_rc "a second reset passes" 0
 assert_contains "a second reset says so" "$L/INDEX.md: already the format header"
 assert_eq "a second reset changes no byte" "$before" "$(hashes)"
+assert_no_file "a second reset writes no second archive" .archive/lessons/template-2026-11-17-2.md
 case "$FIX.orig" in */template-selftest.*) rm -rf "$FIX.orig" ;; esac
 
 # --- Synthetic files: exact header ---------------------------------------------
 make_fixture
 cp_script start-reset-lessons.sh
 mkdir -p "$L"
-printf '# Index\n\nIntro line.\n\nFormat:\n\n- [L001] <example> - <lesson\n  wrapped> (used: 0)\n\n- [L001] Real lesson - do it (used: 3, last: 2026-01-01, retire-when: x)\n- [L002] Another (used: 1, last: -, retire-when: y)\n' > "$L/INDEX.md"
+printf '# Index\n\nIntro line.\n\nFormat:\n\n- [L001] <example> - <lesson\n  wrapped> (used: 0, last: -, approved: YYYY-MM-DD)\n\n- [L001] Real lesson - do it (used: 3, last: 2026-01-01, approved: 2025-12-01, retire-when: x)\n- [L002] Another (used: 1, last: -, approved: 2025-12-02, retire-when: y)\n' > "$L/INDEX.md"
 printf '# Pending\n\nEntry format (all four fields required):\n\n- what happened:\n- retire-when:\n\n### An entry\n\n- what happened: x\n- retire-when: y\n' > "$L/PENDING.md"
 printf '# Quarantine\n\nEntry format:\n\n- test path:\n- owner task:\n\n- test path: tests/a.sh\n- owner task: fix-a\n' > "$L/QUARANTINE.md"
 printf '# Upstream\r\n\r\nEntry format:\r\n\r\n- what happened:\r\n- applies to: core\r\n\r\n### Entry\r\n\r\n- what happened: z\r\n' > "$L/UPSTREAM.md"
+printf '2026-11-01 maintain: template pass
+  evidence line
+2026-11-02 expire: L001 archived
+' > "$L/MAINTENANCE.log"
 git add -A && git commit -qm fixture
+run ./scripts/start-reset-lessons.sh --check
+assert_rc "--check fails while MAINTENANCE.log holds the template's entries" 1
+assert_contains "--check names MAINTENANCE.log" "$L/MAINTENANCE.log: holds the template's entries"
 run ./scripts/start-reset-lessons.sh
 assert_rc "reset on synthetic files passes" 0
-assert_eq "INDEX.md is exactly its header" "$(printf '# Index\n\nIntro line.\n\nFormat:\n\n- [L001] <example> - <lesson\n  wrapped> (used: 0)')" "$(cat "$L/INDEX.md")"
+assert_no_file "the reset leaves no template maintain log" "$L/MAINTENANCE.log"
+assert_file_has "the archive holds a MAINTENANCE.log section" .archive/lessons/template-2026-11-17.md "## $L/MAINTENANCE.log"
+assert_file_has "the archive holds the template's maintain entry" .archive/lessons/template-2026-11-17.md "2026-11-01 maintain: template pass"
+assert_file_has "the archive holds the evidence lines" .archive/lessons/template-2026-11-17.md "  evidence line"
+assert_contains "the log reset is reported" "$L/MAINTENANCE.log: template entries archived and the file removed"
+# A later sync appends its record to the absent log; session-context and
+# template-sync read it from there (template-sync only ever appends).
+mkdir -p "$L" && echo "template-sync: template-v0.1.0 2026-11-17" >> "$L/MAINTENANCE.log"
+assert_eq "an appended sync line is the whole log" "template-sync: template-v0.1.0 2026-11-17" "$(cat "$L/MAINTENANCE.log")"
+rm -f "$L/MAINTENANCE.log"
+assert_file "synthetic: the archive exists" .archive/lessons/template-2026-11-17.md
+assert_file_has "synthetic: the archive holds a dropped lesson line" .archive/lessons/template-2026-11-17.md "- [L002] Another (used: 1, last: -, approved: 2025-12-02, retire-when: y)"
+assert_file_has "synthetic: the archive holds a dropped pending entry" .archive/lessons/template-2026-11-17.md "### An entry"
+assert_file_has "synthetic: the archive holds a dropped quarantine entry" .archive/lessons/template-2026-11-17.md "- test path: tests/a.sh"
+assert_file_lacks "synthetic: the format header is not archived" .archive/lessons/template-2026-11-17.md "Entry format"
+assert_file_lacks "synthetic: the empty-state line is not archived" .archive/lessons/template-2026-11-17.md "No quarantined tests."
+assert_file_has "synthetic: the CRLF file's entry is archived" .archive/lessons/template-2026-11-17.md "- what happened: z"
+assert_eq "INDEX.md is exactly its header" "$(printf '# Index\n\nIntro line.\n\nFormat:\n\n- [L001] <example> - <lesson\n  wrapped> (used: 0, last: -, approved: YYYY-MM-DD)')" "$(cat "$L/INDEX.md")"
 assert_eq "PENDING.md is exactly its header" "$(printf '# Pending\n\nEntry format (all four fields required):\n\n- what happened:\n- retire-when:')" "$(cat "$L/PENDING.md")"
 assert_eq "QUARANTINE.md is its header and the empty-state line" "$(printf '# Quarantine\n\nEntry format:\n\n- test path:\n- owner task:\n\nNo quarantined tests.')" "$(cat "$L/QUARANTINE.md")"
 # Bytes compared with cmp: Git Bash drops CRs inside command substitution.
@@ -103,6 +146,7 @@ run ./scripts/start-reset-lessons.sh
 assert_rc ".start-done refuses with exit 2" 2
 assert_contains ".start-done refusal says start already ran" "start already ran"
 assert_eq ".start-done refusal writes nothing" "$before" "$(hashes)"
+assert_no_file ".start-done refusal archives nothing" .archive/lessons/template-2026-11-17.md
 run ./scripts/start-reset-lessons.sh --check
 assert_rc ".start-done refuses --check too" 2
 
@@ -113,6 +157,7 @@ run ./scripts/start-reset-lessons.sh
 assert_rc "uncommitted changes refuse with exit 1" 1
 assert_contains "the uncommitted file is named" "$L/PENDING.md"
 assert_eq "an uncommitted change in one file leaves every file untouched" "$before" "$(hashes)"
+assert_no_file "an uncommitted-change refusal archives nothing" .archive/lessons/template-2026-11-17.md
 
 refusal_fixture
 printf '# Lessons\n\nNo format block here.\n- [L001] x\n' > "$L/INDEX.md"

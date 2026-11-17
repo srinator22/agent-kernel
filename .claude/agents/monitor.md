@@ -26,7 +26,7 @@ script exits 0 or 1, or the total wait reaches the limit in your brief
 (default 60 minutes); then report the SHA as unverified.
 
 Relay its expected-workflows line and its transition lines, then report
-in the ship.md failure format:
+in this format:
 
 - Success: "all checks terminal-success for <SHA>" plus the check list.
 - Failure: workflow, job, conclusion, log URL and the failing log tail,

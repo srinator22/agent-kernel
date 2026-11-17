@@ -20,6 +20,19 @@ on:
 permissions:
   contents: read
 
+# Superseded pull-request runs are cancelled (a newer push to the same pull
+# request makes the older run's result moot). Push runs on main, branches and
+# tags are never cancelled: every pushed SHA must reach a terminal result
+# (kernel rule 5), and a version-tag run carries the deploy job. The deploy
+# job keeps its own group below, so racing deploys queue; that group is
+# job-level and independent of this workflow-level one. Non-PR runs are keyed
+# on the ref and the SHA, so each has a group of its own (a push to main and a
+# tag on the same SHA do not share one): GitHub cancels a PENDING run in a
+# shared group when a newer one queues, even with cancel-in-progress false.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # The required gate (branch protection names "check"). The runner image is
   # pinned: ubuntu-latest is moving to Ubuntu 26.04 and a silent image change
@@ -48,16 +61,20 @@ jobs:
     outputs:
       windows: ${{ steps.match.outputs.windows }}
       guard: ${{ steps.match.outputs.guard }}
+      selftest_inputs: ${{ steps.match.outputs.selftest_inputs }}
       gate: ${{ steps.match.outputs.gate }}
       gate_files: ${{ steps.match.outputs.gate_files }}
     steps:
+      # Only the merge commit and its first parent are diffed, so depth 2 is
+      # enough; a job that diffs against an arbitrary base would use
+      # fetch-depth: 0 with filter: blob:none (blobless) instead.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
       - id: match
         name: Match the changed files
         run: |
-          windows=false; guard=false; gate=false; gate_files=""
+          windows=false; guard=false; selftest_inputs=false; gate=false; gate_files=""
           while IFS= read -r f; do
             # Windows-specific: path matching, transcript discovery, the
             # Windows entry points and their tests (lesson L019).
@@ -73,6 +90,11 @@ jobs:
               scripts/destructive-guard.sh|tests/template/test_destructive_guard.sh|tests/template/lib.sh|\
               .github/workflows/ci.yml) guard=true ;;
             esac
+            # The declared inputs of the self-tests: scripts, the tests and the
+            # inputs list itself (selftest-inputs job).
+            case "$f" in
+              scripts/*|tests/template/*|.github/workflows/ci.yml) selftest_inputs=true ;;
+            esac
             # Gate files: what judges a change (ADR 0018).
             case "$f" in
               scripts/check.sh|scripts/quickgate.sh|scripts/kernel-hash.sh|scripts/selftest.sh|.kernel.hash|\
@@ -82,10 +104,11 @@ jobs:
                 gate=true; gate_files="$gate_files $f" ;;
             esac
           done < <(git diff --name-only --no-renames HEAD^1 HEAD)
-          echo "windows=$windows guard=$guard gate=$gate gate files:${gate_files:- none}"
+          echo "windows=$windows guard=$guard selftest_inputs=$selftest_inputs gate=$gate gate files:${gate_files:- none}"
           {
             echo "windows=$windows"
             echo "guard=$guard"
+            echo "selftest_inputs=$selftest_inputs"
             echo "gate=$gate"
             echo "gate_files=${gate_files# }"
           } >> "$GITHUB_OUTPUT"
@@ -127,19 +150,111 @@ jobs:
   # up ci-watch.sh, which waits on every job. It skips private repositories:
   # there Windows minutes are billed against the owner's quota, and a cost
   # needs the owner's approval (kernel rule 15). !cancelled() lets it run when
-  # the paths job was skipped (every event but pull_request).
+  # the paths job was skipped (every event but pull_request). The suite is
+  # split into three shards that run in parallel (fail-fast off so one red
+  # shard does not hide the others); each uploads its per-test timings so the
+  # split can be rebalanced. The job-level condition skips all shards before
+  # setup, so a skipped run costs no Windows minutes.
   selftest-windows:
     needs: paths
     if: ${{ !cancelled() && github.event.repository.private == false && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || needs.paths.outputs.windows == 'true') }}
     runs-on: windows-2025
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - name: Run the template self-tests
-        run: ./scripts/selftest.sh
+      - name: Run the template self-tests (shard ${{ matrix.shard }} of 3)
+        env:
+          SELFTEST_TIMES: selftest-times-${{ matrix.shard }}.txt
+        run: ./scripts/selftest.sh --shard ${{ matrix.shard }}/3
+      # Third-party action: pinned by full commit SHA (docs/rules/ci-baseline.md).
+      - name: Upload the shard timings
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: selftest-times-${{ matrix.shard }}
+          path: selftest-times-${{ matrix.shard }}.txt
+          retention-days: 14
+
+  # The self-tests run in a copy of the tree that holds only their declared
+  # inputs, which proves the list is complete (scripts/selftest-reuse.sh).
+  # Linux only, so it is cheap: on pull requests that change scripts/,
+  # tests/template/ or the workflow (the paths job), and on every push to
+  # main. Skipped at the job level otherwise.
+  selftest-inputs:
+    needs: paths
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || needs.paths.outputs.selftest_inputs == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify the declared self-test inputs are complete
+        run: ./scripts/selftest-reuse.sh verify-inputs
+
+  # A project adopted from the template must pass the shipped gauntlet and
+  # self-tests: copy the tree to a scratch folder, apply the mechanical parts
+  # of docs/procedures/start.md that need no human (the stack-check.sh stub,
+  # the Profiles, Template and status lines, the sync record, the lessons
+  # reset, the verify skill, .start-done), commit, then run ./scripts/check.sh
+  # there. The catalogs a real project does not carry are left out, as
+  # tests/template/test_check_always.sh does. Linux only; on pull requests
+  # that change scripts/, tests/template/ or the workflow (the paths job) and
+  # on every push to main. Skipped at the job level otherwise.
+  adopted-project:
+    needs: paths
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || needs.paths.outputs.selftest_inputs == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Adopt the template in a scratch folder
+        run: |
+          set -euo pipefail
+          src="$PWD"
+          scratch="$(mktemp -d)"
+          git ls-files -co --exclude-standard -z \
+            | grep -zv '^[.]work/template-sync/\|^docs/library/\|^docs/roster/\|^tests/docs/questions\.md$' \
+            | tar --null -T - -cf - | tar -xf - -C "$scratch"
+          cd "$scratch"
+          git init -q .
+          git config user.email adopted@example.invalid
+          git config user.name adopted
+          git config core.autocrlf false
+          git add -A
+          git commit -q -m "chore: template copy"
+          # start.md step 6: the lessons reset runs on the committed copy (it
+          # refuses uncommitted lessons files) and before the sync record below.
+          bash scripts/start-reset-lessons.sh
+          bash scripts/start-reset-lessons.sh --check
+          git add -A
+          git commit -q -m "chore: reset the lessons"
+          # start.md step 3: the project-owned stack steps (a trivial stub).
+          printf '#!/usr/bin/env bash\necho "stack steps wired by the adopted-project job"\n' > scripts/stack-check.sh
+          chmod +x scripts/stack-check.sh
+          # start.md step 4: Profiles, Template, status line and the sync record.
+          sed -i -e 's/^- Profiles: {{FILLED_BY_START.*$/- Profiles: software\n- Template: https:\/\/example.invalid\/template.git template-v0.1.0/' -e '/^Status: TEMPLATE/d' AGENTS.md
+          echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
+          ./scripts/kernel-hash.sh --update
+          # start.md step 4: the software profile's verify skill, filled, in both mirrors.
+          for d in .claude .agents; do
+            mkdir -p "$d/skills/verify"
+            printf -- '---\nname: verify\ndescription: adopted-project fixture\n---\nRun the fixture.\n' > "$d/skills/verify/SKILL.md"
+          done
+          # start.md step 8.
+          echo "$(date -u +%F) adopted-project CI scratch" > .start-done
+          git add -A
+          git commit -q -m "chore: adopt the template"
+          echo "scratch=$scratch" >> "$GITHUB_ENV"
+      - name: Run the gauntlet in the adopted project
+        run: |
+          cd "$scratch"
+          ./scripts/check.sh
 
   # The destructive guard is written for bash 3.2, the /bin/bash macOS still
   # ships, and no other job has one. This runs its test under that bash, with

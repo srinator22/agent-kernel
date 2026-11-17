@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # stop-gate.sh: the Stop hook allows when there is no live task or the hook
-# already continued once, blocks on broken task state, runs the quick gate only
-# when every criterion is ticked, caches a green run by working-tree state,
-# and allows when no quick lane is wired. A fake quickgate.sh records its runs.
+# already continued once, blocks on broken task state, starts the quick gate in
+# the background only when every criterion is ticked and returns without
+# waiting, blocks once on a recorded failing run, caches a recorded pass by
+# working-tree state, clears a running file older than an hour, and allows when
+# no quick lane is wired. A fake quickgate.sh records its runs and, while
+# .work/jobs/qg.release is absent, stays running so a hook that waited for it
+# would hang the test instead of passing.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -12,6 +16,19 @@ stop() {
   OUT="$(printf '%s' "$p" | bash scripts/stop-gate.sh 2>&1)"; RC=$?
 }
 qg_runs() { if [[ -f .work/jobs/qg.log ]]; then wc -l < .work/jobs/qg.log | tr -d ' '; else echo 0; fi; }
+# bg_alive: "alive" when the pid in the running file is a live process.
+bg_alive() {
+  local pid=""
+  [[ -f .work/jobs/stop-gate.running ]] && read -r pid _ < .work/jobs/stop-gate.running
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then echo alive; else echo gone; fi
+}
+# wait_bg: await the background run the hook started, by its pid.
+wait_bg() {
+  local pid=""
+  [[ -f .work/jobs/stop-gate.running ]] && read -r pid _ < .work/jobs/stop-gate.running
+  [[ -n "$pid" ]] || return 0
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+}
 # task CRITERIA_LINES [MODE] [PLAN_STATUS]: write a live TASK.md.
 task() {
   mkdir -p .work
@@ -38,6 +55,9 @@ cp_script stop-gate.sh taskgraph.sh tasklint.sh
 cat > scripts/quickgate.sh <<'QG'
 #!/usr/bin/env bash
 mkdir -p .work/jobs && echo run >> .work/jobs/qg.log
+# Held open until the test releases it; the cap only keeps a broken run from
+# outliving the test.
+for _ in $(seq 600); do [[ -f .work/jobs/qg.release ]] && break; sleep 0.1; done
 echo "QG-OUTPUT-LINE"
 exit "${QG_RC:-0}"
 QG
@@ -88,35 +108,76 @@ stop
 assert_rc "a ticked line inside a comment does not count" 0
 assert_eq "the quick gate still did not run" "0" "$(qg_runs)"
 
+# The quick gate runs detached: the hook returns while the fake gate is held
+# open by the missing release file, so a hook that waited would hang here.
 task "- [x] works -> src.txt
 - [X] other -> judgment: reviewed"
+export QG_RC=1
+rm -f .work/jobs/qg.release
 stop
-assert_rc "all ticked and the quick gate red: block" 2
+assert_rc "all ticked: the hook allows without waiting for the quick gate" 0
+assert_file "a background run is recorded" .work/jobs/stop-gate.running
+assert_eq "the recorded run is alive" "alive" "$(bg_alive)"
+assert_no_file "no result while the run is going" .work/jobs/stop-gate.result
+stop
+assert_rc "a live run lets the stop through" 0
+touch .work/jobs/qg.release
+wait_bg
+assert_eq "the live run was not started twice" "1" "$(qg_runs)"
+assert_file_has "the result names the exit code" .work/jobs/stop-gate.result " 1"
+assert_no_file "the finished run clears its running file" .work/jobs/stop-gate.running
+stop
+assert_rc "a recorded failing result blocks" 2
 assert_contains "the block names the quick gate" "scripts/quickgate.sh failed (exit 1)"
-assert_contains "the quick gate output is passed on" "QG-OUTPUT-LINE"
-assert_eq "the quick gate ran once" "1" "$(qg_runs)"
+assert_contains "the log tail is passed on" "QG-OUTPUT-LINE"
+assert_file "the failure is marked reported" .work/jobs/stop-gate.result.reported
+assert_no_file "the failing result is consumed" .work/jobs/stop-gate.result
 
 export QG_RC=0
 stop
-assert_rc "all ticked and the quick gate green: allow" 0
+assert_rc "a reported failure does not block again" 0
+wait_bg
 assert_eq "the quick gate ran again after the red run" "2" "$(qg_runs)"
+assert_no_file "a pass is not cached before a stop reads it" .work/jobs/stop-gate.green
+stop
+assert_rc "a recorded pass for the same tree: allow" 0
 assert_file "the green state is cached" .work/jobs/stop-gate.green
+assert_no_file "the passing result is consumed" .work/jobs/stop-gate.result
 stop
 assert_rc "unchanged tree: allow" 0
+assert_no_file "an unchanged tree starts no run" .work/jobs/stop-gate.running
 assert_eq "an unchanged tree reuses the green run" "2" "$(qg_runs)"
 echo more >> src.txt
-stop
+stop; wait_bg
 assert_eq "a tracked change re-runs the quick gate" "3" "$(qg_runs)"
 echo new > untracked.txt
 stop
+assert_rc "a pass recorded for an older tree: allow" 0
+wait_bg
 assert_eq "a new untracked file re-runs the quick gate" "4" "$(qg_runs)"
+read -r newkey _ < .work/jobs/stop-gate.result
+stop
+assert_eq "the pass for the current tree is cached" "$newkey" "$(cat .work/jobs/stop-gate.green)"
 assert_eq "the real index is untouched" "" "$(git diff --cached --name-only)"
 
 rm -f .work/jobs/stop-gate.green
 export QG_RC=2
-stop
+stop; wait_bg; stop
 assert_rc "a wired lane that exits 2 is a real failure: block" 2
 assert_contains "the exit status is named" "scripts/quickgate.sh failed (exit 2)"
+export QG_RC=0
+
+# A running file older than an hour is cleared even when its pid is alive.
+printf '%s %s\n' "$$" "$(( $(date +%s) - 7200 ))" > .work/jobs/stop-gate.running
+before="$(qg_runs)"
+rm -f .work/jobs/qg.release
+stop
+assert_rc "a stale running file: allow" 0
+assert_eq "a new run replaces the stale one" "alive" "$(bg_alive)"
+assert_file_lacks "the stale pid is gone" .work/jobs/stop-gate.running "$$ "
+touch .work/jobs/qg.release
+wait_bg
+assert_eq "a stale running file does not stop a new run" "$((before + 1))" "$(qg_runs)"
 unset QG_RC
 
 printf '#!/usr/bin/env bash\n# no quick lane here\n' > scripts/check.sh; chmod +x scripts/check.sh
@@ -166,10 +227,12 @@ stop
 assert_rc "no dream.sh: allow" 0
 t_cleanup
 
-# Wiring: the Stop hook runs this script with a timeout long enough for the gate.
+# Wiring: the Stop hook runs this script with a short timeout; the gate runs
+# detached, so the hook never needs the gate's minutes.
 SETTINGS="$T_ROOT/.claude/settings.json"
 assert_file_has "settings.json declares a Stop hook" "$SETTINGS" '"Stop"'
 assert_file_has "the Stop hook runs the gate script" "$SETTINGS" 'scripts/stop-gate.sh'
-assert_file_has "the Stop hook sets a timeout" "$SETTINGS" '"timeout": 1200'
+assert_file_has "the Stop hook sets a short timeout" "$SETTINGS" '"timeout": 120'
+assert_file_lacks "the Stop hook no longer waits 1200 s" "$SETTINGS" '"timeout": 1200'
 
 t_finish

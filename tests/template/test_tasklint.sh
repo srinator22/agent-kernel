@@ -53,7 +53,7 @@ to_crlf() { awk '{ printf "%s\r\n", $0 }' "$1" > "$1.crlf" && mv "$1.crlf" "$1";
 # Usage and missing file.
 run ./scripts/tasklint.sh
 assert_rc "no argument is a usage error" 2
-assert_contains "usage names the subcommands" "check | ship"
+assert_contains "usage names the subcommands" "check | ship | final"
 run ./scripts/tasklint.sh bogus
 assert_rc "unknown argument is a usage error" 2
 run ./scripts/tasklint.sh check extra
@@ -419,6 +419,63 @@ to_crlf .work/TASK.md
 run ./scripts/tasklint.sh ship
 assert_rc "CRLF verdict on the current tree passes ship" 0
 
+# final = ship plus a required PASS review verdict (kernel rule 5), except in
+# quick mode. check.sh runs ship before the review exists, so ship itself must
+# not demand the verdict (the reviewer needs check.sh's tree line first).
+task_review "PASS - criteria met" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final passes a PASS verdict on the current tree" 0
+task_review ""
+run ./scripts/tasklint.sh final
+assert_rc "final fails an empty Review verdict" 1
+assert_contains "final names the missing verdict" "no PASS review verdict"
+task_review "FAIL - criterion C1 unmet" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final fails a FAIL verdict" 1
+assert_contains "final says the verdict is not PASS" "no PASS review verdict"
+task_review "Pending re-review" "PASS - older round" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final fails a pending re-review" 1
+printf '# Task: fixture
+Mode: standard
+
+## Assumptions
+- [confirmed] fine
+
+## Acceptance criteria
+- [x] C1 done -> tests/x_test.sh
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final fails a task with no Review verdict section" 1
+assert_contains "final names the missing verdict when the section is absent" "no PASS review verdict"
+run ./scripts/tasklint.sh ship
+assert_rc "ship still passes with no verdict (check.sh runs it before the review)" 0
+printf '# Task: fixture
+Mode: quick
+
+## Acceptance criteria
+- [x] C1 done -> tests/x_test.sh
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final lets a quick-mode task skip the verdict" 0
+task_review "PASS - stale" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh final
+assert_rc "final still fails a stale PASS tree" 1
+assert_contains "final names the stale tree" "covers tree 0000000000000000000000000000000000000000"
+printf '# Task: fixture
+Mode: standard
+
+## Assumptions
+- [open] x
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_contains "final also reports open assumptions" "open assumption"
+printf '# Task: {{title}}
+Mode: standard
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final passes the pristine template" 0
+
 # Mode.
 printf '# Task: fixture\nMode: standard | quick | autopilot\n\n## Assumptions\n- [open] x\n' > .work/TASK.md
 run ./scripts/tasklint.sh ship
@@ -469,5 +526,48 @@ task_assume standard "- [open] still open"
 to_crlf .work/TASK.md
 run ./scripts/tasklint.sh ship
 assert_rc "CRLF open assumption fails ship" 1
+
+
+# Unattended field.
+un_task() { printf '# Task: fixture\nMode: standard\n%s\n\n## Acceptance criteria\n- [ ] C1 -> tests/x_test.sh\n' "$1" > .work/TASK.md; }
+un_task "Unattended: yes - run scripts, edit owned files; report: .work/done/night.md"
+run ./scripts/tasklint.sh check
+assert_rc "a well-formed Unattended field passes" 0
+un_task "Unattended: no"
+run ./scripts/tasklint.sh check
+assert_rc "Unattended: no passes" 0
+printf '# Task: fixture\nMode: standard\n\n## Acceptance criteria\n- [ ] C1 -> tests/x_test.sh\n' > .work/TASK.md
+run ./scripts/tasklint.sh check
+assert_rc "an absent Unattended field passes" 0
+un_task "Unattended: yes"
+run ./scripts/tasklint.sh check
+assert_rc "yes with no actions or report fails" 1
+assert_contains "malformed field is explained" "Unattended must be"
+un_task "Unattended: yes - edit files"
+run ./scripts/tasklint.sh check
+assert_rc "yes without a report path fails" 1
+un_task "Unattended: yes - ; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "yes with empty actions fails" 1
+un_task "Unattended: maybe - x; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an unknown value fails" 1
+un_task "Unattended: yes - delete old branches; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming deletion is refused" 1
+assert_contains "refusal cites kernel rule 15" "kernel rule 15"
+un_task "Unattended: yes - git push --force the branch; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming force-push is refused" 1
+un_task "Unattended: yes - edit the kernel section; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming kernel edits is refused" 1
+un_task "<!-- Unattended: yes - delete everything -->"
+run ./scripts/tasklint.sh check
+assert_rc "a commented-out Unattended line is ignored" 0
+un_task "Unattended: yes - run tests; report: out.md"
+to_crlf .work/TASK.md
+run ./scripts/tasklint.sh check
+assert_rc "a CRLF Unattended field passes" 0
 
 t_finish

@@ -49,7 +49,7 @@ start again, and do nothing else. A recommended gap (gh, gitleaks, git-cliff,
    7. Risk profile: ordinary, scientific/numerical, safety-sensitive, or
       embedded? And the LIST of profiles to adopt from
       `docs/profiles/README.md` (software always; scientific,
-      embedded-firmware, hardware-pcb, data-analysis as the suggestion in
+      embedded-firmware, hardware-pcb, data-analysis, product-render as the suggestion in
       `docs/CAPABILITY_MAP.md` says; the human confirms or edits it).
       (Scientific wires golden-master fixtures, deterministic seeds, and
       promotes docs/rules/scientific-integrity.md in the index.) Also: which

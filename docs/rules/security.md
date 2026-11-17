@@ -18,7 +18,8 @@
   names, unpushed commits); run `scripts/private-terms.sh history` (every
   ref, diff and annotated tag) before widening exposure. Pushed history
   is covered only by history; neither covers submodules, untracked files
-  or non-ASCII case folding. A pushed branch named with a term fails
+  or non-ASCII case folding. The hook scripts/push-scan.sh runs check
+  before every `git push`. A pushed branch named with a term fails
   check until renamed locally; a broken ref is skipped by check and
   fails history.
 - Validate imports and uploads: file type, size, recursion depth, and
