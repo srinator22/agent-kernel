@@ -80,6 +80,21 @@ assert_not_contains "an existing listed file is not reported" "lists scripts/che
 assert_not_contains "a summary directory entry is not required to exist as a file" "lists .codex"
 touch_files docs/rules/a.md
 
+# Reverse for tracked core files: a core file the tree never lists is reported
+# by name; listed files, files under a summary directory entry and files
+# outside the core folders are not.
+unlisted() { OUT="$(blueprint_core_unlisted "$@" 2>&1)"; RC=$?; }
+unlisted docs/BLUEPRINT.md AGENTS.md .github/workflows/ci.yml docs/rules/a.md docs/profiles/hardware/PROFILE.md scripts/check.sh .codex/agents/monitor.toml
+assert_eq "listed core files and a summary-covered file report nothing" "" "$OUT"
+unlisted docs/BLUEPRINT.md docs/decisions/0099-new.md scripts/newtool.sh
+assert_contains "an unlisted core file is reported by name (1)" "does not list tracked core file docs/decisions/0099-new.md"
+assert_contains "an unlisted core file is reported by name (2)" "does not list tracked core file scripts/newtool.sh"
+assert_contains "the message says where to add it" "add it to docs/BLUEPRINT.md section 2"
+unlisted docs/BLUEPRINT.md README.md src/app.py docs/other/x.md dir/other.md
+assert_eq "files outside the core folders are ignored" "" "$OUT"
+unlisted docs/BLUEPRINT.md scripts/a.md
+assert_contains "a name listed under another directory does not cover a core file" "tracked core file scripts/a.md"
+
 # Only section 2 counts.
 parity docs/BLUEPRINT.md AGENTS.md
 assert_not_contains "section 1 fences are not read" "before.md"
