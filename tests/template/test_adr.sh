@@ -272,4 +272,94 @@ run ./scripts/adr.sh check
 assert_rc "a collision with origin's default branch named by origin/HEAD fails" 1
 assert_contains "the default branch is named" "is already taken on origin/trunk by docs/decisions/0005-trunk.md"
 
+# Accepted ADR bodies against the default branch: only the Status line may
+# change in place; anything else is appended under "## Amendment YYYY-MM-DD".
+make_fixture
+cp_script adr.sh
+git symbolic-ref HEAD refs/heads/main
+git init -q --bare "$FIX/.git/origin.git"
+git -C "$FIX/.git/origin.git" symbolic-ref HEAD refs/heads/main
+git remote add origin "$FIX/.git/origin.git"
+base_adr() { printf '# 0001 - A decision\n\nDate: 2026-01-02\nStatus: accepted\n\n## Context\n\nLine one.\nLine two.\n\n## Decision\n\nWe chose X.\n\n## Consequences\n\nIt costs Y.\n' > "$D/0001-first.md"; }
+mkdir -p "$D"
+base_adr
+git add -A && git commit -qm base && git push -q origin main 2>/dev/null
+git checkout -q -b work
+run ./scripts/adr.sh check
+assert_rc "an unchanged ADR passes the body check" 0
+assert_contains "the body comparison is reported" "adr: body check: 1 ADR(s) also on origin/main compared; none changed beyond the Status line or appended amendments"
+sed -i.bak 's/^Status: accepted/Status: superseded by 0002 (2026-02-01)/' "$D/0001-first.md" && rm -f "$D"/*.bak
+adr 0002-next.md 0002 2026-02-01 accepted
+run ./scripts/adr.sh check
+assert_rc "a changed Status line passes" 0
+rm "$D/0002-next.md"
+base_adr
+printf '\n## Amendment 2026-03-04\n\nAlso Z.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "an appended dated Amendment section passes" 0
+printf '\n## Amendment 2026-03-05 - second\n\nAnd W.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "a second appended Amendment section passes" 0
+base_adr
+awk 'NR > 5 && !/^##/ { $0 = $0 "  " } { print }' "$D/0001-first.md" > "$D/x" && printf '\n\n\n' >> "$D/x" && mv "$D/x" "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "trailing whitespace and trailing blank lines pass" 0
+base_adr
+printf '\n## Amendment 2026-03-06: with a title\n\nOk.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "an Amendment heading with a colon and title passes" 0
+base_adr
+printf '\nSome late note.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "appended text without an Amendment heading fails" 1
+assert_contains "the file, line and fix are named" "docs/decisions/0001-first.md: the body of an ADR on origin/main is never rewritten; first difference at line 19 (Status line aside): appended text \"Some late note.\" is not under a ## Amendment YYYY-MM-DD heading; append a dated '## Amendment YYYY-MM-DD' section or write a superseding ADR"
+base_adr
+printf '\n## Amendment 2026-03-04\n\nOk.\n\n## Postscript\n\nNo.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "an appended heading that is not an Amendment fails" 1
+assert_contains "the heading is named" "appended heading \"## Postscript\" is not a ## Amendment YYYY-MM-DD heading"
+base_adr
+printf '\n## Amendment soon\n\nNo date.\n' >> "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "an Amendment heading without a date fails" 1
+base_adr
+sed -i.bak 's/^We chose X\./We chose Z./' "$D/0001-first.md" && rm -f "$D"/*.bak
+run ./scripts/adr.sh check
+assert_rc "an edited body line fails" 1
+assert_contains "the first differing line is quoted" "first difference at line 13 (Status line aside): \"We chose X.\" became \"We chose Z.\""
+base_adr
+sed -i.bak '/^Line two\.$/d' "$D/0001-first.md" && rm -f "$D"/*.bak
+run ./scripts/adr.sh check
+assert_rc "a deleted line fails" 1
+assert_contains "the deleted line is named" "first difference at line 9 (Status line aside): \"Line two.\" became \"\""
+base_adr
+awk '{ print } /^Line one\.$/ { print "Inserted line." }' "$D/0001-first.md" > "$D/x" && mv "$D/x" "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "a line inserted mid-body fails" 1
+assert_contains "the inserted line is named" "first difference at line 9 (Status line aside): \"Line two.\" became \"Inserted line.\""
+base_adr
+head -n 12 "$D/0001-first.md" > "$D/x" && mv "$D/x" "$D/0001-first.md"
+run ./scripts/adr.sh check
+assert_rc "a truncated body fails" 1
+assert_contains "the removed line is named" "line removed:"
+base_adr
+adr 0002-new.md 0002 2026-02-01 accepted
+printf '\nFree text.\n' >> "$D/0002-new.md"
+run ./scripts/adr.sh check
+assert_rc "an ADR that is not on the base is not body-checked" 0
+QUICK=1 run ./scripts/adr.sh check
+assert_rc "QUICK=1 skips the body check" 0
+printf 'Changed.\n' >> "$D/0001-first.md"
+QUICK=1 run ./scripts/adr.sh check
+assert_rc "QUICK=1 passes even with an edited base ADR" 0
+assert_contains "the quick body skip is said" "adr: body check skipped: quick lane (QUICK=1); the full check.sh compares accepted ADR bodies with the default branch"
+git remote remove origin
+run ./scripts/adr.sh check
+assert_rc "no base available skips the body check and passes" 0
+assert_contains "the no-origin body skip is said" "adr: body check skipped: no 'origin' remote; accepted ADR bodies were not compared with the default branch"
+git remote add origin "$FIX/.git/missing.git"
+run ./scripts/adr.sh check
+assert_rc "an unreachable base skips the body check and passes" 0
+assert_contains "the failed-fetch body skip is said" "adr: body check skipped: could not fetch origin/main; accepted ADR bodies were not compared"
+
 t_finish

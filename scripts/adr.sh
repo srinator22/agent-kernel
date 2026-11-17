@@ -28,7 +28,14 @@
 #   lacks must not reuse a number origin's branch already gives another file.
 #   Parallel branches collided on ADR numbers twice before this. No remote, or
 #   a failed fetch, prints that the comparison was skipped; it never passes
-#   silently as if compared.
+#   silently as if compared;
+#   an ADR that already exists on that default branch keeps its body: only the
+#   "Status:" line may change in place, and anything else must be appended
+#   after the old last line under a "## Amendment YYYY-MM-DD" heading (a
+#   changed, removed or inserted line, or appended text outside such a
+#   heading, fails naming the file and the first differing line; trailing
+#   whitespace and end-of-file newlines are ignored). Same base, and the same
+#   skip rules and messages, as the number comparison above.
 # No records folder, or an empty one, passes.
 # Test hook: ADR_TODAY=YYYY-MM-DD overrides today's date for new.
 set -euo pipefail
@@ -119,14 +126,17 @@ origin_check() {
   # run often against a short budget; a network fetch belongs to the full gate.
   if [[ "${QUICK:-0}" == 1 ]]; then
     echo "adr: origin check skipped: quick lane (QUICK=1); the full check.sh compares new numbers with the default branch"
+    echo "adr: body check skipped: quick lane (QUICK=1); the full check.sh compares accepted ADR bodies with the default branch"
     return 0
   fi
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "adr: origin check skipped: not a git repository; new numbers were not compared with the default branch"
+    echo "adr: body check skipped: not a git repository; accepted ADR bodies were not compared with the default branch"
     return 0
   fi
   if ! git remote get-url origin >/dev/null 2>&1; then
     echo "adr: origin check skipped: no 'origin' remote; new numbers were not compared with the default branch"
+    echo "adr: body check skipped: no 'origin' remote; accepted ADR bodies were not compared with the default branch"
     return 0
   fi
   head="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
@@ -138,6 +148,7 @@ origin_check() {
   if ! GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes" \
        "${fetch[@]}" origin "+refs/heads/$branch:$ref" >/dev/null 2>&1; then
     echo "adr: origin check skipped: could not fetch origin/$branch (offline, or no such branch); new numbers were not compared"
+    echo "adr: body check skipped: could not fetch origin/$branch; accepted ADR bodies were not compared"
     return 0
   fi
   remote_files="$(git ls-tree --name-only "$ref" -- "$DIR/" 2>/dev/null \
@@ -162,6 +173,66 @@ origin_check() {
     fi
   done < <(adr_files)
   (( collide > 0 )) || echo "adr: origin check: $added ADR(s) added on this branch, none reuses a number on origin/$branch"
+  body_check "$ref" "$branch"
+}
+
+# Normalised view of an ADR for body_check, on stdin: CR and trailing blanks
+# off every line, the Status: line (before the first "## " heading) reduced to
+# its keyword, trailing blank lines dropped.
+adr_normalise() {
+  awk '{ sub(/\r$/, ""); sub(/[ \t]+$/, "") }
+    NR > 1 && !hdone && /^## / { hdone = 1 }
+    !hdone && /^Status:/ { $0 = "Status:" }
+    $0 == "" { blank++; next }
+    { while (blank > 0) { print ""; blank-- } print }'
+}
+
+# Appends edits of accepted ADRs to cmd_check's errs. $1 = the base ref.
+# The base file's normalised lines must be the working file's first lines;
+# whatever follows must open with, and only contain "## " headings of, a
+# "## Amendment YYYY-MM-DD" section (lines in ``` or ~~~ fences are not headings).
+body_check() {
+  local ref="$1" branch="$2" f tmp compared=0 res line msg before=${#errs[@]}
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/adr-body.XXXXXX")"
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    git cat-file -e "$ref:$f" 2>/dev/null || continue
+    git show "$ref:$f" 2>/dev/null | adr_normalise > "$tmp/base"
+    adr_normalise < "$f" > "$tmp/now"
+    [[ -s "$tmp/base" ]] || continue
+    compared=$((compared + 1))
+    res="$(awk -v maxlen=70 '
+      function cut(t) { return length(t) > maxlen ? substr(t, 1, maxlen) "..." : t }
+      FILENAME == ARGV[1] { b[++n] = $0; next }
+      { w[++m] = $0 }
+      END {
+        for (i = 1; i <= n; i++) {
+          if (i > m) { print i "|line removed: \"" cut(b[i]) "\""; exit }
+          if (w[i] != b[i]) { print i "|\"" cut(b[i]) "\" became \"" cut(w[i]) "\""; exit }
+        }
+        amend = "^## Amendment [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]([ :].*)?$"
+        for (i = n + 1; i <= m; i++) {
+          l = w[i]
+          if (l ~ /^ ? ? ?(```|~~~)/) { fence = !fence }
+          if (l == "") continue
+          if (!fence && l ~ /^## /) {
+            if (l !~ amend) { print i "|appended heading \"" cut(l) "\" is not a ## Amendment YYYY-MM-DD heading"; exit }
+            seen = 1; continue
+          }
+          if (!seen) { print i "|appended text \"" cut(l) "\" is not under a ## Amendment YYYY-MM-DD heading"; exit }
+        }
+      }' "$tmp/base" "$tmp/now")"
+    if [[ -n "$res" ]]; then
+      line="${res%%|*}"
+      msg="${res#*|}"
+      errs+=("$f: the body of an ADR on origin/$branch is never rewritten; first difference at line $line (Status line aside): $msg; append a dated '## Amendment YYYY-MM-DD' section or write a superseding ADR")
+    fi
+  done < <(adr_files)
+  rm -f "$tmp/base" "$tmp/now"
+  rmdir "$tmp" 2>/dev/null || true
+  if (( ${#errs[@]} == before )); then
+    echo "adr: body check: $compared ADR(s) also on origin/$branch compared; none changed beyond the Status line or appended amendments"
+  fi
 }
 
 cmd_check() {
