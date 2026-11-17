@@ -66,3 +66,9 @@ The library admits items with one-project evidence; a profile needs two
   filter width, the seed setting) ship as defaults to measure, not rules.
 - Outside tools, rented GPUs and farms are researched with dated prices
   but deferred; any use needs an owner decision (kernel rule 15).
+
+## Amendment 2026-11-18
+
+A second project now uses the render kit, so the `product-render` profile
+exists (docs/profiles/product-render/PROFILE.md); the procedure, skill and
+tools stay in docs/library/ and the profile points to them.

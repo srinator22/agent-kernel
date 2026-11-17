@@ -17,8 +17,9 @@
 - A pull request that changes a gate file (the gate files the ci.yml
   `paths` job lists) needs the `gate-change` label, added by a human who
   reviewed the gate change (ADR 0018).
-- Cache keys include the lockfile hash and the toolchain version so a
-  stale cache cannot mask breakage.
+- Cache keys include the lockfile hash and the toolchain version so a stale
+  cache cannot mask breakage; only trusted jobs write caches, untrusted jobs
+  (fork or pull-request code) restore only.
 - On failure, upload diagnostic artifacts (logs, reports) with no secrets
   in them.
 - Deployment depends on validation of the exact same SHA; an unvalidated
@@ -33,11 +34,7 @@
   on main, tags or deploys.
 - Optional jobs are gated at the job level (`if:` fed by a `paths` job) so a
   skipped job allocates no runner; a step-level skip has already paid setup.
-- Only trusted jobs write caches; untrusted jobs (fork or pull-request code)
-  restore only.
 - Moving a check to another stage (push, schedule) never makes a required
   answer optional: required checks stay green for the exact pushed SHA and a
   release gate stays attached to the version shipped
   (docs/procedures/ci-cost.md).
-- `actions/upload-artifact` and `actions/download-artifact` are pinned by
-  commit SHA like other third-party actions.

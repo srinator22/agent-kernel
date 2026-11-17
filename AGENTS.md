@@ -52,6 +52,7 @@ These rules govern process. Project truth lives in the Project decisions section
 - Experiments, models, leakage, validation status -> docs/rules/scientific-integrity.md
 - Deleting or overwriting anything material -> docs/rules/destructive-actions.md
 - CI permissions, pinning, caching, deploy gating -> docs/rules/ci-baseline.md
+- CI cost, slow or expensive checks, staging, reuse, selection, sharding -> docs/procedures/ci-cost.md
 - Advisor, workers, reviewer, monitor, task graph, time caps -> docs/rules/orchestration.md
 - Model tiers, harness adapters, mirror parity -> docs/rules/models.md
 - Project type bundles (rules, gates, tools, playbooks) -> docs/profiles/README.md

@@ -648,7 +648,7 @@ if [[ ! -f .start-done ]]; then
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers, private terms)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format and refs, test budget, doc questions, selftest, preference registers, private terms)"
   timing_line
   exit 0
 fi
