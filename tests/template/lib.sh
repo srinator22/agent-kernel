@@ -27,6 +27,12 @@ export TEMPLATE_RUFF="$T_ROOT/tests/template/fixtures/fake-ruff.sh"
 # $DREAM_CODEX_HOME before CODEX_HOME and ~/.codex. A path that does not exist is
 # an empty home; make_fixture swaps in a created empty folder beside each
 # fixture, which t_cleanup removes with it.
+# Fixture repositories never start git's automatic maintenance: newer git runs
+# it detached after a commit, and its .git/objects/maintenance.lock can appear
+# in one directory listing and be gone from the next, failing a test that
+# compares listings (CI run 44092893785, test_fleet.sh). Passed as -c style
+# environment so every git call in a test and in the scripts it runs sees it.
+export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=maintenance.auto GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=gc.auto GIT_CONFIG_VALUE_1=0
 T_NO_CODEX="${TMPDIR:-/tmp}/template-selftest.no-codex-home"
 export DREAM_CODEX_HOME="$T_NO_CODEX"
 T_PASS=0
