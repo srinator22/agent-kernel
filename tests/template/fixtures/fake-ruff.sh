@@ -6,6 +6,8 @@
 # call), FAKE_RUFF_CHECK_RC, FAKE_RUFF_FORMAT_RC, FAKE_RUFF_SCRATCH_RC (used
 # instead of the other two when the cwd is a check.sh scratch root,
 # */template-ruff.*), FAKE_RUFF_VERSION_RC.
+# Recorded: ruff --version -> ruff 0.16.10 (pinned version, recorded in .work/done/2026-11-08-fleet-sync-fixes.md as "template ruff: uvx, ruff 0.16.10")
+# Recorded: ruff check on a file with findings -> exit 1; on an unparsable ruff.toml -> exit 2 "ruff failed / Failed to load configuration" (real, ruff 0.17.3 via uvx --offline, 2026-11-18)
 if [[ -n "${FAKE_RUFF_LOG:-}" ]]; then printf '%s|%s\n' "$PWD" "$*" >> "$FAKE_RUFF_LOG"; fi
 case "${1:-}" in
   --version) echo "ruff 0.16.10 (fake-ruff.sh)"; exit "${FAKE_RUFF_VERSION_RC:-0}" ;;

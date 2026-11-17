@@ -6,6 +6,7 @@
 # behind), the scripts that source it (dream.sh, feedback-log.sh, check.sh 5f)
 # and that no script or test still picks python3 by command -v alone.
 # The test never skips: a real Python 3 is found by probing and wrapped.
+# Recorded: python3 as the Microsoft Store stub -> prints "Python was not found; run without arguments to install from the Microsoft Store" and exits 49 (documented at scripts/find-python.sh lines 4-5; not reproducible on the recording host, Python was installed)
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

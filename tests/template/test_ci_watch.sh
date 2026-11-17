@@ -7,6 +7,10 @@
 # path-filtered workflow that cannot run. A failure prints the failing job's
 # log tail even while its workflow run is still in progress. The watch
 # loop runs against a fake gh on PATH and a local bare remote; no network.
+# Recorded: gh api repos/{owner}/{repo}/commits/<sha>/check-runs --jq (tab fields) -> real 2026-11-18 for 6e3e70b1: "check<TAB>completed<TAB>success<TAB>https://github.com/srinator22/agent-kernel/actions/runs/42804415245/job/129789805339<TAB>129789805339"
+# Recorded: gh api repos/{owner}/{repo}/actions/runs?head_sha=<sha> --jq (tab fields) -> real 2026-11-18 for 6e3e70b1: ".github/workflows/ci.yml<TAB>completed<TAB>success<TAB>42804415245<TAB>https://github.com/srinator22/agent-kernel/actions/runs/42804415245"
+# Recorded: gh run view <id> --log-failed while a run is in progress -> refused by gh 2.90 (recorded in the comment at scripts/ci-watch.sh, "gh run view --job refuses while the rest")
+# Recorded: gh with an expired login -> prints "please run: gh auth login" and exits 4 (the fake's text; gh itself exits 4 on auth failure per gh help exit-codes, not re-run here)
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

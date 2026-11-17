@@ -11,6 +11,7 @@
 # and the file names in check.sh and the blueprint (A13).
 # The payloads in tests/template/fixtures/codex/ were recorded from a live Codex
 # session with every machine value replaced by a neutral one.
+# Recorded: git --exec-path -> C:/Program Files/Git/mingw64/libexec/git-core (real, Git for Windows 2.53.0, 2026-11-18); the git.cmd shim answers it with a folder holding no bash and passes every other call to the real git
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

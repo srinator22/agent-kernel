@@ -2,6 +2,7 @@
 # session-context.sh: the mode line, the rule-7 reminder, the git priming
 # block (branch, capped status, last 10 commits), the in-progress task, and
 # graceful output outside a git repository.
+# Recorded: none - the gh, winget, brew, curl and python3 shims are tripwires that log the call and exit 1 (python3: exit 0); no real response is replayed
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 

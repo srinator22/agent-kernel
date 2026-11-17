@@ -14,6 +14,7 @@
 # the slowest-files and wall lines, SELFTEST_TIMES. --shard K/N: greedy deal by
 # weight, disjoint and complete, median for a missing weight, usage errors.
 # --write-weights: format, and the output feeds --shard.
+# Recorded: nproc -> 24 (real, 2026-11-18, Git Bash on the recording host); the nproc shim prints that one number
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
