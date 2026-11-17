@@ -25,6 +25,7 @@ scripts
 tests/template
 tests/docs
 tests/quarantine.list
+tests/style-exempt.list
 tests/BUDGET
 docs
 .claude

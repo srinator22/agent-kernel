@@ -273,31 +273,94 @@ gfail=0
 gerr() { echo "CHECK FAILED: $*" >&2; gfail=1; }
 
 # 4a. Style: plain hyphens only (kernel rule 20), and no typographic or
-# mis-encoded characters. Tracked files only.
-# Needs grep with PCRE (GNU); where unavailable this defers to CI.
+# mis-encoded characters. Scans tracked files and untracked files that are not
+# ignored, so a new file cannot carry a dash past a local run.
+#
+# Exemptions: tests/style-exempt.list (one git pathspec per line, "#" comments,
+# blank lines ignored) names vendored or captured third-party files that skip
+# THESE style scans only. A wildcard is refused: name a file, or a folder with
+# a trailing "/". An entry that matches no tracked file is stale and fails. The
+# secret scan never reads this list, and a file must never be hidden from the
+# style scans with a .gitattributes -diff, which also hides it from every
+# diff-based secret scan.
+#
+# Engine: git grep -P where git has PCRE; otherwise a portable fallback (grep
+# on the literal UTF-8 byte sequences of the same characters) so the scan never
+# silently skips. CHECK_FORCE_NO_PCRE=1 forces the fallback and
+# CHECK_FORCE_NO_FALLBACK=1 also disables it; both are test-only inputs. With
+# neither engine the step fails, except in CI (CI=true), which has PCRE and
+# defers with a warning.
 # The first 20 matches are printed with sed, which reads all its input: a
 # pipe into head ends the writer with SIGPIPE under pipefail (exit 141) once
 # the list outgrows the pipe buffer.
-rc=0
-dashes="$(git grep -IPn '[\x{2013}\x{2014}]' 2>/dev/null)" || rc=$?
-if (( rc == 0 )); then
-  printf '%s\n' "$dashes" | sed -n '1,20p'
-  gerr "em or en dash found; plain hyphens only"
-elif (( rc > 1 )); then
-  echo "WARNING: git grep -P unavailable; dash check deferred to CI."
+style_ex=(.)
+style_exempt_list="tests/style-exempt.list"
+if [[ -f "$style_exempt_list" ]]; then
+  while IFS= read -r ent || [[ -n "$ent" ]]; do
+    [[ -z "$ent" || "$ent" == \#* ]] && continue
+    if [[ "$ent" == *[\*\?\[]* || "$ent" == :* ]]; then
+      gerr "$style_exempt_list: '$ent' is a wildcard or pathspec magic; name a tracked file, or a folder with a trailing /"
+      continue
+    fi
+    if [[ -z "$(git ls-files -- ":(literal)$ent")" ]]; then
+      gerr "$style_exempt_list: stale exemption '$ent' matches no tracked file; remove it"
+      continue
+    fi
+    style_ex+=(":(exclude,literal)$ent")
+  done < <(sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$style_exempt_list")
 fi
+
+# The fallback patterns are literal UTF-8 bytes (grep -E under LC_ALL=C), the
+# same characters the PCRE patterns name by code point.
+printf -v S_EN '\xe2\x80\x93'
+printf -v S_EM '\xe2\x80\x94'
+S_DASH_ERE="$S_EN|$S_EM"
+printf -v S_CHARS_ERE '\xe2\x80\x98|\xe2\x80\x99|\xe2\x80\x9c|\xe2\x80\x9d|\xe2\x80\xa6|\xc2\xa0|\xef\xbf\xbd|\xc3\x83\xc2[\x80-\xbf]|\xc3\xa2\xe2\x82\xac'
+
+style_engine="none"
+if [[ "${CHECK_FORCE_NO_PCRE:-}" != 1 ]]; then
+  prc=0
+  git grep -P -q -e x -- . >/dev/null 2>&1 || prc=$?
+  (( prc <= 1 )) && style_engine="pcre"
+fi
+if [[ "$style_engine" == none && "${CHECK_FORCE_NO_FALLBACK:-}" != 1 ]]; then
+  if LC_ALL=C grep -E -q -e "$S_DASH_ERE" <<< "a${S_EN}b" 2>/dev/null; then
+    style_engine="grep"
+  fi
+fi
+
+# style_scan LABEL PCRE_PATTERN ERE_PATTERN MESSAGE
+style_scan() {
+  local label="$1" pcre="$2" ere="$3" msg="$4" found="" rc=0
+  case "$style_engine" in
+    pcre)
+      found="$(git grep --untracked --exclude-standard -IPn -e "$pcre" -- "${style_ex[@]}" 2>/dev/null)" || rc=$?
+      (( rc > 1 )) && { gerr "git grep -P failed while scanning for $label"; return; }
+      ;;
+    grep)
+      # /dev/null keeps grep from reading stdin when the file list is empty.
+      found="$(git ls-files -z -co --exclude-standard -- "${style_ex[@]}" | LC_ALL=C xargs -0 grep -InHE -e "$ere" /dev/null 2>/dev/null)" || true
+      ;;
+    *)
+      if [[ "${CI:-}" == true ]]; then
+        echo "WARNING: no PCRE and no fallback scanner; $label check deferred."
+      else
+        gerr "cannot scan for $label: git grep -P is unavailable and the grep fallback cannot run; install git with PCRE or GNU grep (CI=true only defers this)"
+      fi
+      return
+      ;;
+  esac
+  if [[ -n "$found" ]]; then
+    printf '%s\n' "$found" | sed -n '1,20p'
+    gerr "$msg"
+  fi
+}
+style_scan "dashes" '[\x{2013}\x{2014}]' "$S_DASH_ERE" "em or en dash found; plain hyphens only"
 # Typographic and mis-encoded characters: curly quotes, the ellipsis
 # character, non-breaking space, the replacement character, and UTF-8 that
 # was decoded as Latin-1 or Windows-1252 (an A-tilde or a-circumflex-euro
 # pair). They break greps and diffs and usually mean pasted or mangled text.
-rc=0
-chars="$(git grep -IPn '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' 2>/dev/null)" || rc=$?
-if (( rc == 0 )); then
-  printf '%s\n' "$chars" | sed -n '1,20p'
-  gerr "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
-elif (( rc > 1 )); then
-  echo "WARNING: git grep -P unavailable; character check deferred to CI."
-fi
+style_scan "typographic characters" '[\x{2018}\x{2019}\x{201C}\x{201D}\x{2026}\x{00A0}\x{FFFD}]|\x{00C3}[\x{0080}-\x{00BF}]|\x{00E2}\x{20AC}' "$S_CHARS_ERE" "typographic or mis-encoded character found (curly quote, ellipsis, non-breaking space, replacement character or mojibake); use plain ASCII punctuation"
 
 # 4b. Memory caps and mirror parity are mechanized (kernel rules 8 to 10):
 # lesson count, entry fields, quarantine age, quarantine list, skills cap,
@@ -493,6 +556,7 @@ if [[ ! -f .start-done ]]; then
     tests/template/test_taskgraph.sh tests/template/test_template_sync.sh
     tests/template/test_quickgate.sh tests/template/test_check_always.sh
     tests/template/test_blueprint_parity.sh tests/template/fixtures/check.sh
+    tests/template/test_style_scan.sh
     docs/decisions/0004-profile-agent-sets.md docs/library/README.md
     tests/template/test_profile_tools.sh
     docs/decisions/0005-department-agent-roster.md docs/roster/README.md
