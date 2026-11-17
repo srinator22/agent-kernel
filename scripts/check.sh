@@ -426,9 +426,20 @@ if [[ -d tests/template ]]; then
       echo "$reuse_out (CHECK_SELFTEST=full forces a run)"
       SELFTEST_DESC="reused"
     else
+      # The key is taken before the run and recorded only if it is the same
+      # after it: an input edited while the suite ran (the detached stop gate
+      # lets work continue) was never tested, so it is never recorded (ADR 0019).
+      pre_key=""
+      if (( reuse_able )) && [[ "${CI:-}" != true ]]; then
+        pre_key="$(bash scripts/selftest-reuse.sh key 2>/dev/null)" || pre_key=""
+      fi
       if ./scripts/selftest.sh; then
-        if (( reuse_able )) && [[ "${CI:-}" != true ]]; then
-          bash scripts/selftest-reuse.sh record || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
+        if [[ -n "$pre_key" ]]; then
+          if [[ "$(bash scripts/selftest-reuse.sh key 2>/dev/null)" == "$pre_key" ]]; then
+            bash scripts/selftest-reuse.sh record || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
+          else
+            echo "selftest-reuse: an input changed while the self-tests ran; not recorded, so the next run tests it"
+          fi
         fi
       else
         gerr "scripts/selftest.sh failed"
