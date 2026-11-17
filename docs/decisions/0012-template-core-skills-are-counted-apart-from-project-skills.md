@@ -44,3 +44,17 @@ when the project is over its cap. Chosen by the owner on 2026-11-08.
   retire one, as before.
 - The ceiling a project can reach is 10 plus its profile skills once the core
   set reaches 8, against 8 plus profile skills before.
+
+## Amendment 2026-11-17: retired core skills
+
+A later release can drop a name from `CORE_SKILLS` (a retired core skill).
+The template stops shipping its folders, but template-sync never deletes a
+project file, so the project keeps `.claude/skills/<name>`, which then counts
+as a project skill and can take a full project over its cap. template-sync
+reads the earlier core list (the previous version's `scripts/lessons.sh` and
+the project's own, as text) and the new one, and prints
+`RETIRED CORE SKILL: <name>` for each dropped name whose folder the project
+keeps, beside the existing `ACTION: skills cap` line when the cap is
+breached. The counting rule is unchanged: the owner archives the skill or
+keeps it in one of the 2 project slots. Tested in
+`tests/template/test_template_sync.sh` section (p2).

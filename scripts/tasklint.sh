@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # tasklint.sh - lints the prose contracts of .work/TASK.md that no other gate
 # reads: evidence behind ticked criteria, Assumptions status lines, and the
-# reviewer's plan verdict for autopilot tasks (kernel rules 4, 5 and 16).
+# reviewer's plan verdict for autopilot tasks, and the tree a PASS review
+# verdict covers (kernel rules 4, 5 and 16; ADR 0017).
 # Usage:
 #   scripts/tasklint.sh check    problems that are wrong at any time
 #   scripts/tasklint.sh ship     check, plus problems that block calling the task done
@@ -29,7 +30,14 @@
 #                (also "**PASS**" or "Verdict: PASS"); with several review rounds
 #                listed, the current verdict goes first. Autopilot only: check
 #                requires it once a Plan node is doing or done; ship always.
-# ship also fails every [open] assumption unless the mode is quick.
+#   Review verdict  "## Review verdict"; its first non-blank line is the current
+#                verdict (rounds newest first), PASS or FAIL as a word. The first
+#                "Reviewed tree: <id>" line in the section (a leading "- " or
+#                bold markers allowed) names the tree the reviewer saw.
+# ship also fails every [open] assumption unless the mode is quick, and a PASS
+# review verdict whose tree is missing or differs from scripts/tree-id.sh now
+# (a change after the review); a FAIL or other first line is not compared, nor
+# is a record under .work/done/.
 # A pristine template (it still holds "{{title}}") has nothing to lint and passes.
 # Exit codes: 0 pass, 1 problems found or file missing, 2 usage error.
 set -euo pipefail
@@ -192,8 +200,23 @@ sec == "plan" && /^[ \t]*\|/ {
   next
 }
 sec == "plan verdict" && !vseen && /[^ \t]/ { vseen = 1; vline = $0 }
+sec == "review verdict" && /[^ \t]/ {
+  if (!rvseen) { rvseen = 1; rvline = $0 }
+  l = $0; sub(/^[ \t>*_-]+/, "", l)
+  if (rvtree == "" && match(l, /^Reviewed tree:[ \t*_`]*[0-9a-f]+/)) {
+    rvtree = substr(l, RSTART, RLENGTH); sub(/^Reviewed tree:[ \t*_`]*/, "", rvtree)
+  }
+}
 END {
   flush()
+  # The review verdict: the first line is the current one; PASS or FAIL as a word.
+  rvstate = "empty"
+  if (rvseen) {
+    if (rvline ~ /(^|[^A-Za-z])FAIL([^A-Za-z]|$)/) rvstate = "fail"
+    else if (rvline ~ /(^|[^A-Za-z])PASS([^A-Za-z]|$)/) rvstate = "pass"
+    else rvstate = "none"
+  }
+  printf "RV%s%s%s%s\n", SEP, rvstate, SEP, rvtree
   taskmode = "standard"
   if (hasmode && modeval !~ /\|/) {
     m = tolower(modeval)
@@ -272,8 +295,25 @@ while IFS= read -r rec; do
       fi
       ;;
     INFO) taskmode="$a"; ticked="$b"; assumed="$c" ;;
+    RV) rvstate="$a"; rvtree="$b" ;;
   esac
 done <<< "$analysis"
+
+# A PASS review verdict is bound to the tree it reviewed (ADR 0017). Ship only:
+# during the work the tree moves on purpose. A record archived under .work/done/
+# describes a tree that has since moved on, so it is never compared.
+case "$FILE" in
+  .work/done/*|*/.work/done/*) rvstate=archived ;;
+esac
+if [[ "$MODE" == ship && "${rvstate:-empty}" == pass ]]; then
+  if [[ -z "${rvtree:-}" ]]; then
+    problem "review verdict is PASS but names no reviewed tree; the reviewer copies the \"check.sh: verified tree <id>\" line of the verify output into its verdict as \"Reviewed tree: <id>\" (docs/procedures/ship.md step 4)"
+  elif ! now_tree="$(bash "$ROOT/scripts/tree-id.sh" 2>&1)"; then
+    problem "cannot compute the current tree to match the review verdict (scripts/tree-id.sh: $now_tree)"
+  elif [[ "$now_tree" != "$rvtree" ]]; then
+    problem "review verdict covers tree $rvtree but the working tree is now $now_tree: files changed after the review. Re-review: make \"Pending re-review\" the first line of the Review verdict section, run ./scripts/check.sh, and record the new verdict first (docs/procedures/ship.md step 4)"
+  fi
+fi
 
 if (( probs > 0 )); then
   echo "tasklint: $MODE FAILED ($probs problem(s))" >&2

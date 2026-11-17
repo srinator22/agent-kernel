@@ -248,6 +248,32 @@ PYEOF
 )"
 if [[ "$tmo" =~ ^[0-9.]+$ ]] && awk -v t="$tmo" 'BEGIN{exit !(t<=1)}'; then t_ok "branch lookup git timeout is 1 s or less ($tmo)"; else t_bad "branch lookup git timeout is 1 s or less (got: $tmo)"; fi
 
+# Every git call of one hook run (branch, main worktree, feedback folder) has a
+# timeout, and together they stay at 3 s or less: a 10 s main-worktree timeout
+# called twice made 21 s worst case against the 5 s budget.
+tot="$("$PYX" -I - "$FIXW/scripts/dream" "$FIXW" <<'PYEOF' 2>&1
+import contextlib, io, json, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import feedback
+seen = []
+class R:
+    returncode, stdout = 1, ""
+def fake(cmd, **kw):
+    seen.append(kw.get("timeout"))
+    return R()
+subprocess.run = fake
+payload = {"prompt": "no, that is wrong", "session_id": "s"}
+sys.stdin = io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode("utf-8")))
+with contextlib.redirect_stdout(io.StringIO()):
+    feedback.run()
+if not seen or None in seen:
+    print("untimed:%s" % seen)
+else:
+    print(sum(seen))
+PYEOF
+)"
+if [[ "$tot" =~ ^[0-9.]+$ ]] && awk -v t="$tot" 'BEGIN{exit !(t<=3)}'; then t_ok "all hook git timeouts sum to 3 s or less ($tot)"; else t_bad "all hook git timeouts sum to 3 s or less (got: $tot)"; fi
+
 # --- Codex UserPromptSubmit payloads (A6) and machine-written prompts (A8) ---
 # codex_hook PROMPT TRANSCRIPT-PATH: the payload Codex sends (session_id, turn_id, transcript_path,
 # cwd, hook_event_name, model, permission_mode, prompt).

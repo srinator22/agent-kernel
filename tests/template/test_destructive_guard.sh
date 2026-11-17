@@ -6,6 +6,9 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 GUARD="$T_ROOT/scripts/destructive-guard.sh"
+# The guard runs under the bash running this test, so `/bin/bash <this test>`
+# on macOS exercises bash 3.2 and not whatever bash comes first on PATH.
+GBASH="${BASH:-bash}"
 SETTINGS="$T_ROOT/.claude/settings.json"
 PREFIX="BLOCKED by scripts/destructive-guard.sh"
 
@@ -24,7 +27,7 @@ guard_ctx() {
   else
     payload="$(printf '{"tool_name":"%s","tool_input":{"command":"%s"}}' "$1" "$2")"
   fi
-  OUT="$(printf '%s' "$payload" | env HOME="$4" USERPROFILE="$5" CLAUDE_PROJECT_DIR="$6" bash "$GUARD" 2>&1)"
+  OUT="$(printf '%s' "$payload" | env HOME="$4" USERPROFILE="$5" CLAUDE_PROJECT_DIR="$6" "$GBASH" "$GUARD" 2>&1)"
   RC=$?
 }
 # guard TOOL COMMAND: no cwd in the payload, the fixed identity above.
@@ -510,22 +513,22 @@ for shell in Bash PowerShell; do
 done
 
 # Payload shape: command extraction versus whole-text fallback.
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls","description":"rm -rf /"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls","description":"rm -rf /"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "a description that mentions rm -rf / is allowed when the command is ls" 0
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"description":"x","command":"ls -la"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"description":"x","command":"ls -la"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "a command key after the description is read" 0
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"description":"x","command":"rm -rf /"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"description":"x","command":"rm -rf /"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "a command key after the description is still scanned" 2
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command"  :  "rm -rf /"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command"  :  "rm -rf /"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "whitespace around the command colon is tolerated" 2
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"cmd":"rm -rf /"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"cmd":"rm -rf /"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "a payload with no command key falls back to a whole-text scan" 2
 assert_contains "the fallback block names the guard" "$PREFIX"
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"cmd":"ls"}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"cmd":"ls"}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "a payload with no command key and nothing dangerous is allowed" 0
-OUT="$(printf '' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "an empty payload is allowed" 0
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":""}}' | bash "$GUARD" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":""}}' | "$GBASH" "$GUARD" 2>&1)"; RC=$?
 assert_rc "an empty command is allowed" 0
 
 # The block message carries the reason, the matched segment, and the hand-off.
@@ -575,6 +578,97 @@ for shell in Bash PowerShell; do
   allowed "$shell" "git -c user.name=x commit is allowed" 'git -c user.name=x commit -m y'
 done
 
+# Other routes to core.hooksPath: a persistent git config write, and the
+# GIT_CONFIG_* environment git reads as -c settings.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git config core.hooksPath X is blocked" 'git config core.hooksPath /dev/null'
+  blocked "$shell" "git config --global core.hooksPath X is blocked" 'git config --global core.hooksPath ~/nohooks'
+  blocked "$shell" "git config --local core.hooksPath X is blocked" 'git config --local core.hooksPath x'
+  blocked "$shell" "git config --system core.hooksPath X is blocked" 'git config --system core.hooksPath x'
+  blocked "$shell" "git config --worktree core.hooksPath X is blocked" 'git config --worktree core.hooksPath x'
+  blocked "$shell" "git config --file F core.hooksPath X is blocked" 'git config --file .git/config core.hooksPath x'
+  blocked "$shell" "git config --add core.hooksPath X is blocked" 'git config --add core.hooksPath x'
+  blocked "$shell" "git config --replace-all core.hooksPath X is blocked" 'git config --replace-all core.hooksPath x'
+  blocked "$shell" "git config set core.hooksPath X is blocked" 'git config set core.hooksPath x'
+  blocked "$shell" "GIT CONFIG CORE.HOOKSPATH X (any case) is blocked" 'GIT CONFIG CORE.HOOKSPATH x'
+  blocked "$shell" "git config core.hooksPath then a plain commit is blocked" 'git config core.hooksPath x && git commit -m y'
+  blocked "$shell" "GIT_CONFIG_KEY_n=core.hooksPath prefix is blocked" 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m y'
+  blocked "$shell" "env GIT_CONFIG_KEY_n=core.hooksPath is blocked" 'env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=x git commit -m y'
+  blocked "$shell" "export GIT_CONFIG_KEY_n=core.hooksPath is blocked" 'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=x; git commit -m y'
+  blocked "$shell" "GIT_CONFIG_PARAMETERS with core.hooksPath is blocked" 'GIT_CONFIG_PARAMETERS=\"'"'"'core.hooksPath'"'"'='"'"'x'"'"'\" git commit -m y'
+  blocked "$shell" "PowerShell \$env:GIT_CONFIG_KEY_0 = core.hooksPath is blocked" '$env:GIT_CONFIG_KEY_0 = '"'"'core.hooksPath'"'"'; git commit -m y'
+  blocked "$shell" "cmd set GIT_CONFIG_KEY_0=core.hooksPath is blocked" 'cmd /c set GIT_CONFIG_KEY_0=core.hooksPath'
+  allowed "$shell" "git config user.name X is allowed" 'git config user.name x'
+  allowed "$shell" "git config --global user.email X is allowed" 'git config --global user.email x@example.com'
+  allowed "$shell" "git config core.hooksPath (read) is allowed" 'git config core.hooksPath'
+  allowed "$shell" "git config --get core.hooksPath is allowed" 'git config --get core.hooksPath'
+  allowed "$shell" "git config get core.hooksPath is allowed" 'git config get core.hooksPath'
+  allowed "$shell" "git config --unset core.hooksPath is allowed" 'git config --unset core.hooksPath'
+  allowed "$shell" "git config --list is allowed" 'git config --list'
+  allowed "$shell" "git config alias.st status (persistent alias, a limit) is allowed" 'git config alias.st status'
+  allowed "$shell" "GIT_CONFIG_KEY_n=user.name prefix is allowed" 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0=x git commit -m y'
+  allowed "$shell" "GIT_CONFIG_PARAMETERS with user.name is allowed" 'GIT_CONFIG_PARAMETERS=\"'"'"'user.name'"'"'='"'"'x'"'"'\" git status'
+  guard "$shell" 'git config core.hooksPath x'
+  assert_contains "$shell: the git config hooksPath reason is stated" "git config core.hooksPath replaces the hooks"
+  guard "$shell" 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=x git commit -m y'
+  assert_contains "$shell: the GIT_CONFIG environment reason is stated" "core.hooksPath set through the GIT_CONFIG environment replaces the hooks"
+done
+
+# An inline alias (git -c alias.X=... X) runs a body the guard never reads.
+for shell in Bash PowerShell; do
+  blocked "$shell" "git -c alias.x=!cmd x is blocked" 'git -c alias.x='"'"'!rm -rf /'"'"' x'
+  blocked "$shell" "git -c alias.x=!cmd with a harmless body is still blocked" 'git -c alias.x='"'"'!ls'"'"' x'
+  blocked "$shell" "git -c alias.p=push --force p is blocked" 'git -c alias.p='"'"'push --force'"'"' p origin x'
+  blocked "$shell" "git -c ALIAS.X (any case) is blocked" 'git -c ALIAS.X=status X'
+  blocked "$shell" "git --config-env=alias.x=ENV x is blocked" 'git --config-env=alias.x=CMD x'
+  blocked "$shell" "git --config-env alias.x=ENV x is blocked" 'git --config-env alias.x=CMD x'
+  allowed "$shell" "git -c core.autocrlf=false status is allowed" 'git -c core.autocrlf=false status'
+  guard "$shell" 'git -c alias.x='"'"'!ls'"'"' x'
+  assert_contains "$shell: the inline alias reason is stated" "git alias defined inline runs a command the guard cannot read"
+done
+
+# Broad kills outside the image-name rule: tskill by name, wmic process
+# delete/terminate not by PID, a kill of PID -1 (every process the user may
+# signal), and any taskkill /FI filter.
+for shell in Bash PowerShell; do
+  blocked "$shell" "tskill NAME is blocked" 'tskill node'
+  blocked "$shell" "tskill NAME /a is blocked" 'tskill node /a'
+  blocked "$shell" "tskill.exe NAME is blocked" 'tskill.exe node'
+  blocked "$shell" "wmic process where name= delete is blocked" 'wmic process where name='"'"'node.exe'"'"' delete'
+  blocked "$shell" "wmic process where \"name=\" call terminate is blocked" 'wmic process where \"name='"'"'node.exe'"'"'\" call terminate'
+  blocked "$shell" "wmic process where (name=) delete is blocked" 'wmic process where (name=\"node.exe\") delete'
+  blocked "$shell" "WMIC /node:h PROCESS ... DELETE (any case) is blocked" 'WMIC /node:h PROCESS where name=node.exe DELETE'
+  blocked "$shell" "wmic process where commandline like delete is blocked" 'wmic process where \"commandline like '"'"'%server%'"'"'\" delete'
+  blocked "$shell" "kill -9 -1 is blocked" 'kill -9 -1'
+  blocked "$shell" "kill -KILL -1 is blocked" 'kill -KILL -1'
+  blocked "$shell" "kill -s KILL -1 is blocked" 'kill -s KILL -1'
+  blocked "$shell" "kill -n 9 -1 is blocked" 'kill -n 9 -1'
+  blocked "$shell" "kill -- -1 is blocked" 'kill -- -1'
+  blocked "$shell" "kill -9 1234 -1 is blocked" 'kill -9 1234 -1'
+  blocked "$shell" "sudo kill -9 -1 is blocked" 'sudo kill -9 -1'
+  blocked "$shell" "taskkill /FI USERNAME is blocked" 'taskkill /FI \"USERNAME eq someone\"'
+  blocked "$shell" "taskkill /F /FI STATUS is blocked" 'taskkill /F /FI \"STATUS eq NOT RESPONDING\"'
+  blocked "$shell" "taskkill /FI WINDOWTITLE is blocked" 'taskkill /FI \"WINDOWTITLE eq x*\"'
+  blocked "$shell" "taskkill //FI (Git Bash spelling) is blocked" 'taskkill //F //FI \"USERNAME eq someone\"'
+  blocked "$shell" "taskkill -fi is blocked" 'taskkill -f -fi \"USERNAME eq someone\"'
+  blocked "$shell" "taskkill /FI PID gt is blocked" 'taskkill /FI \"PID gt 1000\"'
+  allowed "$shell" "kill -1 1234 (signal 1 to one PID) is allowed" 'kill -1 1234'
+  allowed "$shell" "kill -9 -- 1234 is allowed" 'kill -9 -- 1234'
+  allowed "$shell" "kill -- -1234 (a process group) is allowed" 'kill -- -1234'
+  allowed "$shell" "kill -l is allowed" 'kill -l'
+  allowed "$shell" "tskill 1234 is allowed" 'tskill 1234'
+  allowed "$shell" "taskkill /F /T /PID is allowed" 'taskkill /F /T /PID 1234'
+  allowed "$shell" "wmic process where processid= delete is allowed" 'wmic process where processid=1234 delete'
+  allowed "$shell" "wmic process where \"processid=\" call terminate is allowed" 'wmic process where \"processid=1234\" call terminate'
+  allowed "$shell" "wmic process PID call terminate is allowed" 'wmic process 1234 call terminate'
+  allowed "$shell" "wmic process where \"name=\" get processid is allowed" 'wmic process where \"name='"'"'node.exe'"'"'\" get processid,commandline'
+  allowed "$shell" "wmic process list brief is allowed" 'wmic process list brief'
+  guard "$shell" 'kill -9 -1'
+  assert_contains "$shell: the kill -1 reason is stated" "kill of PID -1 signals every process the user may signal"
+  guard "$shell" 'taskkill /FI \"USERNAME eq someone\"'
+  assert_contains "$shell: the taskkill filter reason is stated" "taskkill /FI filter can end unrelated processes"
+done
+
 # A shell command over about 4 KB is checked and prints nothing: a stderr
 # warning on an allowed command is shown only in the user's verbose view.
 long_arg="$(printf 'a%.0s' $(seq 1 4200))"
@@ -603,7 +697,7 @@ if (( BASH_VERSINFO[0] >= 4 )); then
   U_UP="$(printf '\303\211')"
   U_LO="$(printf '\303\251')"
   payload="$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf c:/users/%smile"}}' "$U_LO")"
-  OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" bash "$GUARD" 2>&1)"; RC=$?
+  OUT="$(printf '%s' "$payload" | env LC_ALL=C.UTF-8 HOME="C:\\Users\\${U_UP}mile" USERPROFILE="" CLAUDE_PROJECT_DIR="$G_PROJ" "$GBASH" "$GUARD" 2>&1)"; RC=$?
   assert_rc "a non-ASCII home spelled in another case is blocked (LC_ALL=C.UTF-8)" 2
   assert_contains "the non-ASCII home block names the guard" "$PREFIX"
 else
@@ -642,6 +736,10 @@ if (( BASH_VERSINFO[0] >= 4 )); then
       blocked "$shell" "taskkill /IM under a simulated Turkic fold is blocked" 'taskkill /IM node.exe /F'
       blocked "$shell" "RMDIR /S /Q of home under a simulated Turkic fold is blocked" 'RMDIR /S /Q C:\\Users\\tester'
       blocked "$shell" "taskkill /FI IMAGENAME under a simulated Turkic fold is blocked" 'taskkill /FI \"IMAGENAME eq node.exe\"'
+      # A copy that fails to run blocks everything through its trap, so the
+      # blocks above prove nothing unless the same copy allows a harmless command.
+      allowed "$shell" "ls under a simulated Turkic fold is allowed" 'ls'
+      assert_not_contains "$shell: the simulated Turkic fold copy ran (no guard failure)" "the guard failed"
     done
     GUARD="$GUARD_REAL"
   else
@@ -658,12 +756,12 @@ GFIX="$(mktemp -d)"
 cp "$GUARD" "$GFIX/guard.sh"
 sed -i.bak '/^trap /a\
 : "${GUARD_TEST_UNSET_VARIABLE}"' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | env -u GUARD_TEST_UNSET_VARIABLE bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | env -u GUARD_TEST_UNSET_VARIABLE "$GBASH" "$GFIX/guard.sh" 2>&1)"; RC=$?
 assert_rc "an unexpected error inside the guard blocks" 2
 assert_contains "the unexpected-error block says the guard failed" "guard failed"
 assert_contains "the unexpected-error block names the guard" "$PREFIX"
 cp "$GUARD" "$GFIX/guard.sh"
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | "$GBASH" "$GFIX/guard.sh" 2>&1)"; RC=$?
 assert_rc "the unmodified guard allows the same harmless command" 0
 assert_eq "the unmodified guard prints nothing for a harmless command" "" "$OUT"
 
@@ -673,12 +771,12 @@ assert_eq "the unmodified guard prints nothing for a harmless command" "" "$OUT"
 cp "$GUARD" "$GFIX/guard.sh"
 sed -i.bak '/^main() {$/a\
 return 0' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>&1)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | "$GBASH" "$GFIX/guard.sh" 2>&1)"; RC=$?
 assert_rc "main returning without an explicit exit blocks" 2
 assert_contains "main returning without an exit says the guard failed" "the guard failed"
 cp "$GUARD" "$GFIX/guard.sh"
 sed -i.bak 's|^  done <<< "\$in"$|  done < /nonexistent/guard-test-input|' "$GFIX/guard.sh" && rm -f "$GFIX/guard.sh.bak"
-OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bash "$GFIX/guard.sh" 2>/dev/null)"; RC=$?
+OUT="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | "$GBASH" "$GFIX/guard.sh" 2>/dev/null)"; RC=$?
 assert_rc "a check_text loop that never ran blocks" 2
 rm -rf "$GFIX"
 

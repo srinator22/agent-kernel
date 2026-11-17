@@ -30,6 +30,10 @@ TAIL_BYTES = 512 * 1024
 TEXT_LIMIT = 2000
 SAID_LIMIT = 300
 FILES_MAX = 5
+# Seconds per git call. The hook has a 5 s budget and makes three git calls
+# (branch, main worktree, feedback folder); a slow git past the budget would
+# drop the line, so each answers "-" or the worktree itself when it runs late.
+GIT_TIMEOUT = 1
 EDIT_TOOLS = {"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path",
               "NotebookEdit": "notebook_path"}
 
@@ -141,11 +145,10 @@ def task_title(root):
 
 
 def branch_of(root):
-    # 1 s: the hook has a 5 s budget and a slow git must not push it past, which
-    # would drop the line; "-" is the logged answer for a branch not known in time.
+    # "-" is the logged answer for a branch not known in time (GIT_TIMEOUT).
     try:
         r = subprocess.run(["git", "-C", root, "symbolic-ref", "--short", "HEAD"],
-                           capture_output=True, text=True, timeout=1)
+                           capture_output=True, text=True, timeout=GIT_TIMEOUT)
     except (OSError, subprocess.SubprocessError):
         return "-"
     return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "-"
@@ -179,13 +182,13 @@ def run():
     if not text or text.startswith(("/", "<")) or not D.is_human({}, text):
         return
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-    main = D.main_worktree(root)
+    main = D.main_worktree(root, GIT_TIMEOUT)
     tp = payload.get("transcript_path")
     files, said = situation(read_tail(tp) if isinstance(tp, str) and tp else [],
                             [root] if main == root else [root, main])
     kind = classify(text)
     sid = payload.get("session_id")
-    append_line(D.feedback_dir(root), {
+    append_line(D.feedback_dir(root, GIT_TIMEOUT), {
         "v": 1,
         "ts": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "session": sid[:8] if isinstance(sid, str) else "-",

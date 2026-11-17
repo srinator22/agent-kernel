@@ -31,7 +31,8 @@ Then, for the draft you were given:
   source; downstream load, connector).
 - For a power branch, write a branch file in a scratch directory and run the
   power-branch calculator (`check_power_branch`); report its FAIL and UNKNOWN
-  lines verbatim. The tool ships with this profile; if it cannot run here,
+  lines verbatim, or ask the advisor to run it when a sandbox blocks it. The
+  tool ships with this profile; if it cannot run here,
   that is itself a finding, and the I2t, derating and clamp-window arithmetic
   is shown by hand meanwhile. Fill missing datasheet numbers
   from published documents only; leave them unknown when not found.

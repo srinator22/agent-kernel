@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # check.sh blueprint parity: the section 2 tree of docs/BLUEPRINT.md and the
 # required-file list agree in both directions, by full relative path (built by
-# walking the tree's indentation), not by file name alone. The function is
-# extracted from check.sh between its blueprint-parity markers.
+# walking the tree's indentation), not by file name alone, at any tree size
+# (a tree larger than a pipe buffer once broke the pipe under pipefail). The
+# function is extracted from check.sh between its blueprint-parity markers.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -83,6 +84,20 @@ touch_files docs/rules/a.md
 parity docs/BLUEPRINT.md AGENTS.md
 assert_not_contains "section 1 fences are not read" "before.md"
 assert_not_contains "section 3 fences are not read" "after.md"
+
+# A tree far larger than a pipe buffer, with the required file on its first
+# line. Matching it by piping the tree into an early-exit grep -q ended the
+# writer with SIGPIPE under pipefail ("printf: write error: Broken pipe") and
+# reported the listed file as missing; the match must hold at any tree size.
+mkdir -p big
+{
+  printf '## 2. Repository tree\n\n```\nAGENTS.md\n'
+  for (( i = 0; i < 20000; i++ )); do printf 'summary%05d/            # a summary entry\n' "$i"; done
+  printf '```\n'
+} > big/BLUEPRINT.md
+assert_eq "the large tree is bigger than a pipe buffer" "yes" "$( (( $(wc -c < big/BLUEPRINT.md) > 262144 )) && echo yes || echo no)"
+OUT="$(set -o pipefail; blueprint_parity big/BLUEPRINT.md AGENTS.md summary19999/x.md 2>&1)"; RC=$?
+assert_eq "a large tree and its first and last entries agree, no broken pipe" "" "$OUT"
 
 # The real blueprint and the real required list agree in both directions, run
 # from the repository root. This is a fact about the template's own tree, so

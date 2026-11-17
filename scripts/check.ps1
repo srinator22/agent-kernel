@@ -2,7 +2,7 @@
 # The gauntlet is scripts/check.sh and CI runs that exact script; this
 # wrapper only locates Git Bash and forwards to it, so PowerShell and cmd
 # sessions run the same single source of truth instead of a second one.
-# Usage: ./scripts/check.ps1 [--full-mutation]
+# Usage: ./scripts/check.ps1 [--full-mutation] [--quick] [--fast]
 $ErrorActionPreference = "Stop"
 
 $candidates = @()

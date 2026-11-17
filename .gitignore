@@ -44,3 +44,7 @@ render/**/frames/
 render/**/cache/
 # Local fleet registry: private project paths (scripts/fleet.sh)
 fleet.local.list
+
+# merge and patch leftovers never ship (a stray scripts/*.orig would sync into every project)
+*.orig
+*.rej

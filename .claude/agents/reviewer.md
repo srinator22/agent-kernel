@@ -26,6 +26,21 @@ is missing, truncated (cut off, elided, summarised, or lacking the final
 result line of a stage), or does not show every stage exiting cleanly.
 Name what is missing.
 
+The verdict is bound to the tree you reviewed. A clean `./scripts/check.sh`
+run ends with the line `check.sh: verified tree <id>`. Copy that id into
+your verdict block as its own line, exactly `Reviewed tree: <id>`;
+`scripts/tasklint.sh ship` compares it with the tree at ship time, so a
+change made after your review voids a PASS. The verdict is FAIL when the
+verify output has no such line, or when it reads `N/A`.
+
+Lessons the diff triggers. The advisor passes the output of
+`scripts/lessons.sh match` on the diff under review: one line per lesson
+whose trigger matches a changed path. Read each named lesson in
+`docs/lessons/INDEX.md` and check the diff against it. Without that output,
+read the `trigger:` fields in `docs/lessons/INDEX.md` and match them against
+the diff's file headers yourself. Name each lesson applied in the Evidence
+checked list.
+
 Plan review (autopilot tasks). When the advisor asks for a plan review
 before implementation, you receive only `.work/TASK.md`; there is no diff
 and no verify output yet, so the verify-output rule above does not apply.
@@ -63,7 +78,9 @@ sound work gets a clean PASS, not manufactured gaps.
 Your tools are read-only. End your reply with the exact verdict block for
 the "Review verdict" section of .work/TASK.md - PASS or FAIL, with
 specifics (file, line, what is wrong, what evidence shows it); FAIL names
-the exact criterion or rule violated. The block ends with an "Evidence
+the exact criterion or rule violated. Its first line is the verdict word
+(rounds are listed newest first), and it holds the `Reviewed tree: <id>`
+line. The block ends with an "Evidence
 checked" list: each item you verified and where (the verify output stage
 and its result line, the file and line read). The advisor records your
 block verbatim; only your text goes in that section.

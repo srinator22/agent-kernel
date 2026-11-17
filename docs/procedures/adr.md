@@ -6,6 +6,13 @@ fixes or routine features: commit bodies and the changelog carry those.
 The record is permanent and short. `scripts/adr.sh check` runs in every
 `./scripts/check.sh` and enforces the numbering and the format below.
 
+The records live in `docs/decisions/` unless the AGENTS.md Project
+decisions line `- Decision records: <folder>` names another folder inside
+the repository (a project that already kept ADRs in, say, `docs/adr/`).
+Every path below means that folder. Records found in another known ADR
+folder (`docs/adr/`, `adr/`, `doc/adr/` and the like) fail the check
+instead of passing unchecked.
+
 1. Create the file with `scripts/adr.sh new "<Decision title>"`. It takes
    the next number (highest `NNNN` plus one, zero-padded to four digits),
    derives a lowercase kebab-case slug, writes
@@ -47,10 +54,15 @@ The record is permanent and short. `scripts/adr.sh check` runs in every
    edit ever made to an accepted ADR; its body is never rewritten. The
    check verifies that the superseding ADR exists.
 6. Anything that cites the ADR (a procedure, rule or profile file) names it
-   as `docs/decisions/NNNN`; in template mode `scripts/check.sh` verifies
-   the cited file exists (after start nothing does, so check it by hand),
-   so create the ADR in the same change as the citation.
-7. Run `scripts/adr.sh check`, then commit as
+   as `docs/decisions/NNNN`; `scripts/adr.sh check` verifies the cited file
+   exists, in template mode and after start alike, so create the ADR in the
+   same change as the citation.
+7. Run `scripts/adr.sh check`. With an `origin` remote it fetches the
+   default branch (`origin/HEAD`, else `main`) and fails when an ADR this
+   branch adds reuses a number that branch already gives another file:
+   renumber yours after its last (`git mv`, then fix the title line).
+   Offline or without a remote it prints that the comparison was skipped;
+   run it again online before merging. Then commit as
    `docs: add ADR NNNN <short title>` with a body that says why the
    decision was made (kernel rule 6). Never tag or push outside the
    project's recorded git workflow.

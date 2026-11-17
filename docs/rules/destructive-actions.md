@@ -26,13 +26,13 @@ In Claude Code, `scripts/destructive-guard.sh` (PreToolUse) refuses, before
 they run: removal of filesystem roots, the home directory, the workspace
 and their ancestors (any spelling), bare globs, a glob under an unresolved
 variable, a recursive variable path or `.git` removal, the git forms of
-kernel rule 6 (including `-c core.hooksPath=`), and process kills by image
-name (kill the PID you started instead). It reads inside `bash -c`,
-PowerShell `-Command`, `cmd /c`, `$(...)`, backticks, subshells and loop
-bodies, and follows `cd`. Its limits (a quote-unaware split, forms it does
-not read) are listed in its header. The seven steps still
-apply to what it cannot parse: script files, `eval`, aliases, functions,
-pipes.
+kernel rule 6 (core.hooksPath set by `-c`, `git config` or GIT_CONFIG_*
+variables; an inline `-c alias.X`), and broad kills (by image name, tskill
+or wmic by name, `kill -1`, taskkill `/FI`; kill your own PID). It reads
+inside `bash -c`, PowerShell `-Command`, `cmd /c`, `$(...)`, backticks,
+subshells and loop bodies, and follows `cd`. Its limits are listed in its
+header; the seven steps still apply to what it cannot parse: script
+files, `eval`, aliases, functions, pipes.
 
 Examples of refused targets: `rm -rf /`, `rm -rf ~`, `rm -rf .` at the
 workspace root, `git clean -fdx` on the workspace root, `DROP DATABASE`

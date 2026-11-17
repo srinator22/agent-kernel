@@ -5,6 +5,14 @@
 # system temp dir and removes it on exit.
 # Each test loads this file with the guarded source line of test_test_files.sh,
 # so a test that cannot load it stops before writing anything.
+# scripts/selftest.sh runs several test files at once (SELFTEST_JOBS), so a
+# test must not share a temp path with another: every fixture is its own
+# mktemp -d folder. Within one test, t_parallel runs independent sections side
+# by side (see there). Under selftest.sh, T_EXEC_CHECK=1 makes t_cleanup run
+# t_check_exec on every fixture before removing it, and T_EXEC_BITS carries
+# the run's one executable-bit probe (t_exec_bits_work). A test that exits
+# early, or is stopped by TERM, still removes its fixtures and sections (the
+# EXIT trap at the end of this file).
 
 T_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # The pristine template check.sh. After start wires scripts/check.sh to a stack,
@@ -96,8 +104,9 @@ cp_script() {
 # t_exec_bits_work: true where chmod really sets the bit. On Windows (NTFS)
 # chmod is a no-op and Git Bash calls a file executable exactly when it starts
 # with #!, so a fixture script without one would be reported falsely. Probed
-# once per shell.
-T_EXEC_BITS=""
+# once per shell, or taken from the environment, where selftest.sh exports the
+# result of its one probe per run.
+T_EXEC_BITS="${T_EXEC_BITS:-}"
 t_exec_bits_work() {
   local d
   if [[ -z "$T_EXEC_BITS" ]]; then
@@ -149,7 +158,9 @@ t_cleanup() {
 # fixtures) in a background subshell, so independent sections of a slow test
 # overlap. t_parallel_wait then prints each section's lines in call order and
 # adds its pass and fail counts. A section must not rely on state from
-# another; its assertions count exactly as if it had run inline.
+# another; its assertions count exactly as if it had run inline. A section
+# that exits early still removes its fixture (its own EXIT trap; a subshell
+# does not inherit the test's) and is reported as ended before it finished.
 T_PAR_DIR=""
 T_PAR_COUNT=0
 T_PAR_PIDS=()
@@ -163,7 +174,8 @@ t_parallel() {
   n=$T_PAR_COUNT; dir="$T_PAR_DIR"
   (
     # The section owns its own fixtures; the shared folder is the parent's.
-    T_PAR_DIR=""; T_PASS=0; T_FAIL=0; FIX=""
+    T_PAR_DIR=""; T_PASS=0; T_FAIL=0; FIX=""; T_PAR_PIDS=()
+    trap t_cleanup EXIT
     "$2"
     t_cleanup
     echo "$T_PASS $T_FAIL" > "$dir/$n.counts"
@@ -192,10 +204,21 @@ t_par_cleanup() {
   esac
   T_PAR_DIR=""
   T_PAR_COUNT=0
+  T_PAR_PIDS=()
+  T_PAR_NAMES=()
 }
 
-# A test that exits before t_finish still removes its fixture and sections.
-t_exit() { t_cleanup; t_par_cleanup; }
+# A test that exits before t_finish, or is stopped by TERM, still removes its
+# fixture and sections; sections still running get TERM first, so their own
+# EXIT trap removes their fixtures before the shared folder goes.
+t_exit() {
+  local p
+  for p in ${T_PAR_PIDS[@]+"${T_PAR_PIDS[@]}"}; do
+    if [[ -n "$p" ]] && kill -TERM "$p" 2>/dev/null; then wait "$p" 2>/dev/null; fi
+  done
+  t_cleanup
+  t_par_cleanup
+}
 trap t_exit EXIT
 
 t_finish() {

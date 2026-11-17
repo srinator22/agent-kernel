@@ -63,10 +63,23 @@
 #   missing in project, absent from OLD      ADD: applied
 #   missing in project, present in OLD       the project deleted it: listed, not restored
 #   present in project, absent from NEW      removed upstream: listed, never deleted here
+# Installed items: docs/installed.list (project-owned, never synced) lists the
+# library, roster and profile files the project copied into its own folders,
+# one "<project path> <template path>" line each (# comments allowed). Each
+# entry is compared under the rules above with the template path as its NEW
+# and OLD side, whether or not the project carries the catalog; its lines say
+# "[installed from <template path>]". A malformed line exits 2 before anything
+# is written.
+#
+# Retired core skills: a skill on the earlier CORE_SKILLS list (the previous
+# version's scripts/lessons.sh and the project's own, read as text) that the
+# new list drops, while .claude/skills/<name> stays in the project, prints
+# "RETIRED CORE SKILL: <name>"; it now counts as a project skill (ADR 0012).
+#
 # Never applied, always reported as DIFF (the unified diff is written to
 # .work/template-sync/<path>.diff): .github/workflows/ci.yml and every file of an
 # adopted profile (docs/profiles/<name>/ for the names on the AGENTS.md
-# "- Profiles:" line). A DIFF is information, not a conflict: it does not change
+# "- Profiles:" line, parsed by scripts/profiles.sh). A DIFF is information, not a conflict: it does not change
 # the exit code. A profile the project does not carry is skipped.
 #
 # AGENTS.md is never applied. The KERNEL block (KERNEL:BEGIN through KERNEL:END)
@@ -81,7 +94,7 @@
 #
 # Exit: 0 clean or applied, 1 conflicts or a kernel change pending (or a failed
 # clone, ref or kernel verification, or the skills cap exceeded or not counted
-# after the sync), 2 usage or guard failure.
+# after the sync), 2 usage or guard failure or a malformed docs/installed.list.
 #
 # Test hook: TEMPLATE_SYNC_TODAY=YYYY-MM-DD overrides today's date.
 set -euo pipefail
@@ -131,31 +144,28 @@ usage_text() {
   echo "  --status: offline check that the Template line names the last recorded sync"
   echo "  --list-set: print the synced set as '<group> <path>' lines"
   echo "  --synced-commits <range>: '<sha> <kind>' per commit of a git range here that changes what projects receive; kind is agents, core, header or catalog (offline)"
-  echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage or guard failure"
+  echo "  exit: 0 clean or applied, 1 conflicts, kernel change pending, skills cap exceeded or not counted, 2 usage, guard failure or a malformed docs/installed.list"
 }
 usage() { usage_text >&2; exit 2; }
 
-# The "- Profiles:" line is a comma list of names, often followed by notes:
-# bracketed remarks after a name, or a sentence after the list ("hardware-pcb
-# deferred until ..."). Bracketed text is dropped, the list ends at the first
-# period or semicolon, and it stops at the first item that is not a single
-# name. A name counts only when the template or the project has its profile
-# folder, so prose words never become adopted profiles.
+# The "- Profiles:" line is parsed by scripts/profiles.sh, the one parser
+# lessons.sh shares, so both adopt the same set. The project's copy runs when
+# present; a project that bootstrapped only this script uses the template's
+# copy at the new ref. A name counts only when the template or the project has
+# its profile folder.
 adopted_profiles() {
   [[ -f AGENTS.md ]] || return 0
-  local line item IFS
-  line="$(grep -m1 -E '^- Profiles:' AGENTS.md 2>/dev/null | tr -d '\r' || true)"
-  line="${line#- Profiles:}"
-  line="${line//\`/}"
-  [[ "$line" == *"{{"* ]] && return 0
-  line="$(printf '%s' "$line" | sed -E 's/\([^)]*\)//g; s/[.;].*$//')"
-  IFS=','
-  for item in $line; do
-    item="${item#"${item%%[![:space:]]*}"}"
-    item="${item%"${item##*[![:space:]]}"}"
-    [[ "$item" =~ ^[a-z0-9][a-z0-9-]*$ ]] || break
+  local parser="scripts/profiles.sh" names item
+  [[ -f "$parser" ]] || parser="$WORK/new/scripts/profiles.sh"
+  if [[ ! -f "$parser" ]]; then
+    echo "template-sync: neither the project nor the template has scripts/profiles.sh; cannot read the Profiles line" >&2
+    return 1
+  fi
+  names="$(bash "$parser" adopted AGENTS.md)" || return 1
+  while IFS= read -r item; do
+    [[ -n "$item" ]] || continue
     if [[ -d "$WORK/new/docs/profiles/$item" || -d "docs/profiles/$item" ]]; then echo "$item"; fi
-  done
+  done <<< "$names"
 }
 
 # "- Template: <url> <tag>" from AGENTS.md; prints "<url> <tag>" (tag may be empty).
@@ -243,6 +253,14 @@ write_diff() {
   diff -u --label "project/$1" --label "template/$1" "$2" "$3" > "$OUTDIR/$1.diff" || true
 }
 
+# core_skills_of LESSONS_SH: the names on its "CORE_SKILLS=(...)" line, one per
+# line; read as text, never run, since the file may come from the template.
+core_skills_of() {
+  [[ -f "$1" ]] || return 0
+  awk '{ sub(/\r$/, "") } /^CORE_SKILLS=\(.*\)[ \t]*$/ { sub(/^CORE_SKILLS=\(/, ""); sub(/\)[ \t]*$/, ""); print; exit }' "$1" \
+    | tr -s ' \t' '\n\n' | grep -E '^[a-z0-9][a-z0-9-]*$' || true
+}
+
 kernel_block() { awk '/<!-- KERNEL:BEGIN -->/{f=1} f{print} /<!-- KERNEL:END -->/{exit}' "$1" | tr -d '\r'; }
 rules_index() { awk '/^## Rules index/{f=1; print; next} f && /^## /{exit} f{print}' "$1" | tr -d '\r'; }
 
@@ -257,6 +275,69 @@ uncarried_catalog() {
     fi
   done
   return 1
+}
+
+# The ledger of library, roster and profile items the project copied into its
+# own folders (docs/procedures/upstream.md, "Installed items"): one
+# "<project path> <template path>" line per file, # comments and blank lines
+# ignored. Read into LED_DST / LED_SRC (indexed arrays: bash 3.2 has no
+# associative ones). A malformed line stops the run: guessing what an entry
+# meant could overwrite a file the project owns.
+LEDGER="docs/installed.list"
+LED_DST=()
+LED_SRC=()
+
+ledger_path_ok() { # a relative path with no empty, "." or ".." part
+  [[ "$1" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ ]] || return 1
+  [[ "/$1/" != */./* && "/$1/" != */../* ]]
+}
+
+read_ledger() {
+  LED_DST=(); LED_SRC=()
+  [[ -f "$LEDGER" ]] || return 0
+  local line n=0 dst src extra i bad
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    line="${line%%#*}"
+    [[ -n "${line//[[:space:]]/}" ]] || continue
+    dst=""; src=""; extra=""
+    read -r dst src extra <<< "$line"
+    bad=""
+    if [[ -z "$src" || -n "$extra" ]]; then bad="want exactly '<project path> <template path>'"
+    elif ! ledger_path_ok "$dst" || ! ledger_path_ok "$src"; then bad="paths must be relative, with no empty, '.' or '..' part"
+    elif [[ "$src" != docs/library/* && "$src" != docs/roster/* && "$src" != docs/profiles/* ]]; then bad="the template path must be under docs/library/, docs/roster/ or docs/profiles/"
+    elif [[ "$dst" == docs/library/* || "$dst" == docs/roster/* || "$dst" == docs/profiles/* ]]; then bad="the project path must be outside the catalogs and profiles, which sync on their own"
+    elif [[ "$dst" == AGENTS.md ]] || [[ "$dst" =~ $PROJECT_OWNED_RE ]] || is_header_file "$dst"; then bad="the project path is a file template-sync never applies"
+    else
+      for i in "${CORE_FILES[@]}"; do [[ "$dst" == "$i" ]] && bad="the project path is a template core file"; done
+      for i in ${LED_DST[@]+"${LED_DST[@]}"}; do [[ "$dst" == "$i" ]] && bad="the project path is listed twice"; done
+    fi
+    if [[ -n "$bad" ]]; then
+      echo "template-sync: $LEDGER:$n: $bad: $line" >&2
+      return 1
+    fi
+    LED_DST+=("$dst"); LED_SRC+=("$src")
+  done < "$LEDGER"
+  return 0
+}
+
+# tpl_path PATH: where PATH's template version lives (the ledger's source for
+# an installed item, else PATH itself).
+tpl_path() {
+  local i
+  for i in ${LED_DST[@]+"${!LED_DST[@]}"}; do
+    if [[ "${LED_DST[$i]}" == "$1" ]]; then echo "${LED_SRC[$i]}"; return 0; fi
+  done
+  echo "$1"
+}
+
+# led_note PATH: " [installed from <source>]" for a ledger entry, else nothing.
+led_note() {
+  local t
+  t="$(tpl_path "$1")"
+  if [[ "$t" != "$1" ]]; then echo " [installed from $t]"; fi
+  return 0
 }
 
 # --status: offline check that the "- Template:" line is exact and names the
@@ -422,16 +503,20 @@ commit_kind() {
   fi
 }
 
-# One git log reads the whole range (marker line "SOH then the sha", then that
-# commit's files; SOH is a control character git always quotes in a path, so no
-# path line can look like a marker); only commits that touch a header file or
-# AGENTS.md pay for the git show comparisons inside commit_kind. --no-renames
-# keeps one path per change, as diff-tree -r reported it.
+# One git log reads the whole range (marker line "TAB then the sha", then that
+# commit's files; git quotes a path holding any control character whatever
+# core.quotePath says, so no path line starts with a raw TAB); only commits that
+# touch a header file or AGENTS.md pay for the git show comparisons inside
+# commit_kind. --no-renames keeps one path per change, as diff-tree -r reported
+# it. The marker was SOH (\001) until 2026-11-17: bash uses \001 internally as
+# its quoting escape (CTLESC), so its survival through command substitution, an
+# unquoted here-document and read -r rested on each bash version's handling of
+# that byte; TAB is an ordinary character in all three, and IFS= keeps it.
 synced_commits() {
   local range="$1" line sha="" out mark
-  mark="$(printf '\001')"
+  mark="$(printf '\t')"
   local files=()
-  if ! out="$(git -C "$ROOT" -c core.quotePath=false -c log.showRoot=true log --no-merges --no-renames --format=%x01%H --name-only "$range" 2>/dev/null)"; then
+  if ! out="$(git -C "$ROOT" -c core.quotePath=false -c log.showRoot=true log --no-merges --no-renames --format=%x09%H --name-only "$range" 2>/dev/null)"; then
     echo "template-sync: --synced-commits: cannot read the git range '$range' in $ROOT" >&2
     return 1
   fi
@@ -561,7 +646,10 @@ main() {
     fi
   fi
 
-  ADOPTED="$(adopted_profiles | tr '\n' ' ')"
+  local adopted_list
+  adopted_list="$(adopted_profiles)" || exit 1
+  ADOPTED="$(printf '%s\n' "$adopted_list" | grep . | tr '\n' ' ' || true)"
+  read_ledger || exit 2
   rm -rf "$OUTDIR"
   mkdir -p "$OUTDIR"
   echo "template-sync: template $template at $new_ref"
@@ -586,10 +674,18 @@ main() {
       echo "template-sync: $cd_/ is not carried by this project; not synced (copy it from the template to opt in)"
     fi
   done
+  if (( ${#LED_DST[@]} )); then
+    echo "template-sync: ${#LED_DST[@]} installed item(s) in $LEDGER, each compared with its template source"
+  fi
 
-  local paths p n_f o_f p_f vn vo vp
+  # An installed item's path may sit in the core set (.claude/agents/); the
+  # ledger decides its template side, so the core walk skips it.
+  local paths p t n_f o_f p_f vn vo vp led_list=""
+  if (( ${#LED_DST[@]} )); then led_list="$(printf '%s\n' "${LED_DST[@]}")"; fi
   paths="$( { list_core "$WORK/new"; if [[ -n "$old_dir" ]]; then list_core "$old_dir"; fi; } \
-            | grep -Ev "$EXCLUDE_RE" | grep -Ev "$PROJECT_OWNED_RE" | sort -u || true)"
+            | grep -Ev "$EXCLUDE_RE" | grep -Ev "$PROJECT_OWNED_RE" \
+            | { if [[ -n "$led_list" ]]; then grep -vxF -- "$led_list"; else cat; fi; } | sort -u || true)"
+  if [[ -n "$led_list" ]]; then paths="$(printf '%s\n%s\n' "$paths" "$led_list" | grep . || true)"; fi
 
   local updates=() adds=() conflicts=() diffs=() deleted=() removed=()
   local unchanged=0 owned=0
@@ -598,8 +694,9 @@ main() {
     if uncarried_profile "$p" && ! adopted_profile_of "$p"; then continue; fi
     if uncarried_catalog "$p"; then continue; fi
     n_f=0; o_f=0; p_f=0
-    [[ -f "$WORK/new/$p" ]] && n_f=1
-    [[ -n "$old_dir" && -f "$old_dir/$p" ]] && o_f=1
+    t="$(tpl_path "$p")"
+    [[ -f "$WORK/new/$t" ]] && n_f=1
+    [[ -n "$old_dir" && -f "$old_dir/$t" ]] && o_f=1
     [[ -f "$p" ]] && p_f=1
     if (( n_f )) && never_apply "$p"; then
       if (( p_f )); then
@@ -613,9 +710,9 @@ main() {
       continue
     fi
     if (( n_f && p_f )); then
-      vn="$(view new "$WORK/new/$p" "$p")"; vp="$(view proj "$p" "$p")"
+      vn="$(view new "$WORK/new/$t" "$p")"; vp="$(view proj "$p" "$p")"
       vo=""
-      if (( o_f )); then vo="$(view old "$old_dir/$p" "$p")"; fi
+      if (( o_f )); then vo="$(view old "$old_dir/$t" "$p")"; fi
       if same "$vp" "$vn"; then
         unchanged=$((unchanged + 1))
       elif (( o_f )) && same "$vn" "$vo"; then
@@ -635,25 +732,25 @@ main() {
 
   local f
   if (( ${#updates[@]} )); then
-    for f in "${updates[@]}"; do echo "UPDATE    $f  (project copy untouched since $prev; template changed)"; done
+    for f in "${updates[@]}"; do echo "UPDATE    $f  (project copy untouched since $prev; template changed)$(led_note "$f")"; done
   fi
   if (( ${#adds[@]} )); then
-    for f in "${adds[@]}"; do echo "ADD       $f  (new in the template)"; done
+    for f in "${adds[@]}"; do echo "ADD       $f  (new in the template)$(led_note "$f")"; done
   fi
   if (( ${#conflicts[@]} )); then
     for f in "${conflicts[@]}"; do
-      if (( resolved )); then echo "RESOLVED  $f  (project edited and template differs; hand merge attested with --resolved)"
-      else echo "CONFLICT  $f  (project edited and template differs; merge by hand, then rerun with --resolved)"; fi
+      if (( resolved )); then echo "RESOLVED  $f  (project edited and template differs; hand merge attested with --resolved)$(led_note "$f")"
+      else echo "CONFLICT  $f  (project edited and template differs; merge by hand, then rerun with --resolved)$(led_note "$f")"; fi
     done
   fi
   if (( ${#diffs[@]} )); then
     for f in "${diffs[@]}"; do echo "DIFF      $f  (never applied; see $OUTDIR/$f.diff)"; done
   fi
   if (( ${#deleted[@]} )); then
-    for f in "${deleted[@]}"; do echo "DELETED   $f  (the project removed it; not restored)"; done
+    for f in "${deleted[@]}"; do echo "DELETED   $f  (the project removed it; not restored)$(led_note "$f")"; done
   fi
   if (( ${#removed[@]} )); then
-    for f in "${removed[@]}"; do echo "REMOVED   $f  (no longer in the template; review, then archive if unused)"; done
+    for f in "${removed[@]}"; do echo "REMOVED   $f  (no longer in the template; review, then archive if unused)$(led_note "$f")"; done
   fi
   if (( ${#conflicts[@]} && ! resolved )); then
     for f in "${conflicts[@]}"; do
@@ -682,6 +779,31 @@ main() {
     fi
   fi
 
+  # A core skill the new release drops from CORE_SKILLS while the project keeps
+  # its folder becomes a project skill (ADR 0012) and may take the project over
+  # its cap; name it so the owner sees why. The earlier core list is the
+  # previous version's and the project's own lessons.sh (read before applying).
+  local retired_skills=() s
+  if [[ -f "$WORK/new/scripts/lessons.sh" ]]; then
+    local new_core prior_core=""
+    new_core="$(core_skills_of "$WORK/new/scripts/lessons.sh")"
+    # A lessons.sh with no readable CORE_SKILLS line names no list, so it
+    # retires nothing.
+    if [[ -n "$new_core" ]]; then
+      prior_core="$( { if [[ -n "$old_dir" ]]; then core_skills_of "$old_dir/scripts/lessons.sh"; fi; core_skills_of scripts/lessons.sh; } | sort -u)"
+    fi
+    while IFS= read -r s; do
+      [[ -n "$s" && -d ".claude/skills/$s" ]] || continue
+      grep -qx -- "$s" <<< "$new_core" && continue
+      retired_skills+=("$s")
+    done <<< "$prior_core"
+  fi
+  if (( ${#retired_skills[@]} )); then
+    for s in "${retired_skills[@]}"; do
+      echo "RETIRED CORE SKILL: $s  (.claude/skills/$s is kept but no longer a template core skill; it now counts as a project skill (ADR 0012): archive it or keep it in a project slot)"
+    done
+  fi
+
   echo "template-sync: summary: update=${#updates[@]} add=${#adds[@]} conflict=${#conflicts[@]} diff=${#diffs[@]} deleted-by-project=${#deleted[@]} removed-upstream=${#removed[@]} unchanged=$unchanged project-owned=$owned"
 
   local rc=0
@@ -700,13 +822,13 @@ main() {
         { head -n "$HEADER_LINES" "$WORK/new/$f"; tail -n +"$((HEADER_LINES + 1))" "$f"; } > "$WORK/hdr.tmp"
         cat "$WORK/hdr.tmp" > "$f"
       else
-        cp -p "$WORK/new/$f" "$f"
+        cp -p "$WORK/new/$(tpl_path "$f")" "$f"
       fi
     done
   fi
   if (( ${#adds[@]} )); then
     for f in "${adds[@]}"; do
-      mkdir -p "$(dirname "$f")"; cp -p "$WORK/new/$f" "$f"
+      mkdir -p "$(dirname "$f")"; cp -p "$WORK/new/$(tpl_path "$f")" "$f"
       case "$f" in *.sh) newsh+=("$f") ;; esac
     done
   fi

@@ -33,6 +33,13 @@ setup_block() {
 }
 setup_block || true
 
+# Git Bash skips its path conversion while MSYS_NO_PATHCONV is defined at all,
+# empty value included, so a session that inherits it runs every script with
+# unconverted paths (lesson L019). A hook only sees exported variables.
+if [[ -n "${MSYS_NO_PATHCONV+x}" ]]; then
+  echo "[session-context] WARNING: MSYS_NO_PATHCONV is exported, so Git Bash path conversion is off for every script this session runs; unset it and set it only on the single command that needs it (lesson L019)."
+fi
+
 # Git state: commit bodies carry the why (kernel rule 6), so the last commits
 # and the working-tree status are the cheapest memory to load. Capped so a
 # large untracked tree cannot flood the context. Outside a git repository

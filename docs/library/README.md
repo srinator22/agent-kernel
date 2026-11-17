@@ -56,19 +56,17 @@ Every tools/ and hooks/ test runs in the template self-test
 
 ## Hooks
 
-`hooks/refuse_shell_stdin.py` is a PreToolUse hook. It refuses a shell command
-that feeds Python from stdin (`python -`) or uses a here-document: both hang or
-break under some shell wrappers, and the habit recurs, so a written rule is not
-enough. The refusal tells the agent to write the script to a file and run it by
-path. An optional rule, `--check-pcbnew-getwidth` (or
-`HOOK_CHECK_PCBNEW_GETWIDTH=1`), also refuses KiCad scripts that call a bare
-`.GetWidth()`; enable it only where KiCad is scripted. Check it with
-`python docs/library/hooks/refuse_shell_stdin.py --self-test`.
+No library hook ships today. The shell-stdin hook (`refuse_shell_stdin`) left
+the library for the core (ADR 0015): it lives in
+`scripts/hooks/refuse_shell_stdin.py` behind `scripts/refuse-shell-stdin.sh`
+and every project runs it through `.claude/settings.json` and
+`.codex/hooks.json`. Its optional KiCad rule, `--check-pcbnew-getwidth` (or
+`HOOK_CHECK_PCBNEW_GETWIDTH=1`), stays off unless a project that scripts KiCad
+turns it on.
 
-To adopt, copy the hook to `.claude/hooks/` and add a PreToolUse entry to
-`.claude/settings.json` whose matcher covers every shell the harness offers
-(`Bash|PowerShell`) and whose command is
-`python "$CLAUDE_PROJECT_DIR/.claude/hooks/refuse_shell_stdin.py"`.
+A project hook of its own goes in `scripts/hooks.d/<Event>/` as an
+executable file; `scripts/hooks-dispatch.sh` runs it without an edit to
+`.claude/settings.json` (ADR 0015).
 
 ## Tools
 
@@ -147,7 +145,6 @@ one that proved unhelpful is archived with its reason.
 | component | procedure | Part research and bill-of-materials state machine | a hardware R&D journal project |
 | decision | procedure | Engineering decision log, approval, revalidation, supersession | a hardware R&D journal project |
 | experiment | procedure | Pre-registration, run, process and record workflow | a hardware R&D journal project |
-| refuse_shell_stdin | hook | Refuses shell commands that feed Python from stdin or use a here-document; optional KiCad `.GetWidth()` rule | a controller PCB project |
 | commit_unit | tool | One safe commit path: gate, message file, pathspec-limited commit, push, never force | a controller PCB project |
 | check_defect_memory | tool | Validates `docs/DEFECT_MEMORY.md` rows, IDs, status forms and defence paths | a controller PCB project |
 | kb_index | tool | Local full-text index and ranked search over Markdown, text, and optionally PDF and spreadsheets | a controller PCB project |

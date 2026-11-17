@@ -37,6 +37,18 @@ printf '# Task: demo\nMode: standard\n' > .work/TASK.md
 run bash scripts/session-context.sh
 assert_contains "a live TASK.md is printed" "In-progress task state"
 assert_contains "its content follows" "# Task: demo"
+# MSYS_NO_PATHCONV: warn when it is defined (any value, empty included, since
+# Git Bash checks only that it exists); say nothing when it is not.
+run env -u MSYS_NO_PATHCONV bash scripts/session-context.sh
+assert_not_contains "MSYS_NO_PATHCONV unset: no warning" "MSYS_NO_PATHCONV"
+run env MSYS_NO_PATHCONV=1 bash scripts/session-context.sh
+assert_rc "MSYS_NO_PATHCONV=1: still exits 0" 0
+assert_contains "MSYS_NO_PATHCONV=1: warns" "WARNING: MSYS_NO_PATHCONV is exported"
+assert_contains "the warning names the lesson" "lesson L019"
+run env MSYS_NO_PATHCONV= bash scripts/session-context.sh
+assert_contains "MSYS_NO_PATHCONV empty: warns" "WARNING: MSYS_NO_PATHCONV is exported"
+run env MSYS_NO_PATHCONV=0 bash scripts/session-context.sh
+assert_contains "MSYS_NO_PATHCONV=0: warns" "WARNING: MSYS_NO_PATHCONV is exported"
 touch .start-done
 run bash scripts/session-context.sh
 assert_contains "project mode line after start" "Project mode (start has run)"

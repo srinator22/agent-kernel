@@ -73,6 +73,7 @@ Status: TEMPLATE - not initialized. Run docs/procedures/start.md before any proj
 - Release model and versioning source of truth: {{FILLED_BY_START}}
 - Deploy target and exposure: {{FILLED_BY_START or none}}
 - Canonical verification: ./scripts/check.sh
+- Decision records: {{docs/decisions (default) or the folder the project already keeps ADRs in}}
 - Data policy: {{what may enter git; where large/private data lives}}
 - Risk profile: {{ordinary / scientific / safety-sensitive / embedded}}
 - Profiles: {{FILLED_BY_START - software always; add scientific, embedded-firmware, hardware-pcb, data-analysis as adopted}}

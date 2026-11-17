@@ -7,6 +7,9 @@ already has somewhere to put its test (kernel rules 2 and 4).
 1. Wire per stack, as applicable, and name each in `scripts/stack-check.sh`:
    unit, property-based, golden-master, integration, end-to-end. Log a
    layer as "N/A - reason" in START_REPORT.md rather than omitting it.
+   Next to property-based tests, a replacement or port gets differential
+   tests: run the old and new system on the same inputs, normalize
+   differences that cannot matter, and keep an approved-differences list.
 2. Test contract. Deterministic: no wall-clock races, no order
    dependence, seeds fixed and stored. Await real completion (the
    promise, event or process exit), never a sleep. Assert behaviour at

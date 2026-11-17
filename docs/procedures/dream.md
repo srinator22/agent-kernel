@@ -191,6 +191,42 @@ wherever the import block remains. To stop loading it, delete the block from
 Codex loads registers (BACKLOG). A taste report written by an older release
 is not applied: run a fresh project taste pass.
 
+## Fleet dream (template only)
+
+In the template repository a dream can also read what the local projects
+started from it send back up, and propose template changes. It uses the
+list `scripts/fleet.sh` reads (`fleet.local.list`, gitignored) and refuses
+once start has run. Run it when projects have new UPSTREAM.md entries or
+dream reports (the fleet.sh upstream column), or on the owner's request.
+
+F1. Run `scripts/dream.sh fleet`. For each listed project it reads, never
+    writes: the Template line and last sync, the open entries of
+    `docs/lessons/UPSTREAM.md` (each with a filled "what happened"; sent
+    entries are cleared there) and the newest two dream reports in the
+    project's main checkout `.work/dream/`. It writes
+    `.work/dream/fleet/digest.md` (gitignored, like every dream file) and
+    prints the path and counts. Ids: p<N> per project, p<N>.u<M> entries,
+    p<N>.r<M> reports, p<N>.s<M> signals. `--max-bytes` (default 40000) is
+    shared evenly by the projects; an entry is cut at 1500 bytes, and every
+    cut says what it left out. A missing folder or a relative line is listed
+    as such and nothing is read for it.
+F2. Transcripts only with the owner's permission: `--transcripts` adds each
+    project's transcript signals, reduced by the same code as a project's
+    own digest, from offsets the fleet keeps in
+    `.work/dream/fleet/transcripts/`. Without it no transcript is opened.
+F3. Dispatch the `dreamer` agent in fleet mode with the fleet digest path
+    and this repository's BACKLOG.md, `docs/lessons/` and AGENTS.md. It
+    returns at most 12 numbered template-change proposals, each citing the
+    project and the entry id.
+F4. Save the report as `.work/dream/fleet/<date>-report.md` and show the
+    owner the numbered list. Approved numbers become BACKLOG rows or
+    `docs/lessons/PENDING.md` entries in the template, worded generically:
+    no project name, path or quote enters a tracked file.
+F5. Run `scripts/dream.sh fleet done`. It commits the transcript offsets of
+    the last `--transcripts` digest and records the date the next digest
+    prints as "last fleet dream". UPSTREAM entries stay in the projects
+    until each project sends and clears them (`docs/procedures/upstream.md`).
+
 ## Privacy and cost
 
 - The digest, its state and the reports live in `.work/dream/`, which
@@ -210,3 +246,7 @@ is not applied: run a fresh project taste pass.
   project's sessions and is a script with no model; the agent reads at most
   40 KB of signals plus the registers; the registers cost every Claude
   session at most 4000 bytes, about 1k tokens.
+- The fleet digest and its reports live in the template's `.work/dream/fleet/`
+  and never leave the computer; it writes nothing in any project. It reads
+  transcripts only with `--transcripts`. One agent reads at most
+  `--max-bytes` of digest once.

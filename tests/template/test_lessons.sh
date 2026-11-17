@@ -5,7 +5,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
 make_fixture
-cp_script lessons.sh
+cp_script lessons.sh profiles.sh
 export LESSONS_TODAY=2026-10-09
 mkdir -p docs/lessons docs/rules .claude/skills/alpha .agents/skills/alpha
 echo "# alpha" > .claude/skills/alpha/SKILL.md
@@ -180,6 +180,11 @@ assert_rc "a profile that is not adopted does not raise the cap" 1
 printf -- '- Profiles: p1\n' > AGENTS.md
 run ./scripts/lessons.sh check
 assert_rc "an adopted profile raises the cap" 0
+mv scripts/profiles.sh scripts/profiles.sh.off
+run ./scripts/lessons.sh check
+assert_rc "a missing profiles.sh fails check" 1
+assert_contains "the missing parser is named" "scripts/profiles.sh is missing"
+mv scripts/profiles.sh.off scripts/profiles.sh
 rm -rf docs/profiles AGENTS.md
 drop_skill s3
 run ./scripts/lessons.sh check
@@ -243,7 +248,7 @@ cp "$FIX/lessons.keep" scripts/lessons.sh && rm -f "$FIX/lessons.keep"
 # completion marker must be reported, not read as "no problems".
 mkdir -p docs/profiles/p5/agents
 printf 'Profile p5\nSkills: none\n' > docs/profiles/p5/PROFILE.md
-printf -- '---\nname: h5\ndescription: x\nmodel: inherit\n---\n' > docs/profiles/p5/agents/h5.md
+printf -- '---\nname: h5\ndescription: x\nmodel: inherit\n---\n\nx\n' > docs/profiles/p5/agents/h5.md
 printf 'name = "h5"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/profiles/p5/agents/h5.toml
 run ./scripts/lessons.sh check
 assert_rc "a complete shipped-set check passes" 0
@@ -264,6 +269,22 @@ assert_contains "the missing twin is named" ".claude/agents/reviewer.md has no .
 echo "x" > .codex/agents/reviewer.toml
 run ./scripts/lessons.sh check
 assert_rc "an agent with a Codex twin passes" 0
+# Core twin parity: .codex/agents/<name>.toml carries the .claude/agents body.
+printf -- '---\nname: reviewer\ndescription: x\n---\n\nReview it.\n' > .claude/agents/reviewer.md
+printf 'name = "reviewer"\ndeveloper_instructions = """\nReview it.\n"""\n' > .codex/agents/reviewer.toml
+run ./scripts/lessons.sh check
+assert_rc "a matching core twin passes" 0
+printf 'name = "reviewer"\ndeveloper_instructions = """\nReview it, briefly.\n"""\n' > .codex/agents/reviewer.toml
+run ./scripts/lessons.sh check
+assert_rc "a drifted core twin fails" 1
+assert_contains "the drifted core twin is named" ".codex/agents/reviewer.toml: developer_instructions differ from the body of .claude/agents/reviewer.md"
+printf -- '---\nname: reviewer\ndescription: x\n---\n\nReview it.\n\n## Hand-offs\n\n- Then `no-such-agent`.\n' > .claude/agents/reviewer.md
+printf 'name = "reviewer"\ndeveloper_instructions = """\nReview it.\n\n## Hand-offs\n\n- Then `no-such-agent`.\n"""\n' > .codex/agents/reviewer.toml
+run ./scripts/lessons.sh check
+assert_rc "a core hand-off to an unknown agent fails" 1
+assert_contains "the unknown core hand-off is named" ".claude/agents/reviewer.md: Hand-offs names \`no-such-agent\`"
+echo "x" > .claude/agents/reviewer.md
+echo "x" > .codex/agents/reviewer.toml
 echo "x" > .claude/agents/explore.md
 run ./scripts/lessons.sh check
 assert_rc "a second agent with no twin fails" 1
@@ -303,7 +324,7 @@ assert_rc "a description outside the frontmatter fails" 1
 assert_contains "the missing description is named" "alpha-skill/SKILL.md: frontmatter missing description"
 ship_skill p4 alpha-skill
 mkdir -p docs/profiles/p4/agents
-printf -- '---\nname: helper\ndescription: x\nmodel: sonnet\n---\n' > docs/profiles/p4/agents/helper.md
+printf -- '---\nname: helper\ndescription: x\nmodel: sonnet\n---\n\nx\n' > docs/profiles/p4/agents/helper.md
 run ./scripts/lessons.sh check
 assert_rc "a shipped agent with no Codex twin fails" 1
 assert_contains "the missing twin is named" "no Codex twin docs/profiles/p4/agents/helper.toml"
@@ -314,6 +335,12 @@ assert_contains "the missing field is named" "helper.toml: missing developer_ins
 printf 'developer_instructions = """\nx\n"""\n' >> docs/profiles/p4/agents/helper.toml
 run ./scripts/lessons.sh check
 assert_rc "a complete profile agent pair passes" 0
+# Twin parity covers profile agents too, not only the roster.
+printf 'name = "helper"\ndescription = "x"\ndeveloper_instructions = """\ny\n"""\n' > docs/profiles/p4/agents/helper.toml
+run ./scripts/lessons.sh check
+assert_rc "a drifted profile twin fails" 1
+assert_contains "the drifted profile twin is named" "docs/profiles/p4/agents/helper.toml: developer_instructions differ from the body of docs/profiles/p4/agents/helper.md"
+printf 'name = "helper"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/profiles/p4/agents/helper.toml
 mkdir -p docs/library/skills/gamma
 echo "no frontmatter" > docs/library/skills/gamma/SKILL.md
 run ./scripts/lessons.sh check
@@ -357,7 +384,7 @@ rm -f docs/roster/README.md
 # Library inventory: the README Items table and the shipped items agree.
 rm -rf docs/library
 mkdir -p docs/library/agents docs/library/skills/sk docs/library/tools
-printf -- '---\nname: aa\ndescription: x\nmodel: sonnet\n---\n' > docs/library/agents/aa.md
+printf -- '---\nname: aa\ndescription: x\nmodel: sonnet\n---\n\nx\n' > docs/library/agents/aa.md
 printf 'name = "aa"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/library/agents/aa.toml
 printf -- '---\nname: sk\ndescription: x\n---\n' > docs/library/skills/sk/SKILL.md
 echo 'print(1)' > docs/library/tools/tt.py
@@ -495,5 +522,152 @@ assert_contains "stats counts approved lessons" "approved lessons: 2/20"
 
 run ./scripts/lessons.sh bogus
 assert_rc "unknown subcommand is a usage error" 2
+
+# Triggers (ADR 0017): the optional last field, validated by check, kept by use.
+add_trig() { # id trigger
+  echo "- [$1] When X happens - do Y (used: 0, last: -, retire-when: never, trigger: $2)" >> docs/lessons/INDEX.md
+}
+write_index
+add_trig L001 "A:*.sh"
+add_trig L002 "docs/decisions/*.md M:src/*"
+add_lesson L003 0 - "never"
+run ./scripts/lessons.sh check
+assert_rc "lessons with and without triggers pass check" 0
+write_index
+add_trig L001 ""
+run ./scripts/lessons.sh check
+assert_rc "an empty trigger fails" 1
+assert_contains "names the empty trigger" "L001 has an empty trigger"
+write_index
+add_trig L001 "A: X:src/* src/a:b"
+run ./scripts/lessons.sh check
+assert_rc "malformed trigger tokens fail" 1
+assert_contains "names an empty glob after the prefix" "trigger token 'A:' is malformed"
+assert_contains "names an unknown prefix" "trigger token 'X:src/*' is malformed"
+assert_contains "names a colon inside the glob" "trigger token 'src/a:b' is malformed"
+assert_contains "counts each bad token" "check FAILED (3 problem(s))"
+echo "- [L002] When X happens - do Y (used: 0, last: -, retire-when: , trigger: A:*.sh)" >> docs/lessons/INDEX.md
+run ./scripts/lessons.sh check
+assert_contains "a trigger does not hide an empty retire-when" "L002 has an empty retire-when"
+write_index
+add_trig L001 "A:*.sh"
+run ./scripts/lessons.sh use L001
+assert_rc "use on a lesson with a trigger succeeds" 0
+assert_file_has "use keeps the trigger" docs/lessons/INDEX.md "(used: 1, last: 2026-10-09, retire-when: never, trigger: A:*.sh)"
+write_index
+add_trig L001 "A:*.sh"
+echo "- [L002] When X happens - do Y (used: 0, last: -, retire-when: done [met], trigger: src/*)" >> docs/lessons/INDEX.md
+run ./scripts/lessons.sh expire
+assert_contains "expire reads [met] beside a trigger" "L002 - retire-when marked [met]"
+assert_not_contains "a trigger alone never expires a lesson" "L001 -"
+
+# match: changed paths from git revisions and from a diff file.
+write_index
+add_trig L001 "A:*.sh"
+add_trig L002 "A:docs/decisions/*.md"
+add_trig L003 "M:src/*"
+add_trig L004 "D:old/*"
+add_trig L005 ".github/workflows/*"
+add_lesson L006 0 - "never"
+add_trig L007 "nothing/here/*"
+mkdir -p src old docs/decisions
+echo "a" > src/a.txt
+echo "o" > old/gone.txt
+echo "r" > old/moved.sh
+git add -A >/dev/null 2>&1 && git commit -qm base >/dev/null 2>&1
+base="$(git rev-parse HEAD)"
+run ./scripts/lessons.sh match HEAD
+assert_rc "match on an unchanged tree succeeds" 0
+assert_eq "no changed path, no lesson" "lessons: 0 of 6 lesson triggers match 0 changed path(s)" "$OUT"
+echo "b" >> src/a.txt
+git rm -q old/gone.txt
+mkdir -p tools && git mv old/moved.sh tools/moved.sh
+echo "# 0001 - x" > docs/decisions/0001-x.md
+printf '#!/bin/sh\n' > new.sh
+git add -A >/dev/null 2>&1 && git commit -qm change >/dev/null 2>&1
+run ./scripts/lessons.sh match "$base..HEAD"
+assert_rc "match on a range succeeds" 0
+assert_contains "an added script matches A:*.sh" "L001 A new.sh (trigger A:*.sh)"
+assert_contains "an added ADR matches" "L002 A docs/decisions/0001-x.md"
+assert_contains "a modified file matches M:" "L003 M src/a.txt"
+assert_contains "a deleted file matches D:" "L004 D old/gone.txt"
+assert_not_contains "a lesson without a trigger is never printed" "L006"
+assert_not_contains "a trigger matching nothing is not printed" "L007"
+assert_not_contains "a workflow trigger with no workflow change is not printed" "L005"
+assert_contains "the count is reported" "lessons: 4 of 6 lesson triggers match"
+lines="$(printf '%s\n' "$OUT" | grep -c '^L0')"
+assert_eq "one line per matching lesson, not per path" 4 "$lines"
+run ./scripts/lessons.sh match "$base" HEAD
+assert_contains "two revisions work like a range" "L002 A docs/decisions/0001-x.md"
+
+# A rename adds its new path and deletes its old one; a glob crosses folders.
+write_index
+add_trig L001 "A:tools/*"
+add_trig L002 "D:old/moved.sh"
+add_trig L003 "M:*.sh"
+run ./scripts/lessons.sh match "$base..HEAD"
+assert_contains "a rename adds the new path" "L001 A tools/moved.sh"
+assert_contains "a rename deletes the old path" "L002 D old/moved.sh"
+assert_not_contains "an added script is not a modified one" "L003"
+
+# The trigger glob is a pattern, never expanded against files in the repo.
+write_index
+add_trig L001 "A:*.sh"
+run ./scripts/lessons.sh match "$base..HEAD"
+assert_contains "*.sh is matched as a pattern although new.sh exists" "L001 A new.sh"
+
+# --staged, refused options, bad revisions, no arguments.
+echo "c" >> src/a.txt
+git add src/a.txt
+write_index
+add_trig L001 "M:src/*"
+run ./scripts/lessons.sh match --staged
+assert_contains "--staged reads the index" "L001 M src/a.txt"
+run ./scripts/lessons.sh match --output=x.txt HEAD
+assert_rc "another option is refused" 2
+assert_contains "names the refused option" "option '--output=x.txt' is not allowed"
+assert_no_file "the refused option wrote nothing" x.txt
+run ./scripts/lessons.sh match no-such-rev
+assert_rc "an unknown revision fails" 2
+assert_contains "names the git failure" "lessons: git diff failed"
+run ./scripts/lessons.sh match
+assert_rc "match without arguments is a usage error" 2
+git reset -q >/dev/null 2>&1
+git checkout -q -- src/a.txt
+
+# A diff file: new, deleted, renamed, modified, a path with a space, CRLF.
+write_index
+add_trig L001 "A:*.sh"
+add_trig L002 "D:old/*"
+add_trig L003 "M:src/*"
+add_trig L004 "A:tools/*"
+add_trig L005 "M:dir?with?space/*"
+mkdir -p "dir with space"
+echo "s" > "dir with space/f.txt"
+git add -A >/dev/null 2>&1 && git commit -qm space >/dev/null 2>&1
+echo "t" >> "dir with space/f.txt"
+git add -A >/dev/null 2>&1 && git commit -qm space2 >/dev/null 2>&1
+git diff -M "$base..HEAD" > "$FIX.diff"
+run ./scripts/lessons.sh match "$FIX.diff"
+assert_rc "match on a diff file succeeds" 0
+assert_contains "diff file: an added script" "L001 A new.sh"
+assert_contains "diff file: a deleted file" "L002 D old/gone.txt"
+assert_contains "diff file: a modified file" "L003 M src/a.txt"
+assert_contains "diff file: a rename adds the new path" "L004 A tools/moved.sh"
+git diff "$(git rev-parse HEAD~1)..HEAD" > "$FIX.space.diff"
+run ./scripts/lessons.sh match "$FIX.space.diff"
+assert_contains "diff file: a path with a space" "L005 M dir with space/f.txt"
+awk '{ printf "%s\r\n", $0 }' "$FIX.diff" > "$FIX.crlf.diff"
+run ./scripts/lessons.sh match "$FIX.crlf.diff"
+assert_contains "a CRLF diff file reads the same" "L004 A tools/moved.sh"
+assert_not_contains "no carriage return in a path" $'\r'
+printf 'just some text\n' > "$FIX.notdiff"
+run ./scripts/lessons.sh match "$FIX.notdiff"
+assert_rc "a file with no diff header fails" 2
+assert_contains "names the missing header" "holds no \"diff --git\" header"
+: > "$FIX.empty"
+run ./scripts/lessons.sh match "$FIX.empty"
+assert_rc "an empty diff file fails" 2
+rm -f "$FIX.diff" "$FIX.space.diff" "$FIX.crlf.diff" "$FIX.notdiff" "$FIX.empty"
 
 t_finish

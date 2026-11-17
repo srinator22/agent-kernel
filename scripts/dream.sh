@@ -8,6 +8,10 @@
 #   scorecard                                 the owner's decisions on past proposals (read-only)
 #   taste [--root R] digest|done|apply|check  the project taste pass: this project's sessions into its
 #                                             preference registers (scripts/dream/taste.py)
+#   fleet [digest|done] [--list F] [--transcripts] [--max-bytes N]
+#                                             template only: the fleet projects' open UPSTREAM.md
+#                                             entries, newest dream reports and, with --transcripts,
+#                                             transcript signals, read-only (scripts/dream/fleet.py)
 # Exit codes: 0 ok / due; 1 not due; 2 usage error or no Python; 3 nothing to
 # dream (digest found no new signal and no new feedback line). Without Python, "due" prints
 # "dream: not due (python not found)" (nothing with --quiet) and exits 1.
@@ -34,5 +38,9 @@ fi
 if [[ "${1:-}" == "taste" ]]; then
   shift
   exec "$PY" -I -B "$ROOT/scripts/dream/taste.py" "$@"
+fi
+if [[ "${1:-}" == "fleet" ]]; then
+  shift
+  exec "$PY" -I -B "$ROOT/scripts/dream/fleet.py" "$@"
 fi
 exec "$PY" -I -B "$ROOT/scripts/dream/dream.py" "$@"

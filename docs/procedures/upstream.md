@@ -93,7 +93,9 @@ last), so check.sh itself stays the template's and syncs cleanly.
       script predates template-v0.3.0), first replace it with the newest
       tag's copy (for example `git clone --depth 1 --branch <tag> <url>` into
       a temporary folder, then copy its `scripts/template-sync.sh`) and
-      commit that alone; the sync then finds the script unchanged.
+      commit that alone; the sync then finds the script unchanged. Until
+      the sync adds `scripts/profiles.sh` (the Profiles line parser), the
+      script uses the template's copy at the new ref.
    3. Dry run: `scripts/template-sync.sh --latest --dry-run`. When the
       project has no usable sync record (NO-BASE, or a recorded base that is
       wrong), run `--suggest-baseline`, pick the merge-base or the best match
@@ -140,11 +142,41 @@ last), so check.sh itself stays the template's and syncs cleanly.
         the result" adds a line to `.work/feedback/log.jsonl`;
         `scripts/dream.sh digest` lists the session (template ADR 0014).
 
+   RETIRED CORE SKILL names a skill the new release dropped from
+   `CORE_SKILLS` whose folder the project keeps: it now counts as a project
+   skill (template ADR 0012); archive it or keep it in a project slot.
+
+   Verify skill upgrade (a sync that brings software profile rule SW-15,
+   template ADR 0016): check.sh then fails project mode until
+   `.claude/skills/verify/SKILL.md` exists with no `{{` left. The profile
+   files arrive as DIFF only, so take the skill template from the new
+   template ref (`git show <ref>:docs/profiles/software/skills/verify/SKILL.md`),
+   fill its `{{VERIFY_...}}` wiring for this project's stack as start.md
+   step 4 describes, install the same file in `.claude/skills/verify/` and
+   `.agents/skills/verify/`, merge the profile's `Skills: verify` line into
+   the project's PROFILE.md (so it counts as the profile's skill, not a
+   project slot), and run it once, recording the `verify:` line.
+
    The script never touches the Project decisions section, re-verifies the
    kernel hash after applying, and refuses a real apply on main or on a
    dirty tree. A conflict (the project edited the file and the template
    changed it too) is reported with its diff on every run until merged and
    attested with `--resolved`.
+
+## Installed items
+
+A library, roster or profile file the project copied into its own folders
+(start step 4, or by hand) is recorded in `docs/installed.list`, one line per
+file: `<project path> <template path>`, for example
+`.claude/agents/researcher.md docs/library/agents/researcher.md`; `#` starts a
+comment. The ledger is project-owned and never synced. The template path is
+under `docs/library/`, `docs/roster/` or `docs/profiles/`; the project path is
+outside those folders and is not `AGENTS.md`, a core file or a lessons file.
+At each sync the installed copy is compared with its template path under the
+three-way rules above (UPDATE, ADD, CONFLICT, REMOVED, each marked
+`[installed from <template path>]`), whether or not the project carries the
+catalog. A malformed line stops the sync with exit 2 and names the line. A
+skill folder is listed file by file.
 
 ## Adopting the template into an existing project
 

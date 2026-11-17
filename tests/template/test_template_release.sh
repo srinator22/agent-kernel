@@ -129,11 +129,22 @@ mkdir -p scripts docs/library
 echo a >> scripts/k_both.sh; chmod +x scripts/k_both.sh; echo b >> docs/library/k_both.md
 git add -A >/dev/null 2>&1 && git commit -q -m "feat: kind both" >/dev/null 2>&1
 commit_file random/k_none.md "chore: kind none"
+put_full_agents "k edited again" "r" "d"
+echo c >> scripts/k_core.sh
+git add -A >/dev/null 2>&1 && git commit -q -m "feat: kind agents and core" >/dev/null 2>&1
+# Paths git must quote (a TAB or SOH in the name) cannot pass for the commit
+# marker line. Index entries only: NTFS refuses such names on disk.
+blob="$(echo q | git hash-object -w --stdin)"
+git update-index --add --cacheinfo "100644,$blob,$(printf '\tlead-tab.md')"
+git update-index --add --cacheinfo "100644,$blob,$(printf '\001lead-soh.md')"
+echo d >> scripts/k_core.sh
+git add scripts/k_core.sh >/dev/null 2>&1 && git commit -q -m "feat: kind core beside quoted paths" >/dev/null 2>&1
 run bash scripts/template-sync.sh --synced-commits base-kinds..HEAD
 assert_rc "synced-commits exits 0" 0
 kinds="$(printf '%s\n' "$OUT" | while read -r sha kind; do printf '%s=%s\n' "$(git log -1 --format=%s "$sha")" "$kind"; done | sort | tr '\n' ' ')"
-assert_eq "kind column: first of core, header, agents, catalog; none for unsynced" "chore: kind agents=agents chore: kind header=header feat: kind both=core feat: kind catalog=catalog feat: kind core=core " "$kinds"
-assert_eq "one line per synced commit" "5" "$(printf '%s\n' "$OUT" | grep -c .)"
+assert_eq "kind column: first of agents, core, header, catalog; none for unsynced" "chore: kind agents=agents chore: kind header=header feat: kind agents and core=agents feat: kind both=core feat: kind catalog=catalog feat: kind core beside quoted paths=core feat: kind core=core " "$kinds"
+assert_eq "one line per synced commit" "7" "$(printf '%s\n' "$OUT" | grep -c .)"
+assert_eq "every line is a full sha and a kind" "" "$(printf '%s\n' "$OUT" | grep -Ev '^[0-9a-f]{40} (agents|core|header|catalog)$' || true)"
 
 # ---- empty group prints none; kernel unchanged ----
 fresh_repo

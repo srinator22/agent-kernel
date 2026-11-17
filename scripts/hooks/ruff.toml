@@ -1,0 +1,17 @@
+# ruff contract for the template-owned Python in this folder. Ruff uses the
+# closest config file, so this replaces a project's root ruff config for these
+# files: a project that runs "ruff check ." or "ruff format --check ." needs no
+# exclusion for them.
+#
+# Why only ruff's default rules and no format contract: these files are synced
+# from the template. Adopted-profile files reach a project only as DIFF reports
+# (never applied) while this config is applied, so stricter rules or a format
+# contract would fail every project's copy at the next sync. The template's own
+# check.sh (template mode) enforces this contract with a pinned ruff.
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[format]
+exclude = ["*.py"]

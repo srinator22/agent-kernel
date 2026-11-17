@@ -135,7 +135,12 @@ for reg in docs/preferences/*.md; do
     /^[ \t]*\|[ \t]*Kind[ \t]*\|[ \t]*Reference[ \t]*\|/ { t = 1; skip = 1; next }
     t && /^[ \t]*\|/ {
       if (skip) { skip = 0; next }
-      n = split($0, c, "|")
+      # An escaped pipe belongs to its cell, as preferences.py and
+      # session-context.sh read the registers.
+      row = $0
+      gsub(/\\[|]/, "\001", row)
+      n = split(row, c, "|")
+      for (i = 2; i <= 4; i++) gsub(/\001/, "|", c[i])
       kind = trim(c[2]); ref = trim(c[3]); owns = trim(c[4])
       gsub(/`/, "", ref)
       hit = area_hit
