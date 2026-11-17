@@ -527,4 +527,47 @@ to_crlf .work/TASK.md
 run ./scripts/tasklint.sh ship
 assert_rc "CRLF open assumption fails ship" 1
 
+
+# Unattended field.
+un_task() { printf '# Task: fixture\nMode: standard\n%s\n\n## Acceptance criteria\n- [ ] C1 -> tests/x_test.sh\n' "$1" > .work/TASK.md; }
+un_task "Unattended: yes - run scripts, edit owned files; report: .work/done/night.md"
+run ./scripts/tasklint.sh check
+assert_rc "a well-formed Unattended field passes" 0
+un_task "Unattended: no"
+run ./scripts/tasklint.sh check
+assert_rc "Unattended: no passes" 0
+printf '# Task: fixture\nMode: standard\n\n## Acceptance criteria\n- [ ] C1 -> tests/x_test.sh\n' > .work/TASK.md
+run ./scripts/tasklint.sh check
+assert_rc "an absent Unattended field passes" 0
+un_task "Unattended: yes"
+run ./scripts/tasklint.sh check
+assert_rc "yes with no actions or report fails" 1
+assert_contains "malformed field is explained" "Unattended must be"
+un_task "Unattended: yes - edit files"
+run ./scripts/tasklint.sh check
+assert_rc "yes without a report path fails" 1
+un_task "Unattended: yes - ; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "yes with empty actions fails" 1
+un_task "Unattended: maybe - x; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an unknown value fails" 1
+un_task "Unattended: yes - delete old branches; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming deletion is refused" 1
+assert_contains "refusal cites kernel rule 15" "kernel rule 15"
+un_task "Unattended: yes - git push --force the branch; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming force-push is refused" 1
+un_task "Unattended: yes - edit the kernel section; report: out.md"
+run ./scripts/tasklint.sh check
+assert_rc "an action naming kernel edits is refused" 1
+un_task "<!-- Unattended: yes - delete everything -->"
+run ./scripts/tasklint.sh check
+assert_rc "a commented-out Unattended line is ignored" 0
+un_task "Unattended: yes - run tests; report: out.md"
+to_crlf .work/TASK.md
+run ./scripts/tasklint.sh check
+assert_rc "a CRLF Unattended field passes" 0
+
 t_finish

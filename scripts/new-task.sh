@@ -60,6 +60,10 @@ cat > "$TASK_FILE" <<TEMPLATE
 Mode: $MODE
 Branch: $BRANCH
 Date: $DATE_UTC
+<!-- optional, for a run the owner leaves unattended: replace this comment with
+     one line "Unattended: yes - <pre-approved actions>; report: <path>"
+     (the owner's per-task approval scope; never deleting data, force-push or
+     kernel edits; scripts/tasklint.sh check validates it) -->
 
 ## Goal
 {{one paragraph}}

@@ -66,6 +66,14 @@ fi
 if [[ -f .work/TASK.md ]] && ! grep -q '{{title}}' .work/TASK.md; then
   echo "[session-context] In-progress task state (.work/TASK.md):"
   cat .work/TASK.md
+  # Unattended run: one line naming the owner's pre-approved scope and the report path.
+  un="$(grep -m1 -E '^Unattended:[[:space:]]*yes' .work/TASK.md 2>/dev/null || true)"
+  un="${un%$'\r'}"
+  un="${un#Unattended:}"
+  un="${un# }"
+  if [[ -n "$un" ]]; then
+    echo "[session-context] UNATTENDED RUN: ${un} (kernel rule 15 unchanged; stall rule: docs/procedures/longjob.md)"
+  fi
 fi
 
 # Prints each register's rules (ID and Rule) grouped by area, so a session
