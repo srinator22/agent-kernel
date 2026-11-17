@@ -413,6 +413,7 @@ if [[ ! -f .start-done ]]; then
     scripts/hooks/tests/test_refuse_shell_stdin.py
     tests/template/test_shell_stdin_hook.sh tests/template/test_hooks_dispatch.sh
     scripts/tree-id.sh tests/template/test_tree_id.sh
+    scripts/dream/fleet.py tests/template/test_dream_fleet.sh
     scripts/profiles.sh tests/template/test_profiles.sh
     scripts/start-reset-lessons.sh tests/template/test_start_reset_lessons.sh
   )
