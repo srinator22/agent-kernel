@@ -5,6 +5,8 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# A nested run under check.sh --quick exports QUICK=1; this file sets each lane itself.
+export QUICK=0
 make_fixture
 cp_script adr.sh
 D=docs/decisions
