@@ -158,10 +158,8 @@ fast_selftest() {
 # under a directory the tree lists as a summary entry (a directory with no
 # children listed, such as .codex/agents/). Reverse: every file the tree lists
 # must exist in the repository.
-blueprint_parity() {
-  local bp="$1" f entry kind path anc ok tree
-  shift
-  tree="$(awk '
+blueprint_tree() {
+  awk '
     function flush(   i, k, ind, isdir, nxt) {
       for (i = 1; i <= n; i++) {
         ind = lvl[i]
@@ -188,7 +186,13 @@ blueprint_parity() {
       n++; lvl[n] = lv; pth[n] = full; isd[n] = (name ~ /\/$/)
       if (isd[n]) stack[lv] = full
     }
-    END { flush() }' "$bp")"
+    END { flush() }' "$1"
+}
+
+blueprint_parity() {
+  local bp="$1" f entry kind path anc ok tree
+  shift
+  tree="$(blueprint_tree "$bp")"
   # Whole-line matches on the newline-framed tree, not printf | grep -q: an
   # early-exit reader can end the writer with SIGPIPE under pipefail once the
   # tree outgrows the pipe buffer ("printf: write error: Broken pipe").
@@ -210,6 +214,34 @@ blueprint_parity() {
     [[ "$kind" == F ]] || continue
     [[ -e "$path" ]] || echo "$bp section 2 lists $path but it does not exist in the repository"
   done <<< "$tree"
+}
+
+# blueprint_core_unlisted BLUEPRINT FILE...: print one problem per line for
+# each FILE under a core folder that section 2 does not list. Rule: a FILE is
+# listed when its full path is a tree entry, or when an ancestor directory is a
+# summary entry (a directory with no children listed, e.g. .codex/agents/).
+# Prefer explicit listing; a summary entry is the documented exception. Files
+# outside the core folders are not checked. There are no other exclusions.
+blueprint_core_unlisted() {
+  local bp="$1" f anc skip tree c
+  shift
+  tree="$(blueprint_tree "$bp")"
+  local nl=$'\n'
+  for f in "$@"; do
+    skip=1
+    for c in scripts/ tests/template/ docs/procedures/ docs/rules/ docs/decisions/ docs/profiles/ .claude/ .codex/ .agents/ .github/; do
+      if [[ "$f" == "$c"* ]]; then skip=0; break; fi
+    done
+    (( skip )) && continue
+    case "$nl$tree$nl" in *"${nl}F $f${nl}"*) continue ;; esac
+    anc="$f"
+    while [[ "$anc" == */* ]]; do
+      anc="${anc%/*}"
+      case "$nl$tree$nl" in *"${nl}L $anc/${nl}"*) skip=1; break ;; esac
+    done
+    (( skip )) && continue
+    echo "$bp section 2 does not list tracked core file $f (add it to docs/BLUEPRINT.md section 2)"
+  done
 }
 # END blueprint-parity
 
@@ -557,6 +589,14 @@ if [[ ! -f .start-done ]]; then
   while IFS= read -r msg; do
     if [[ -n "$msg" ]]; then terr "$msg"; fi
   done < <(blueprint_parity docs/BLUEPRINT.md "${required[@]}")
+
+  # 5j2. Reverse direction: every tracked file under a core folder is listed
+  # in section 2 (ADRs and scripts added without a tree line went unnoticed).
+  tracked_core=()
+  while IFS= read -r f; do tracked_core+=("$f"); done < <(git ls-files -- scripts tests/template docs/procedures docs/rules docs/decisions docs/profiles .claude .codex .agents .github)
+  while IFS= read -r msg; do
+    if [[ -n "$msg" ]]; then terr "$msg"; fi
+  done < <(blueprint_core_unlisted docs/BLUEPRINT.md "${tracked_core[@]+"${tracked_core[@]}"}")
 
   # 5k. Template Python carries its own ruff contract. Projects that run
   # "ruff check ." or "ruff format --check ." with stricter rules must not
