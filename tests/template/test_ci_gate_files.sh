@@ -3,7 +3,8 @@
 # test_check_always*.sh file, their shared lib and scripts/private-terms.sh,
 # by evaluating the workflow's own case pattern; and gate-label has no skip
 # path (always(), failing itself when the paths job did not succeed), since a
-# skipped required check counts as passing.
+# skipped required check counts as passing; adopted-project, the only run of
+# the started copy, is unconditional.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -37,11 +38,17 @@ for f in "${files[@]}"; do
 done
 if is_gate docs/procedures/ship.md; then t_bad "a procedure matched the gate list"; else t_ok "a non-gate file stays out"; fi
 
-job="$(awk '/^  gate-label:/ { f = 1; print; next } f && /^  [a-z-]+:$/ { exit } f' "$CI")"
+job="$(awk '/^  gate-label:/ { f = 1; print; next } f && /^  [a-z0-9-]+:$/ { exit } f' "$CI")"
 grep -qF "if: \${{ always() && github.event_name == 'pull_request' }}" <<< "$job" \
   && t_ok "gate-label runs on every pull request" || t_bad "gate-label is not if: always() on pull requests"
 grep -qF 'needs.paths.result' <<< "$job" && grep -qF '!= "success"' <<< "$job" \
   && t_ok "gate-label fails itself when paths did not succeed" || t_bad "gate-label does not fail on a failed or skipped paths job"
 grep -q '^  private-terms:$' "$CI" && t_ok "the private-terms job exists" || t_bad "no private-terms job in ci.yml"
+ad="$(awk '/^  adopted-project:/ { f = 1; next } f && /^  [a-z0-9-]+:$/ { exit } f' "$CI")"
+if grep -qxF '    if: ${{ !cancelled() }}' <<< "$ad" && ! grep -q 'needs:' <<< "$ad"; then
+  t_ok "adopted-project runs on every pull request and push (the only started-copy run)"
+else
+  t_bad "adopted-project is conditional; the started copy would go unchecked on some changes"
+fi
 
 t_finish

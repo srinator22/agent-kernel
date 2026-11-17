@@ -256,13 +256,14 @@ jobs:
   # of docs/procedures/start.md that need no human (the stack-check.sh stub,
   # the Profiles, Template and status lines, the sync record, the lessons
   # reset, the verify skill, .start-done), commit, then run ./scripts/check.sh
-  # there. The catalogs a real project does not carry are left out, as
-  # tests/template/test_check_always.sh does. Linux only; on pull requests
-  # that change scripts/, tests/template/ or the workflow (the paths job) and
-  # on every push to main. Skipped at the job level otherwise.
+  # there. The catalogs a real project does not carry are left out.
+  # Linux only, on every pull request and
+  # push, and a required check on main: it is the only run of the started
+  # copy (test_check_always_started.sh no longer runs it a second time inside
+  # check.sh), and AGENTS.md, BLUEPRINT, profile or skill changes can break an
+  # adopted project as surely as a script change. About a minute.
   adopted-project:
-    needs: paths
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || needs.paths.outputs.selftest_inputs == 'true') }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:

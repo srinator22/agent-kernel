@@ -73,8 +73,8 @@ every pull request would be noise.
 The owner made the label binding ("Do those", answering the 2026-11-18
 rating): `gate-label` runs on every pull request with `always()` and fails
 itself when the paths job did not succeed, so a skipped job can no longer
-count as passing; main's branch protection requires `check`, `gate-label`
-and `private-terms` with `enforce_admins` on, so the owner's token, which
+count as passing; main's branch protection requires `check`, `gate-label`,
+`private-terms` and `adopted-project` with `enforce_admins` on, so the owner's token, which
 agents use, cannot merge past them either. The gate-file list now also
 holds `tests/template/test_check_always*.sh` (the file split into six) with
 their shared `tests/template/check_always_lib.sh`, and
