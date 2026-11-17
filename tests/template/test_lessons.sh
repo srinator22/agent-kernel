@@ -180,6 +180,11 @@ assert_rc "a profile that is not adopted does not raise the cap" 1
 printf -- '- Profiles: p1\n' > AGENTS.md
 run ./scripts/lessons.sh check
 assert_rc "an adopted profile raises the cap" 0
+mv scripts/profiles.sh scripts/profiles.sh.off
+run ./scripts/lessons.sh check
+assert_rc "a missing profiles.sh fails check" 1
+assert_contains "the missing parser is named" "scripts/profiles.sh is missing"
+mv scripts/profiles.sh.off scripts/profiles.sh
 rm -rf docs/profiles AGENTS.md
 drop_skill s3
 run ./scripts/lessons.sh check

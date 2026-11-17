@@ -46,7 +46,7 @@ run ./scripts/start-reset-lessons.sh
 assert_rc "reset on the template files passes" 0
 for f in "${FILES[@]}"; do is_prefix "$f keeps a leading part of the template file" "$L/$f" "$FIX.orig/$f"; done
 assert_eq "INDEX.md keeps no lesson line except the format example" "1" "$(grep -c '^- \[L[0-9]' "$L/INDEX.md")"
-assert_file_has "INDEX.md keeps the format example" "$L/INDEX.md" "retire-when: <condition>)"
+assert_file_has "INDEX.md keeps the format example" "$L/INDEX.md" "retire-when: <condition>"
 assert_eq "PENDING.md keeps no entry heading" "0" "$(grep -c '^### ' "$L/PENDING.md")"
 assert_eq "PENDING.md ends with the last format field" "- retire-when:" "$(tail -n 1 "$L/PENDING.md")"
 assert_eq "UPSTREAM.md keeps no entry heading" "0" "$(grep -c '^### ' "$L/UPSTREAM.md")"

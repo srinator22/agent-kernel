@@ -476,6 +476,12 @@ is_placeholder() { [[ "$1$3$5$7" == "1111" && -z "$2$4$6$8" ]]; }
 cmd_check() {
   local errs=() approved_count=0 line lineno id seen=" "
 
+  # adopted_profiles runs inside command substitutions, where a missing
+  # parser would read as "no profile adopted" and pass; name it here instead.
+  if [[ -f AGENTS.md && ! -f "$ROOT/scripts/profiles.sh" ]]; then
+    errs+=("scripts/profiles.sh is missing; lessons.sh reads the AGENTS.md Profiles line through it (a core file: restore it from the template)")
+  fi
+
   # Approved lessons: cap, fields, unique ids.
   while IFS="$US" read -r lineno line; do
     [[ -n "$lineno" ]] || continue

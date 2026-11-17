@@ -24,7 +24,7 @@ hook() {
   chmod +x "$D/$1/$2"
 }
 dispatch() { # EVENT [PAYLOAD]
-  OUT="$(printf '%s' "${2:-$PAYLOAD}" | bash "$FIX/scripts/hooks-dispatch.sh" "$1" 2>&1)"; RC=$?
+  OUT="$(bash "$FIX/scripts/hooks-dispatch.sh" "$1" < <(printf '%s' "${2:-$PAYLOAD}") 2>&1)"; RC=$?
 }
 
 # ---- nothing to run ----

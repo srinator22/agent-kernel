@@ -33,8 +33,21 @@ fail() { echo "CHECK FAILED: $*" >&2; exit 1; }
 FAST_NOTICE="check --fast: NOT the full gate - self-tests ran only for the changed files; run ./scripts/check.sh once at task finish (CI runs the full gate)"
 if (( FAST )); then
   echo "$FAST_NOTICE"
-  trap 'rc=$?; echo "$FAST_NOTICE (exit $rc)"' EXIT
 fi
+# One EXIT trap for both exit lines: a second trap would replace the first.
+# TREE_LINE is set before the mode gates; the tree line is printed on a clean
+# full run only (ADR 0017), since a --quick or --fast run is not the verify
+# output a reviewer may cite.
+TREE_LINE=0
+on_exit() {
+  local rc=$? tid
+  if (( TREE_LINE && rc == 0 && ! QUICK )); then
+    tid="$(bash scripts/tree-id.sh 2>/dev/null)" || tid="N/A - scripts/tree-id.sh failed or is missing"
+    echo "check.sh: verified tree $tid"
+  fi
+  if (( FAST )); then echo "$FAST_NOTICE (exit $rc)"; fi
+}
+trap on_exit EXIT
 
 # BEGIN fast-selection
 # fast_changed: print every path changed since the diff base (CHECK_FAST_BASE,
@@ -295,8 +308,8 @@ if [[ -f scripts/private-terms.sh ]]; then
   bash scripts/private-terms.sh check || gerr "scripts/private-terms.sh check failed (a private term is in the repository; the lines above name where, masked)"
 fi
 
-# On a clean exit only, name the tree this run verified; the reviewer copies it into its verdict and tasklint ship compares it (ADR 0017). Set here because both modes exit below.
-trap 'if (( $? == 0 )); then tid="$(bash scripts/tree-id.sh 2>/dev/null)" || tid="N/A - scripts/tree-id.sh failed or is missing"; echo "check.sh: verified tree $tid"; fi' EXIT
+# The tree line is armed here: both modes exit below, and on_exit prints it on a clean full run (ADR 0017).
+TREE_LINE=1
 
 # Step 5: template-mode gate. Before start runs there is no stack to
 # check, so the gauntlet checks the template itself: a green badge means

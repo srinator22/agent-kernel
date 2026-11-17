@@ -50,7 +50,7 @@ write_verify() {
 sec_project() {
 # ---- project mode ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
+cp_script check.sh kernel-hash.sh lessons.sh profiles.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 echo "src" > src.txt
@@ -262,7 +262,7 @@ t_cleanup
 sec_selftest() {
 # ---- project mode with tests/template present: selftest runs in the always section ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh selftest.sh
+cp_script check.sh kernel-hash.sh lessons.sh profiles.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh selftest.sh tree-id.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 touch .start-done
@@ -307,7 +307,7 @@ t_cleanup
 sec_template() {
 # ---- template mode: a clean fixture still exits 0 ----
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh selftest.sh tasklint.sh
+cp_script check.sh kernel-hash.sh lessons.sh profiles.sh taskgraph.sh adr.sh selftest.sh tasklint.sh
 # The required list is read from the real check.sh so the fixture cannot drift.
 mapfile -t REQUIRED < <(sed -n '/^  required=(/,/^  )/p' "$T_CHECK" | sed '1d;$d' | tr -s ' ' '\n' | sed '/^$/d')
 BP="docs/BLUEPRINT.md"
@@ -362,6 +362,7 @@ commit_fixture
 run ./scripts/check.sh
 assert_rc "template mode exits 0 on a clean fixture" 0
 assert_contains "template mode reports success" "template self-test: OK"
+assert_contains "a clean full run names the tree it verified" "check.sh: verified tree "
 assert_contains "template mode ran the always section" "lessons: OK"
 # No self-test may reach a real ruff runner or the network (lib.sh exports the fake).
 assert_contains "the ruff step names the fake runner and its version" "template ruff: TEMPLATE_RUFF ($TEMPLATE_RUFF), ruff 0.16.10 (fake-ruff.sh)"
@@ -544,7 +545,7 @@ sec_fast() {
 # scripts/selftest.sh here is a stand-in for its contract: "selftest.sh
 # FILE..." runs only FILE..., and no argument runs every test file.
 make_fixture
-cp_script check.sh kernel-hash.sh lessons.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
+cp_script check.sh kernel-hash.sh lessons.sh profiles.sh taskgraph.sh adr.sh tasklint.sh doc-eval.sh
 write_agents
 ./scripts/kernel-hash.sh --update >/dev/null
 touch .start-done
@@ -567,6 +568,7 @@ run ./scripts/check.sh --fast
 assert_rc "--fast with nothing changed passes" 0
 assert_contains "--fast says first that it is not the full gate" "check --fast: NOT the full gate"
 assert_contains "--fast repeats the notice on exit with the status" "(CI runs the full gate) (exit 0)"
+assert_not_contains "--fast names no verified tree (it is not the verify output)" "check.sh: verified tree"
 assert_contains "nothing changed: no self-test runs" "no self-test maps to the changed files; none run"
 assert_not_contains "nothing changed: the runner is not called" "selftest stub"
 assert_contains "--fast is the quick lane for stack-check.sh" "stack args: --quick"

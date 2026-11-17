@@ -98,7 +98,7 @@ stray_check() {
     recs="$(find "$k" -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]-*.md' | sed 's|^\./||' | LC_ALL=C sort)"
     [[ -n "$recs" ]] || continue
     n="$(printf '%s\n' "$recs" | wc -l | tr -d ' ')"
-    echo "$k/ holds $n decision record(s) ($(printf '%s\n' "$recs" | head -n 1)) but adr.sh checks $DIR/; name the folder on the AGENTS.md Project decisions line '- Decision records: $k' or move the records into $DIR/"
+    echo "$k/ holds $n decision record(s) ($(sed -n 1p <<< "$recs")) but adr.sh checks $DIR/; name the folder on the AGENTS.md Project decisions line '- Decision records: $k' or move the records into $DIR/"
   done
 }
 
@@ -139,7 +139,7 @@ origin_check() {
     num="${BASH_REMATCH[1]}"
     if ! grep -qxF -- "$f" <<< "$remote_files"; then
       added=$((added + 1))
-      other="$(grep -E "/$num-[^/]*\.md$" <<< "$remote_files" | head -n 1 || true)"
+      other="$(grep -E "/$num-[^/]*\.md$" <<< "$remote_files" | sed -n 1p || true)"
       if [[ -n "$other" ]]; then
         collide=$((collide + 1))
         errs+=("$f: number $num is already taken on origin/$branch by $other; number the ADRs this branch adds from $(printf '%04d' $((rmax + 1))) (after origin/$branch's last, $(printf '%04d' "$rmax")): git mv the file and fix its title line")
