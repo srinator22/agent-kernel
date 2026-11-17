@@ -416,6 +416,14 @@ assert_contains "the roster twin is named" "docs/roster/agents/lead.md: no Codex
 printf 'name = "lead"\ndescription = "x"\ndeveloper_instructions = """\nx\n"""\n' > docs/roster/agents/lead.toml
 run ./scripts/lessons.sh check
 assert_rc "a complete roster agent pair passes" 0
+# One awk judges all files of a class; an empty file yields no records and is
+# still judged, and the file after it keeps its own verdict.
+: > docs/roster/agents/aaa.md; : > docs/roster/agents/aaa.toml
+run ./scripts/lessons.sh check
+assert_contains "an empty roster agent is judged" "docs/roster/agents/aaa.md: frontmatter must open with ---"
+assert_contains "an empty roster twin is judged" "docs/roster/agents/aaa.toml: missing developer_instructions field"
+assert_not_contains "the agent after the empty one stays clean" "docs/roster/agents/lead"
+rm docs/roster/agents/aaa.md docs/roster/agents/aaa.toml
 # Roster inventory: the README's advertised roles and the shipped agents agree.
 printf '# Roster\n\n| Agent | Kind |\n|---|---|\n| `lead` | lead |\n| `ghost` | lead |\n' > docs/roster/README.md
 run ./scripts/lessons.sh check
