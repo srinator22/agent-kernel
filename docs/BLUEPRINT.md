@@ -147,6 +147,7 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
+  tree-id.sh                  # working-tree tree id for the verify line and the review verdict (ADR 0017)
   profiles.sh                 # the one parser of the AGENTS.md Profiles line (template-sync, lessons)
   feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
   find-python.sh              # sourced helper: PY is the first of python3, python that runs as Python 3
@@ -204,6 +205,7 @@ tests/
     test_session_context.sh   # mode line, git priming, task state, template update notice
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
+    test_tree_id.sh           # tracked, untracked, ignored and deleted files; the real index untouched
     test_profiles.sh          # Profiles line forms adopted and refused; template-sync uses the parser
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
     test_selftest.sh          # quarantine list, n/a lines, summary counts, parallel slots, named files, INT and TERM stop, exec-bit wiring
@@ -414,9 +416,9 @@ Minimal background-job wrapper: `start <name> -- <command>` (nohup, log to `.wor
 **ship.md** (the done-gate; run when a logical change is ready to land):
 
 1. Confirm scope: `git status`; unrelated or untracked work is preserved and excluded; resolve every untracked file deliberately (stage it or ignore it, never leave it ambiguous).
-2. Run `./scripts/check.sh` and keep its complete output. Anything red: stop and fix first.
-3. Reviewer gate: the reviewer receives the diff, `.work/TASK.md` and that verify output (Amendment 3); independent review verdict, ending with its Evidence checked list, present in `.work/TASK.md` (kernel rule 5). Quick-mode tasks may skip the reviewer only if the diff touches no logic (docs/config-comments), and say so.
-4. Version: bump the single source-of-truth version file per semver (patch fix, minor feature, major breaking; pre-1.0 per Project decisions).
+2. Version: bump the single source-of-truth version file per semver (patch fix, minor feature, major breaking; pre-1.0 per Project decisions). It comes before verification so the verified tree holds it (ADR 0017).
+3. Run `./scripts/check.sh` and keep its complete output; a clean run ends with `check.sh: verified tree <id>` (`scripts/tree-id.sh`). Anything red: stop and fix first.
+4. Reviewer gate: the reviewer receives the diff, `.work/TASK.md`, that verify output (Amendment 3) and the `scripts/lessons.sh match` output for the diff (ADR 0017); independent review verdict, holding `Reviewed tree: <id>` and ending with its Evidence checked list, present in `.work/TASK.md` (kernel rule 5); `scripts/tasklint.sh ship` fails a PASS verdict whose tree differs from the current one. Quick-mode tasks may skip the reviewer only if the diff touches no logic (docs/config-comments), and say so.
 5. Regenerate CHANGELOG.md via git-cliff (never hand-edit; the detail lives in commit bodies).
 6. Conventional commit; the body carries why, and for fixes the exact issue, fix, and files/functions touched.
 7. Push per the recorded workflow. Then `scripts/ci-watch.sh` - delegate to the monitor agent when available. A push is complete only when every required check for the exact SHA is terminal-success; on failure: inspect logs, fix root cause, verify locally, push the replacement, monitor the replacement SHA.
