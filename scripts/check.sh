@@ -338,11 +338,8 @@ if [[ ! -f .start-done ]]; then
   nonexec="$(git ls-files -s scripts/ | awk '$1 != "100755" && $4 ~ /\.sh$/ {print $4}')"
   [[ -z "$nonexec" ]] || terr "scripts lost the executable bit: $nonexec"
 
-  # 5h. Every ADR a procedure or rule cites exists.
-  for ref in $(grep -ohE 'docs/decisions/[0-9]{4}' docs/procedures/*.md docs/rules/*.md docs/profiles/*/*.md 2>/dev/null | sort -u); do
-    n="${ref##*/}"
-    ls docs/decisions/"$n"-*.md >/dev/null 2>&1 || terr "cited ADR does not exist: $ref"
-  done
+  # 5h. Every ADR a procedure, rule or profile cites exists: scripts/adr.sh
+  # check verifies it in step 4d, in template mode and after start alike.
 
   # 5i. The pristine check.sh fixture the self-tests run against is this file.
   # After start wires the stack, the fixture keeps the template version.
