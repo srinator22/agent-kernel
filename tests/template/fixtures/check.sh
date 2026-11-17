@@ -13,6 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+CHECK_START=$SECONDS
 FULL_MUTATION=0
 QUICK=0
 FAST=0
@@ -72,26 +73,52 @@ fast_changed() {
 # run, sorted, one per line, or the single word ALL. When unsure it runs more,
 # never fewer: a changed test file runs itself; any other path runs every test
 # file whose text names its basename (a script, fixture, doc or lib.sh); a
-# changed path under scripts/, tests/template/, .claude/ or .codex/ that no
-# test names runs every test, since untested tooling may still break one.
+# changed path under scripts/, tests/template/, .claude/ or .codex/ widens to
+# every test when no test names it (untested tooling may still break one),
+# when it no longer exists (a deleted or renamed script: tests that reach it
+# indirectly cannot be traced), or when every test names it (lib.sh). One
+# reason line per selection goes to stderr ("changed-test", "owner:<path>",
+# "widen:<path>") so a surprising selection can be traced.
 fast_select() {
-  local f b t hit all=0 sel=()
+  local f b t hit nhit all=0 sel=() ntests=0
   local tests=(tests/template/test_*.sh)
+  for t in "${tests[@]}"; do [[ -f "$t" ]] && ntests=$((ntests + 1)); done
   while IFS= read -r f || [[ -n "$f" ]]; do
     [[ -n "$f" ]] || continue
     case "$f" in
       tests/template/test_*.sh)
-        if [[ -f "$f" ]]; then sel+=("$f"); fi
+        if [[ -f "$f" ]]; then
+          sel+=("$f")
+          echo "check --fast: select $f (changed-test)" >&2
+        fi
         continue ;;
+    esac
+    case "$f" in
+      scripts/*|tests/template/*|.claude/*|.codex/*)
+        if [[ ! -e "$f" ]]; then
+          all=1
+          echo "check --fast: widen to every test (widen:$f, deleted or renamed)" >&2
+          continue
+        fi ;;
     esac
     b="${f##*/}"
     hit=0
+    nhit=0
     for t in "${tests[@]}"; do
       [[ -f "$t" ]] || continue
-      if grep -qF -- "$b" "$t"; then hit=1; sel+=("$t"); fi
+      if grep -qF -- "$b" "$t"; then hit=1; nhit=$((nhit + 1)); sel+=("$t"); fi
     done
-    if (( ! hit )); then
-      case "$f" in scripts/*|tests/template/*|.claude/*|.codex/*) all=1 ;; esac
+    if (( hit && nhit == ntests )); then
+      all=1
+      echo "check --fast: widen to every test (widen:$f, every test names it)" >&2
+    elif (( hit )); then
+      echo "check --fast: select $nhit test(s) that name $b (owner:$f)" >&2
+    else
+      case "$f" in
+        scripts/*|tests/template/*|.claude/*|.codex/*)
+          all=1
+          echo "check --fast: widen to every test (widen:$f, no test names it)" >&2 ;;
+      esac
     fi
   done
   if (( all )); then echo ALL; return 0; fi
@@ -276,13 +303,52 @@ nonexec="$(git ls-files -s -- scripts tests/template | awk '$1 != "100755" && $4
 # 4g. The template's own scripts are tested (docs/procedures/tests.md), in
 # every mode, whenever the tests exist. --fast runs only the tests the
 # changed files map to (fast_selftest above).
+#
+# The full run reuses a green result (scripts/selftest-reuse.sh): when no path
+# named in tests/template/selftest-inputs.list changed since the last passing
+# run on this checkout, and neither CI=true nor CHECK_SELFTEST=full is set, the
+# self-tests are skipped and the line says so. Any doubt (no record, a changed
+# input, a missing list) runs them, and a passing run outside CI records the
+# key. A project synced from an older template has neither file and always
+# runs them.
+SELFTEST_DESC="skipped"
 if [[ -d tests/template ]]; then
+  st_start=$SECONDS
   if (( FAST )); then
     fast_selftest
+    SELFTEST_DESC="$((SECONDS - st_start))s"
   else
-    ./scripts/selftest.sh || gerr "scripts/selftest.sh failed"
+    reuse_out=""
+    reuse_ok=0
+    reuse_able=0
+    if [[ -f scripts/selftest-reuse.sh && -f tests/template/selftest-inputs.list ]]; then
+      reuse_able=1
+      if [[ "${CHECK_SELFTEST:-}" != full && "${CI:-}" != true ]] && reuse_out="$(bash scripts/selftest-reuse.sh check 2>&1)"; then
+        reuse_ok=1
+      fi
+    fi
+    if (( reuse_ok )); then
+      echo "$reuse_out (CHECK_SELFTEST=full forces a run)"
+      SELFTEST_DESC="reused"
+    else
+      if ./scripts/selftest.sh; then
+        if (( reuse_able )) && [[ "${CI:-}" != true ]]; then
+          bash scripts/selftest-reuse.sh record || echo "WARNING: scripts/selftest-reuse.sh record failed; the next run will not reuse this result."
+        fi
+      else
+        gerr "scripts/selftest.sh failed"
+      fi
+      SELFTEST_DESC="$((SECONDS - st_start))s"
+    fi
   fi
 fi
+# timing_line: one line per successful full or fast run, so a slow step shows.
+timing_line() {
+  local stack="${1:-}" line
+  line="check.sh: timing: selftest $SELFTEST_DESC"
+  [[ -z "$stack" ]] || line="$line, stack ${stack}s"
+  echo "$line, total $((SECONDS - CHECK_START))s"
+}
 
 # 4h. The "- Template: <url> <ref>" line names the last recorded template
 # sync (docs/procedures/upstream.md). Offline; nothing to check in template
@@ -416,6 +482,8 @@ if [[ ! -f .start-done ]]; then
     scripts/dream/fleet.py tests/template/test_dream_fleet.sh
     scripts/profiles.sh tests/template/test_profiles.sh
     scripts/start-reset-lessons.sh tests/template/test_start_reset_lessons.sh
+    scripts/selftest-reuse.sh tests/template/selftest-inputs.list
+    tests/template/test_selftest_reuse.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -568,6 +636,7 @@ if [[ ! -f .start-done ]]; then
     fail "template self-test found the problems listed above"
   fi
   echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, ADR refs, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format, doc questions, selftest, preference registers, private terms)"
+  timing_line
   exit 0
 fi
 
@@ -606,5 +675,7 @@ fi
 stack_args=()
 if (( FULL_MUTATION )); then stack_args+=(--full-mutation); fi
 if (( QUICK )); then stack_args+=(--quick); fi
+stack_start=$SECONDS
 bash ./scripts/stack-check.sh ${stack_args[@]+"${stack_args[@]}"} || fail "scripts/stack-check.sh failed"
 echo "check: OK (always section and scripts/stack-check.sh)"
+timing_line "$((SECONDS - stack_start))"
