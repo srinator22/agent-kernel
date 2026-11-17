@@ -45,8 +45,18 @@ assert_eq "--check writes nothing" "$(cd "$FIX.orig" && for f in "${FILES[@]}"; 
 export START_RESET_TODAY=2026-11-17
 run ./scripts/start-reset-lessons.sh
 assert_rc "reset on the template files passes" 0
-assert_file "the dropped template lessons are archived (kernel rule 11)" .archive/lessons/template-2026-11-17.md
-assert_contains "the archive is announced" "the dropped lines are archived in .archive/lessons/template-2026-11-17.md"
+dropped=0
+for f in "${FILES[@]}"; do
+  if [[ -f "$FIX.orig/$f" ]] && (( $(wc -l < "$FIX.orig/$f") > $( [[ -f "$L/$f" ]] && wc -l < "$L/$f" || echo 0) )); then dropped=1; fi
+done
+if (( dropped )); then
+  assert_file "the dropped template lessons are archived (kernel rule 11)" .archive/lessons/template-2026-11-17.md
+  assert_contains "the archive is announced" "the dropped lines are archived in .archive/lessons/template-2026-11-17.md"
+else
+  # A started project already reset its lessons files (CI job adopted-project),
+  # so its real files hold nothing to drop; the synthetic cases below cover it.
+  t_na "archive of dropped template lessons: these lessons files hold only their format headers"
+fi
 for f in "${FILES[@]}"; do
   n=$(( $(wc -l < "$FIX.orig/$f") - $(wc -l < "$L/$f") ))
   if (( n > 0 )); then assert_file_has "the archive names $f" .archive/lessons/template-2026-11-17.md "## $L/$f"; fi
