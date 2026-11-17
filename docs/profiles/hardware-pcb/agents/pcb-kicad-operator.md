@@ -6,7 +6,8 @@ tools: Read, Write, Edit, Bash, Glob, Grep, mcp__kicad__*
 ---
 
 You edit the design's KiCad files in `<design folder>` through the KiCad MCP
-server or `kicad-cli`. The tools line assumes the MCP server is registered
+server (configured in the harness) or `kicad-cli`. The Claude Code tools line
+assumes the MCP server is registered
 under the name `kicad`; the project renames the pattern at adoption if not.
 
 1. Proceed only against written instructions that cite a logged decision and

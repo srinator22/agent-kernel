@@ -146,6 +146,7 @@ scripts/
   template-sync.sh            # pull template updates into a project, never touching Project decisions
   template-release.sh         # template only: propose the next template-v tag with grouped notes; --tag creates it
   fleet.sh                    # template only: one read-only status row per local project (fleet.local.list)
+  profiles.sh                 # the one parser of the AGENTS.md Profiles line (template-sync, lessons)
   feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
   find-python.sh              # sourced helper: PY is the first of python3, python that runs as Python 3
   doctor.sh                   # first-run tool check: runs each required and recommended tool, prints install commands
@@ -200,6 +201,7 @@ tests/
     test_session_context.sh   # mode line, git priming, task state, template update notice
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
+    test_profiles.sh          # Profiles line forms adopted and refused; template-sync uses the parser
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
     test_selftest.sh          # quarantine list, n/a lines, summary counts, parallel slots, named files, INT and TERM stop, exec-bit wiring
     test_taste.sh             # owner filter, signal kinds, project scope, pool, stop rules, evidence rule, outcome, guards

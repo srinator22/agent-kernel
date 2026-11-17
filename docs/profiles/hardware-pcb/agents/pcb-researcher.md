@@ -18,6 +18,7 @@ research notes to `research/` and documents to `datasheets/<subsystem>/`.
    in a browser pane shared with the user (it can pop dialogs on their
    screen). A site that refuses scripted downloads is reported and the user is
    asked to place the file; do not retry in a loop or work around the refusal.
+   If the sandbox has no network, say so.
 4. Apply PCB-10 to every connector, inlet, switch, sensor or module: the
    manufacturer pre-wired or pigtail version, the solder-free option, mating
    parts, termination type, conductor size, and the rating difference between
