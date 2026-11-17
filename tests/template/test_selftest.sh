@@ -4,7 +4,13 @@
 # file that does not exist fails the run; an unlisted failing test still
 # fails; n/a lines of passing tests show in the normal output; the summary
 # line counts passed, failed and quarantined files; the lib.sh fixtures the
-# tests build leave no temp folders behind.
+# tests build leave no temp folders behind. Parallel runs: files run
+# SELFTEST_JOBS at a time (default the core count capped at 4, --serial one),
+# a finished slot is refilled at once (wait -n and the SELFTEST_POLL=1 poll),
+# results print in file order; INT and TERM stop every running file; test
+# files named on the command line run alone; T_EXEC_CHECK=1 and the one
+# executable-bit probe reach every file. Cases that need two files at once
+# wait on marker files with a bounded loop, never on a fixed delay.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
@@ -206,5 +212,144 @@ run env TMPDIR="$FIX/tmpcheck" ./scripts/selftest.sh
 assert_rc "a failing run still fails" 1
 assert_eq "a failing run leaves nothing in TMPDIR" "" "$(ls -A "$FIX/tmpcheck")"
 chmod +x tests/template/test_*.sh
+
+# ---- test files named on the command line ----
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template other sub
+printf '#!/usr/bin/env bash\necho "  ok   a passes"\nexit 0\n' > tests/template/test_a.sh
+printf '#!/usr/bin/env bash\necho "  FAIL b fails"\nexit 1\n' > tests/template/test_b.sh
+printf '#!/usr/bin/env bash\necho "  ok   c passes"\nexit 0\n' > tests/template/test_c.sh
+printf '#!/usr/bin/env bash\nexit 0\n' > other/test_a.sh
+chmod +x tests/template/test_*.sh other/test_a.sh
+run ./scripts/selftest.sh tests/template/test_a.sh
+assert_rc "one named file runs alone and passes" 0
+assert_contains "only the named file is counted" "selftest: 1 passed, 0 failed, 0 quarantined (1 test files)"
+assert_not_contains "an unnamed failing file does not run" "test_b.sh"
+run ./scripts/selftest.sh "$FIX/tests/template/test_c.sh" ./tests/template/test_b.sh tests/template/test_c.sh
+assert_rc "a named failing file fails the run" 1
+assert_contains "absolute, ./ and repeated names: each file runs once" "selftest: 1 passed, 1 failed, 0 quarantined (2 test files)"
+pos_b="$(printf '%s\n' "$OUT" | grep -n 'tests/template/test_b.sh' | head -n 1 | cut -d: -f1)"
+pos_c="$(printf '%s\n' "$OUT" | grep -n 'tests/template/test_c.sh' | head -n 1 | cut -d: -f1)"
+assert_eq "named files report in file order, not argument order" "yes" "$([[ -n "$pos_b" && -n "$pos_c" && "$pos_b" -lt "$pos_c" ]] && echo yes || echo no)"
+assert_not_contains "the unnamed file does not run" "test_a.sh"
+OUT="$(cd sub && ../scripts/selftest.sh -v ../tests/template/test_a.sh 2>&1)"; RC=$?
+assert_rc "a path relative to the caller's folder is found" 0
+assert_contains "-v works with named files" "a passes"
+run env SELFTEST_JOBS=1 ./scripts/selftest.sh tests/template/test_a.sh tests/template/test_c.sh
+assert_contains "named files run under SELFTEST_JOBS=1" "selftest: 2 passed, 0 failed, 0 quarantined (2 test files)"
+run ./scripts/selftest.sh tests/template/test_zz.sh
+assert_rc "a named file that does not exist is refused" 2
+assert_contains "the missing file is named" "no such test file: tests/template/test_zz.sh"
+run ./scripts/selftest.sh scripts/selftest.sh
+assert_rc "a named file that is not a test file is refused" 2
+assert_contains "the non-test file is named" "scripts/selftest.sh is not a tests/template/test_*.sh file"
+run ./scripts/selftest.sh other/test_a.sh
+assert_rc "a test_*.sh outside tests/template is refused" 2
+assert_contains "the outside file is named" "other/test_a.sh is not a tests/template/test_*.sh file"
+run ./scripts/selftest.sh tests/template
+assert_rc "a folder is refused" 2
+echo 'tests/template/test_b.sh # owner: fix-b date: 2026-11-08' > tests/quarantine.list
+run ./scripts/selftest.sh tests/template/test_b.sh
+assert_rc "a named quarantined file is skipped, not run" 0
+assert_contains "it is named as quarantined" "selftest: 0 passed, 0 failed, 1 quarantined (1 test files)"
+rm -f tests/quarantine.list
+
+# ---- a finished slot is refilled at once ----
+# Two slots, three files: a holds its slot until c has started, b ends at
+# once. c can start only in b's slot while a still runs, so a passes only when
+# a slot is refilled as soon as any file finishes, not when the oldest does.
+# The bounded wait in a only matters when c never starts (a failure).
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template
+cat > tests/template/test_a.sh <<'TA'
+#!/usr/bin/env bash
+for _ in $(seq 1 200); do [[ -e "$SELFTEST_DIR/c.started" ]] && break; sleep 0.1; done
+[[ -e "$SELFTEST_DIR/c.started" ]] || { echo "  FAIL a never saw c start"; exit 1; }
+echo "  ok   a saw c start"
+TA
+printf '#!/usr/bin/env bash\necho "  ok   b ends at once"\n' > tests/template/test_b.sh
+printf '#!/usr/bin/env bash\ntouch "$SELFTEST_DIR/c.started"\necho "  ok   c started"\n' > tests/template/test_c.sh
+chmod +x tests/template/test_*.sh
+export SELFTEST_DIR="$FIX/sync"
+for mode in wait-n poll; do
+  rm -rf "$SELFTEST_DIR"; mkdir -p "$SELFTEST_DIR"
+  if [[ "$mode" == poll ]]; then run env SELFTEST_JOBS=2 SELFTEST_POLL=1 ./scripts/selftest.sh
+  else run env -u SELFTEST_POLL SELFTEST_JOBS=2 ./scripts/selftest.sh; fi
+  assert_rc "$mode: three files in two slots pass" 0
+  assert_contains "$mode: c started in b's slot while a still ran" "PASS  tests/template/test_a.sh"
+  assert_contains "$mode: summary" "selftest: 3 passed, 0 failed, 0 quarantined (3 test files)"
+  assert_eq "$mode: results stay in file order" "a b c" "$(printf '%s\n' "$OUT" | sed -n 's/^PASS  tests\/template\/test_\(.\)\.sh$/\1/p' | paste -sd' ' -)"
+done
+
+# ---- INT and TERM stop every running file ----
+# Two long files record their pid, and an EXIT trap marks that they cleaned
+# up. The run is stopped once both have started; nothing may still run, both
+# must have cleaned up well before their bounded wait ends, and TMPDIR is left
+# empty. A file that ran its full wait leaves a .late marker.
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template
+for x in a b; do
+  cat > "tests/template/test_$x.sh" <<'TL'
+#!/usr/bin/env bash
+n="$(basename "$0" .sh)"
+trap 'touch "$SELFTEST_DIR/$n.cleaned"' EXIT
+echo "$$" > "$SELFTEST_DIR/$n.pid"
+for _ in $(seq 1 300); do sleep 0.1; done
+touch "$SELFTEST_DIR/$n.late"
+TL
+done
+chmod +x tests/template/test_*.sh
+# stop_case SIGNAL EXPECTED-EXIT [ENV-OPTION...]
+stop_case() {
+  local sig="$1" want="$2" sp x alive=""
+  shift 2
+  rm -rf "$SELFTEST_DIR" "$FIX/tmpstop"; mkdir -p "$SELFTEST_DIR" "$FIX/tmpstop"
+  env "$@" TMPDIR="$FIX/tmpstop" SELFTEST_JOBS=2 ./scripts/selftest.sh > "$FIX/stop.out" 2>&1 &
+  sp=$!
+  for _ in $(seq 1 200); do [[ -s "$SELFTEST_DIR/test_a.pid" && -s "$SELFTEST_DIR/test_b.pid" ]] && break; sleep 0.1; done
+  kill "-$sig" "$sp"
+  wait "$sp"; RC=$?
+  OUT="$(cat "$FIX/stop.out")"
+  assert_rc "$sig: the run exits with the signal's status" "$want"
+  assert_contains "$sig: the stop is named" "selftest: stopped by SIG$sig"
+  for x in a b; do
+    if [[ -s "$SELFTEST_DIR/test_$x.pid" ]] && kill -0 "$(cat "$SELFTEST_DIR/test_$x.pid")" 2>/dev/null; then alive="$alive test_$x"; fi
+  done
+  assert_eq "$sig: no test file still runs" "" "${alive# }"
+  assert_file "$sig: test_a was stopped and cleaned up" "$SELFTEST_DIR/test_a.cleaned"
+  assert_file "$sig: test_b was stopped and cleaned up" "$SELFTEST_DIR/test_b.cleaned"
+  assert_no_file "$sig: test_a did not run to its end" "$SELFTEST_DIR/test_a.late"
+  assert_eq "$sig: nothing is left in TMPDIR" "" "$(ls -A "$FIX/tmpstop")"
+}
+stop_case TERM 143
+# A background job of a shell without job control starts with INT ignored,
+# and bash cannot trap a signal ignored at entry; env --default-signal (GNU
+# coreutils 8.31+) restores it, as a terminal's Ctrl-C finds it.
+if env --default-signal=INT true 2>/dev/null; then
+  stop_case INT 130 --default-signal=INT
+else
+  t_na "INT stops every running file: env --default-signal is missing here; the TERM case covers the same stop path"
+fi
+
+# ---- the executable-bit wiring ----
+# selftest.sh exports T_EXEC_CHECK=1 to every file, probes the bits once
+# through lib.sh and exports the result; where chmod cannot set them the run
+# prints one n/a line, not one per file.
+make_fixture
+cp_script selftest.sh
+mkdir -p tests/template
+cp "$T_ROOT/tests/template/lib.sh" tests/template/lib.sh
+for x in e1 e2; do
+  printf '#!/usr/bin/env bash\nsource "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || exit 2\necho "  ok   check=${T_EXEC_CHECK:-unset} bits=${T_EXEC_BITS:-unset}"\nmake_fixture\nt_finish\n' > "tests/template/test_$x.sh"
+done
+chmod +x tests/template/test_*.sh
+if t_exec_bits_work; then bits=1; na=0; else bits=0; na=1; fi
+run env -u T_EXEC_CHECK -u T_EXEC_BITS -u T_EXEC_NA ./scripts/selftest.sh -v
+assert_rc "two lib.sh tests pass" 0
+assert_eq "every file sees T_EXEC_CHECK=1 and the probed bits" "2" "$(printf '%s\n' "$OUT" | grep -c "ok   check=1 bits=$bits")"
+assert_eq "the executable-bit n/a line appears once per run where it applies" "$na" "$(printf '%s\n' "$OUT" | grep -c 'n/a .*executable bits')"
 
 t_finish

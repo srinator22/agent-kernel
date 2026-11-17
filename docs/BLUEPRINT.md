@@ -160,7 +160,7 @@ scripts/
     taste.py                  # stdlib: project taste digest (this project's sessions), evidence pool, approved lines into docs/preferences rows
     ruff.toml                 # ruff contract: default rules, no format, so a project's ruff config never governs it
   quickgate.sh                # fast in-work subset of the gauntlet
-  selftest.sh                 # runs tests/template/ against the template's own scripts
+  selftest.sh                 # runs tests/template/ (or the named test files) against the template scripts, SELFTEST_JOBS files at a time, results in file order
   adr.sh                      # check (ADR numbering and format) | new <title>
   worker-git-guard.sh         # worker PreToolUse hook body: refuses git commit and push
   destructive-guard.sh        # PreToolUse hook body, every session: refuses destructive rm and git forms
@@ -170,15 +170,15 @@ scripts/
   doc-eval.sh                 # check | brief: the documentation question table
 tests/
   template/                   # fixtures and tests for the scripts above; called from check.sh
-    lib.sh                    # shared assertion helpers
-    test_kernel_hash.sh
+    lib.sh                    # shared assertion helpers, fixtures, t_parallel sections, t_check_exec
+    test_kernel_hash.sh       # verify, update, drift, CRLF, missing markers
     test_new_task.sh
     test_lessons.sh
     test_taskgraph.sh
     test_template_sync.sh
     test_quickgate.sh
     test_check_always.sh
-    test_blueprint_parity.sh
+    test_blueprint_parity.sh  # full-path parity both ways, a tree larger than a pipe buffer
     test_profile_tools.sh     # runs the tests of every shipped tool and hook
     test_adr.sh
     test_ci_watch.sh          # expected workflows, --expect, watch loop against a fake gh
@@ -192,14 +192,14 @@ tests/
     test_template_release.sh  # versions, grouped notes, kernel suggestion, --tag guards
     test_fleet.sh             # status rows against fixture projects
     test_dream.sh             # digest kinds, cap, offsets, due and offer, hygiene, scorecard
-    test_selftest.sh          # quarantine list, n/a lines, summary counts
+    test_selftest.sh          # quarantine list, n/a lines, summary counts, parallel slots, named files, INT and TERM stop, exec-bit wiring
     test_taste.sh             # owner filter, signal kinds, project scope, pool, stop rules, evidence rule, outcome, guards
     test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
     test_preferences.sh       # register cells, baselines, template-mode guard, unwired-hook warning
-    test_doctor.sh            # tool checks against PATH shims, install lines per system, the Store stub
+    test_doctor.sh            # tool checks against PATH shims, install lines per system, the Store stub, run from inside scripts/
     test_find_python.sh       # stub python3 skipped by running it, no variable left, scripts that source the helper
     test_taste_project.sh     # per-project taste: other projects excluded, home untouched, register rows, duplicates, template mode
-    test_test_files.sh        # guarded lib.sh load in every test, exec bits
+    test_test_files.sh        # guarded lib.sh load in every test, exec bits, t_check_exec and its T_EXEC_CHECK hook, t_parallel
     test_private_terms.sh     # masked output, staged and binary content, paths, refs, unpushed and full history, merges, tags, refusals
     fixtures/
       check.sh                # pristine template check.sh the tests run against
