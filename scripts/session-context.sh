@@ -166,6 +166,41 @@ preferences_block() {
 }
 preferences_block || true
 
+# Maintenance cadence (docs/procedures/maintain.md step 7): one line when
+# docs/lessons/MAINTENANCE.log holds no "YYYY-MM-DD maintain: ..." entry dated
+# within the last 35 days (or no log at all). Pure file read and shell
+# arithmetic: no git, no subprocess beyond awk and date. LESSONS_TODAY
+# overrides today's date, as in scripts/lessons.sh. Guarded: this hook must
+# exit 0.
+maintain_block() {
+  local log="docs/lessons/MAINTENANCE.log" last="" now y m d
+  now="${LESSONS_TODAY:-$(date -u +%F 2>/dev/null || true)}"
+  [[ "$now" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 0
+  if [[ -f "$log" ]]; then
+    last="$(LC_ALL=C awk '
+      { sub(/$/, "") }
+      /^[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] maintain:/ { d = substr($0, 1, 10); if (d > best) best = d }
+      END { print best }' "$log" 2>/dev/null || true)"
+  fi
+  # Days since 1970-01-01 (civil-from-days, as scripts/lessons.sh day_number).
+  daynum() {
+    local yy=$((10#${1:0:4})) mm=$((10#${1:5:2})) dd=$((10#${1:8:2})) era yoe doy doe
+    if (( mm <= 2 )); then yy=$((yy - 1)); fi
+    era=$(( yy / 400 ))
+    yoe=$(( yy - era * 400 ))
+    doy=$(( (153 * (mm > 2 ? mm - 3 : mm + 9) + 2) / 5 + dd - 1 ))
+    doe=$(( yoe * 365 + yoe / 4 - yoe / 100 + doy ))
+    echo $(( era * 146097 + doe - 719468 ))
+  }
+  if [[ -z "$last" ]]; then
+    echo "[session-context] Maintenance: no maintain pass recorded in docs/lessons/MAINTENANCE.log; run the maintain skill (docs/procedures/maintain.md)."
+  elif (( $(daynum "$now") - $(daynum "$last") > 35 )); then
+    echo "[session-context] Maintenance: last maintain pass $last, over 35 days ago; run the maintain skill (docs/procedures/maintain.md)."
+  fi
+  return 0
+}
+maintain_block || true
+
 # Template update awareness. Project mode: tell the human when a newer
 # template-v* tag exists than the last recorded sync. Template mode: tell the
 # maintainer when synced-set commits have landed since the newest tag.
