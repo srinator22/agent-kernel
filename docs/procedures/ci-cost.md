@@ -33,7 +33,7 @@ this template has measured only what its own timing lines print.
    a skipped job shows "skipped", not a green job with empty steps. Trap:
    cancel-in-progress on main, tags or deploys cancels a run that must finish,
    and so does a group shared by push runs: GitHub cancels a pending run in a
-   shared group even without cancel-in-progress, so key non-PR runs on the SHA
+   shared group even without cancel-in-progress, so key non-PR runs on ref and SHA
    (`docs/rules/ci-baseline.md`).
 4. Stage checks by when the answer is needed. Applies when one workflow runs
    everything on every push. Three stages: the PR answer required to merge;
