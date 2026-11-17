@@ -6,8 +6,10 @@ roles from `docs/roster/agents/` and the render tools from
 `docs/library/tools/` (copy the whole set, with `render_common.py`, to
 `tools/render/` and its tests to `tools/render/tests/`; paths below use that
 location). Origin: a product film project (a still-render set and a one-shot
-film of a transparent plastic product with a liquid-pour demo); one-project
-evidence, so every step is plausible, not proven general. Facts about tools
+film of a transparent plastic product with a liquid-pour demo), then a
+mechanism reveal film and a release loop in a second project; the rules and
+gates are in `docs/profiles/product-render/PROFILE.md`. The steps are
+evidence-based, not proven general. Facts about tools
 and versions come from `docs/research/2026-10-29-render-recommendations.md`
 (VERIFY 2026-10-29). A worked example on a primitive scene is in
 `docs/library/examples/product-render-sample/`.

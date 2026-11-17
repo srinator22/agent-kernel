@@ -83,7 +83,10 @@ tests with `bash docs/library/tools/tests/<test>.sh`. Every tool takes
 | `fixture-guard.sh` | Fails a commit that changes a golden fixture and the code it pins together without a marker line in the body (SC-3). |
 | `check-project-readmes.sh` | Requires every folder under a projects directory to have a README with the required headings. |
 
-Render tools (`product-render` procedure; copy the whole set with
+Render tools (`product-render` procedure; since 2026-11-17 a second project
+has used the render items, so `docs/profiles/product-render/PROFILE.md` owns
+their rules and gates and points here for the files, which are not copied or
+moved; copy the whole set with
 `render_common.py`). Cores are stdlib Python with a small PNG codec; Pillow
 and numpy are optional fast paths that the tests prove equal to the stdlib
 path, so CI needs neither. Tools marked (Blender) run inside Blender through
