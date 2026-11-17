@@ -226,7 +226,7 @@ shipped_set_errors() {
   for f in "$dir"/agents/*.md "$dir"/skills/*/SKILL.md; do
     [[ -f "$f" ]] || continue
     if [[ "$f" == */SKILL.md ]]; then name="$(basename "$(dirname "$f")")"; else name="$(basename "$f" .md)"; fi
-    if ! head -n 1 "$f" | tr -d '\r' | grep -qx -- '---'; then
+    if [[ "$(sed -n 1p "$f" | tr -d '\r')" != '---' ]]; then
       echo "$f: frontmatter must open with ---"
       continue
     fi
@@ -256,11 +256,11 @@ shipped_set_errors() {
     shipped="$(for f in "$dir"/skills/*/; do if [[ -d "$f" ]]; then basename "$f"; fi; done | sort -u)"
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
-      printf '%s\n' "$shipped" | grep -qx -- "$name" || echo "$profile: Skills: lists $name but $dir/skills/$name/SKILL.md does not exist"
+      grep -qx -- "$name" <<< "$shipped" || echo "$profile: Skills: lists $name but $dir/skills/$name/SKILL.md does not exist"
     done <<< "$declared"
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
-      printf '%s\n' "$declared" | grep -qx -- "$name" || echo "$dir/skills/$name ships but $profile does not list it on its Skills: line"
+      grep -qx -- "$name" <<< "$declared" || echo "$dir/skills/$name ships but $profile does not list it on its Skills: line"
     done <<< "$shipped"
   fi
   echo "$SHIPPED_DONE"
@@ -307,7 +307,7 @@ handoff_errors() {
     [[ -f "$md" ]] || continue
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
-      printf '%s\n' "$known" | grep -qx -- "$name" || echo "$md: Hand-offs names \`$name\`, which is not an agent in this template"
+      grep -qx -- "$name" <<< "$known" || echo "$md: Hand-offs names \`$name\`, which is not an agent in this template"
     done < <(awk '{ sub(/\r$/, "") } /^## / { f = ($0 == "## Hand-offs"); next } f' "$md" \
       | grep -o '`[a-z][a-z0-9]*\(-[a-z0-9]\+\)\+`' | tr -d '`' | sort -u)
   done
@@ -319,7 +319,7 @@ shipped_set_check() {
   local out
   out="$(shipped_set_errors "$@" || true)"
   printf '%s\n' "$out" | grep -vx -- "$SHIPPED_DONE" | grep . || true
-  printf '%s\n' "$out" | grep -qx -- "$SHIPPED_DONE" || echo "shipped-set check of $1 stopped before completing"
+  grep -qx -- "$SHIPPED_DONE" <<< "$out" || echo "shipped-set check of $1 stopped before completing"
 }
 
 # roster_inventory_errors: the roster README advertises its roles as table rows
@@ -339,7 +339,7 @@ roster_inventory_errors() {
   done <<< "$listed"
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
-    printf '%s\n' "$listed" | grep -qx -- "$name" || echo "docs/roster/agents/$name ships but $readme does not list it"
+    grep -qx -- "$name" <<< "$listed" || echo "docs/roster/agents/$name ships but $readme does not list it"
   done <<< "$shipped"
   return 0
 }
@@ -382,7 +382,7 @@ library_inventory_errors() {
       "$lib"/hooks/*) kind=hook; name="${f##*/}"; name="${name%.py}" ;;
       *) kind=tool; name="${f##*/}"; name="${name%.*}" ;;
     esac
-    printf '%s\n' "$rows" | grep -qx -- "$kind $name" || echo "$f ships but $readme does not list it as a $kind"
+    grep -qx -- "$kind $name" <<< "$rows" || echo "$f ships but $readme does not list it as a $kind"
   done
   return 0
 }
@@ -395,7 +395,7 @@ profile_skill_sets() {
   for f in docs/profiles/*/PROFILE.md; do
     [[ -f "$f" ]] || continue
     name="$(basename "$(dirname "$f")")"
-    if [[ -n "$adopted" ]] && ! printf '%s\n' "$adopted" | grep -qx -- "$name"; then
+    if [[ -n "$adopted" ]] && ! grep -qx -- "$name" <<< "$adopted"; then
       continue
     fi
     # Template mode (AGENTS.md present, no usable Profiles line): software is
@@ -564,7 +564,7 @@ cmd_check() {
       [[ -f "$ag" ]] || continue
       agname="$(basename "$ag" .md)"
       [[ -f ".codex/agents/$agname.toml" ]] && continue
-      if [[ -f docs/rules/models.md ]] && grep -i 'no Codex counterpart' docs/rules/models.md | grep -qw -- "$agname"; then
+      if [[ -f docs/rules/models.md ]] && grep -i 'no Codex counterpart' docs/rules/models.md | grep -cw -- "$agname" >/dev/null; then
         continue
       fi
       errs+=(".claude/agents/$agname.md has no .codex/agents/$agname.toml and docs/rules/models.md has no line naming '$agname' with 'no Codex counterpart'")

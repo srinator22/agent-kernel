@@ -235,7 +235,7 @@ if [[ -n "$EXPECT" ]]; then
       w="${w// /}"
       [[ -n "$w" ]] || continue
       [[ "$w" == */* ]] || w="$WF_DIR/$w"
-      if ! printf '%s\n' "${ALL_WF[@]}" | grep -qxF -- "$w"; then
+      if ! grep -qxF -- "$w" <<< "$(printf '%s\n' "${ALL_WF[@]}")"; then
         echo "ci-watch: --expect names $w, which is not a workflow file at $SHA" >&2
         exit 2
       fi

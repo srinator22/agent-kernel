@@ -37,16 +37,100 @@ jobs:
       - name: Run the gauntlet
         run: ./scripts/check.sh
 
+  # Which optional jobs a pull request needs, from the files it changes: the
+  # merge commit GitHub checks out against its first parent, the base. Job
+  # conditions cannot see changed paths, and a workflow-level paths filter
+  # would hide the jobs from ci-watch.sh's single ci.yml.
+  paths:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      windows: ${{ steps.match.outputs.windows }}
+      guard: ${{ steps.match.outputs.guard }}
+      gate: ${{ steps.match.outputs.gate }}
+      gate_files: ${{ steps.match.outputs.gate_files }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: match
+        name: Match the changed files
+        run: |
+          windows=false; guard=false; gate=false; gate_files=""
+          while IFS= read -r f; do
+            # Windows-specific: path matching, transcript discovery, the
+            # Windows entry points and their tests (lesson L019).
+            case "$f" in
+              scripts/*.cmd|scripts/*.ps1|scripts/dream.sh|scripts/dream/*|scripts/template-sync.sh|scripts/doctor.sh|\
+              scripts/find-python.sh|scripts/session-context.sh|scripts/feedback-log.sh|scripts/selftest.sh|\
+              tests/template/lib.sh|tests/template/test_dream.sh|tests/template/test_taste*.sh|\
+              tests/template/test_template_sync.sh|tests/template/test_doctor.sh|tests/template/test_find_python.sh|\
+              tests/template/test_session_context.sh|tests/template/test_codex_hooks.sh|tests/template/test_feedback.sh|\
+              .codex/hooks.json|.github/workflows/ci.yml) windows=true ;;
+            esac
+            case "$f" in
+              scripts/destructive-guard.sh|tests/template/test_destructive_guard.sh|tests/template/lib.sh|\
+              .github/workflows/ci.yml) guard=true ;;
+            esac
+            # Gate files: what judges a change (ADR 0018).
+            case "$f" in
+              scripts/check.sh|scripts/quickgate.sh|scripts/kernel-hash.sh|scripts/selftest.sh|.kernel.hash|\
+              tests/template/lib.sh|tests/template/fixtures/check.sh|tests/template/test_check_always.sh|\
+              tests/template/test_quickgate.sh|tests/template/test_kernel_hash.sh|tests/template/test_selftest.sh|\
+              .claude/agents/reviewer.md|.codex/agents/reviewer.toml|.github/workflows/*|docs/rules/ci-baseline.md)
+                gate=true; gate_files="$gate_files $f" ;;
+            esac
+          done < <(git diff --name-only --no-renames HEAD^1 HEAD)
+          echo "windows=$windows guard=$guard gate=$gate gate files:${gate_files:- none}"
+          {
+            echo "windows=$windows"
+            echo "guard=$guard"
+            echo "gate=$gate"
+            echo "gate_files=${gate_files# }"
+          } >> "$GITHUB_OUTPUT"
+
+  # A pull request that changes a gate file needs the label gate-change,
+  # which a human adds after reviewing the gate change itself (ADR 0018). The
+  # labels are read live, so "Re-run failed jobs" after labelling passes.
+  gate-label:
+    needs: paths
+    if: needs.paths.outputs.gate == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Require the gate-change label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          GATE_FILES: ${{ needs.paths.outputs.gate_files }}
+        run: |
+          labels="$(gh api "repos/$REPO/pulls/$PR" --jq '.labels[].name')"
+          if grep -qx 'gate-change' <<< "$labels"; then
+            echo "gate files changed ($GATE_FILES) and the gate-change label is present"
+            exit 0
+          fi
+          echo "This pull request changes gate files: $GATE_FILES"
+          echo "A gate cannot judge a change to itself. A human reviews the gate change,"
+          echo "adds the label gate-change, then re-runs this job (ADR 0018)."
+          exit 1
+
   # The self-tests are plain bash and Windows is a supported platform
   # (scripts/check.cmd), so they also run on Windows. Not a required check:
   # it has its own timeout and a failure shows as a red job without blocking
-  # the Linux gate (docs/rules/ci-baseline.md). It runs on main and by hand
-  # only: a Windows run takes tens of minutes, and on every pull request it
-  # would hold up ci-watch.sh, which waits on every job. It skips private
-  # repositories: there Windows minutes are billed against the owner's quota,
-  # and a cost needs the owner's approval (kernel rule 15).
+  # the Linux gate (docs/rules/ci-baseline.md). It runs on main, by hand, and
+  # on pull requests that change a Windows-specific file (the paths job): a
+  # Windows run takes tens of minutes, and on every pull request it would hold
+  # up ci-watch.sh, which waits on every job. It skips private repositories:
+  # there Windows minutes are billed against the owner's quota, and a cost
+  # needs the owner's approval (kernel rule 15). !cancelled() lets it run when
+  # the paths job was skipped (every event but pull_request).
   selftest-windows:
-    if: github.event.repository.private == false && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    needs: paths
+    if: ${{ !cancelled() && github.event.repository.private == false && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || needs.paths.outputs.windows == 'true') }}
     runs-on: windows-2025
     timeout-minutes: 45
     defaults:
@@ -56,6 +140,29 @@ jobs:
       - uses: actions/checkout@v7
       - name: Run the template self-tests
         run: ./scripts/selftest.sh
+
+  # The destructive guard is written for bash 3.2, the /bin/bash macOS still
+  # ships, and no other job has one. This runs its test under that bash, with
+  # /bin first on PATH so the guard the test starts with "bash" is 3.2 too.
+  # Free on public repositories and skipped on private ones (macOS minutes
+  # are billed at a multiple); on main, by hand, and on pull requests that
+  # change the guard, its test, lib.sh or this file.
+  guard-bash32:
+    needs: paths
+    if: ${{ !cancelled() && github.event.repository.private == false && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || needs.paths.outputs.guard == 'true') }}
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the guard test under /bin/bash 3.2
+        run: |
+          export PATH="/bin:/usr/bin:$PATH"
+          /bin/bash --version
+          case "$(bash --version)" in
+            *"version 3.2."*) ;;
+            *) echo "bash on PATH is not 3.2; the run would not test the guard under 3.2" >&2; exit 1 ;;
+          esac
+          /bin/bash tests/template/test_destructive_guard.sh
 
   # {{delete if no deploy target}}
   # Deployment depends on validation of the exact same SHA
