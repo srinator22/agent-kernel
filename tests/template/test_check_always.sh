@@ -7,6 +7,14 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# A started (adopted) project: .start-done exists, or AGENTS.md no longer
+# carries the template's "Status: TEMPLATE" line. Real-tree assertions about
+# the template's own tree skip there.
+t_started() {
+  [[ -f "$T_ROOT/.start-done" ]] && return 0
+  [[ -f "$T_ROOT/AGENTS.md" ]] && ! grep '^Status: TEMPLATE' "$T_ROOT/AGENTS.md" >/dev/null 2>&1
+}
+
 EM="$(printf '\xe2\x80\x94')"
 STACK_MSG="scripts/stack-check.sh is missing"
 
@@ -492,7 +500,7 @@ done
 # A13: the shipped settings wire the feedback hook for UserPromptSubmit with a
 # 5 second budget. Read from the real tree: a started project customises its
 # own settings and merges the entry by hand (docs/procedures/upstream.md).
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "the real settings.json wires the feedback hook with timeout 5: this repository is a started project (.start-done); its settings are its own"
 else
   wired="$(awk '/"UserPromptSubmit"/{u=1} /"PreToolUse"/{u=0} u && /scripts\/feedback-log\.sh/{f=1} f && /"timeout": 5,?$/{print "wired"; exit}' "$T_ROOT/.claude/settings.json")"
@@ -590,7 +598,7 @@ sec_started() {
 # started project this repository IS the started project, and its own
 # ./scripts/check.sh run is the proof; copying it again would recurse and test
 # the project's tree against the template's expectations.
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "a started project passes check.sh with tests/template kept: this repository is a started project (.start-done); covered by its own ./scripts/check.sh run"
 else
   # Both branches of the real-tree parity case are asserted: here, on the

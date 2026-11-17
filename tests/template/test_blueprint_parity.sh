@@ -7,6 +7,14 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" || { echo "$0: cannot load lib.sh; stopped before writing anything" >&2; exit 2; }
 
+# A started (adopted) project: .start-done exists, or AGENTS.md no longer
+# carries the template's "Status: TEMPLATE" line. Real-tree assertions about
+# the template's own tree skip there.
+t_started() {
+  [[ -f "$T_ROOT/.start-done" ]] && return 0
+  [[ -f "$T_ROOT/AGENTS.md" ]] && ! grep '^Status: TEMPLATE' "$T_ROOT/AGENTS.md" >/dev/null 2>&1
+}
+
 make_fixture
 FUNC="$(sed -n '/^# BEGIN blueprint-parity/,/^# END blueprint-parity/p' "$T_CHECK")"
 if [[ -z "$FUNC" ]]; then t_bad "check.sh has no blueprint-parity function"; t_finish; fi
@@ -119,7 +127,7 @@ assert_eq "a large tree and its first and last entries agree, no broken pipe" ""
 # like check.sh step 5j it holds only in template mode: a started project
 # carries a different tree (no docs/library, its own ADRs) and checks it with
 # its own ./scripts/check.sh run.
-if [[ -f "$T_ROOT/.start-done" ]]; then
+if t_started; then
   t_na "the real blueprint and required list agree: this repository is a started project (.start-done); covered by check.sh step 5j in the template"
 else
   cd "$T_ROOT" || exit 1

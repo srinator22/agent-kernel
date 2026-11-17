@@ -196,6 +196,65 @@ jobs:
       - name: Verify the declared self-test inputs are complete
         run: ./scripts/selftest-reuse.sh verify-inputs
 
+  # A project adopted from the template must pass the shipped gauntlet and
+  # self-tests: copy the tree to a scratch folder, apply the mechanical parts
+  # of docs/procedures/start.md that need no human (the stack-check.sh stub,
+  # the Profiles, Template and status lines, the sync record, the lessons
+  # reset, the verify skill, .start-done), commit, then run ./scripts/check.sh
+  # there. The catalogs a real project does not carry are left out, as
+  # tests/template/test_check_always.sh does. Linux only; on pull requests
+  # that change scripts/, tests/template/ or the workflow (the paths job) and
+  # on every push to main. Skipped at the job level otherwise.
+  adopted-project:
+    needs: paths
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || needs.paths.outputs.selftest_inputs == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Adopt the template in a scratch folder
+        run: |
+          set -euo pipefail
+          src="$PWD"
+          scratch="$(mktemp -d)"
+          git ls-files -co --exclude-standard -z \
+            | grep -zv '^[.]work/template-sync/\|^docs/library/\|^docs/roster/\|^tests/docs/questions\.md$' \
+            | tar --null -T - -cf - | tar -xf - -C "$scratch"
+          cd "$scratch"
+          git init -q .
+          git config user.email adopted@example.invalid
+          git config user.name adopted
+          git config core.autocrlf false
+          git add -A
+          git commit -q -m "chore: template copy"
+          # start.md step 6: the lessons reset runs on the committed copy (it
+          # refuses uncommitted lessons files) and before the sync record below.
+          bash scripts/start-reset-lessons.sh
+          bash scripts/start-reset-lessons.sh --check
+          git add -A
+          git commit -q -m "chore: reset the lessons"
+          # start.md step 3: the project-owned stack steps (a trivial stub).
+          printf '#!/usr/bin/env bash\necho "stack steps wired by the adopted-project job"\n' > scripts/stack-check.sh
+          chmod +x scripts/stack-check.sh
+          # start.md step 4: Profiles, Template, status line and the sync record.
+          sed -i -e 's/^- Profiles: {{FILLED_BY_START.*$/- Profiles: software\n- Template: https:\/\/example.invalid\/template.git template-v0.1.0/' -e '/^Status: TEMPLATE/d' AGENTS.md
+          echo "template-sync: template-v0.1.0 2026-11-07" > docs/lessons/MAINTENANCE.log
+          ./scripts/kernel-hash.sh --update
+          # start.md step 4: the software profile's verify skill, filled, in both mirrors.
+          for d in .claude .agents; do
+            mkdir -p "$d/skills/verify"
+            printf -- '---\nname: verify\ndescription: adopted-project fixture\n---\nRun the fixture.\n' > "$d/skills/verify/SKILL.md"
+          done
+          # start.md step 8.
+          echo "$(date -u +%F) adopted-project CI scratch" > .start-done
+          git add -A
+          git commit -q -m "chore: adopt the template"
+          echo "scratch=$scratch" >> "$GITHUB_ENV"
+      - name: Run the gauntlet in the adopted project
+        run: |
+          cd "$scratch"
+          ./scripts/check.sh
+
   # The destructive guard is written for bash 3.2, the /bin/bash macOS still
   # ships, and no other job has one. This runs its test under that bash, with
   # /bin first on PATH so the guard the test starts with "bash" is 3.2 too.
