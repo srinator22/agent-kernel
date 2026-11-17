@@ -22,6 +22,8 @@
   before every `git push`. A pushed branch named with a term fails
   check until renamed locally; a broken ref is skipped by check and
   fails history.
+- CI scans every pull request and push range against the PRIVATE_TERMS
+  secret (`scripts/private-terms.sh range`).
 - Validate imports and uploads: file type, size, recursion depth, and
   decompression limits before processing.
 - Normalize paths; reject traversal; never write outside the intended

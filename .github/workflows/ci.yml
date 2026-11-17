@@ -97,7 +97,7 @@ jobs:
             esac
             # Gate files: what judges a change (ADR 0018).
             case "$f" in
-              scripts/check.sh|scripts/quickgate.sh|scripts/kernel-hash.sh|scripts/selftest.sh|.kernel.hash|\
+              scripts/check.sh|scripts/quickgate.sh|scripts/kernel-hash.sh|scripts/selftest.sh|scripts/private-terms.sh|.kernel.hash|\
               tests/template/lib.sh|tests/template/fixtures/check.sh|tests/template/test_check_always.sh|\
               tests/template/test_quickgate.sh|tests/template/test_kernel_hash.sh|tests/template/test_selftest.sh|\
               .claude/agents/reviewer.md|.codex/agents/reviewer.toml|.github/workflows/*|docs/rules/ci-baseline.md)
@@ -116,15 +116,28 @@ jobs:
   # A pull request that changes a gate file needs the label gate-change,
   # which a human adds after reviewing the gate change itself (ADR 0018). The
   # labels are read live, so "Re-run failed jobs" after labelling passes.
+  # It runs on every pull request (always() defeats the skip a failed or
+  # skipped paths job would otherwise propagate, and a skipped required check
+  # counts as passing), and fails itself when paths did not succeed. A job
+  # that only needs paths and skips on its output has no such guarantee.
   gate-label:
     needs: paths
-    if: needs.paths.outputs.gate == 'true'
+    if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: read
     steps:
+      - name: Require the paths job to have succeeded
+        env:
+          PATHS_RESULT: ${{ needs.paths.result }}
+        run: |
+          if [ "$PATHS_RESULT" != "success" ]; then
+            echo "The paths job result is '$PATHS_RESULT', not 'success'; the gate files cannot be judged." >&2
+            exit 1
+          fi
       - name: Require the gate-change label
+        if: needs.paths.outputs.gate == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -140,6 +153,46 @@ jobs:
           echo "A gate cannot judge a change to itself. A human reviews the gate change,"
           echo "adds the label gate-change, then re-runs this job (ADR 0018)."
           exit 1
+
+  # Private personal terms must never reach a pushed branch: a leak reached a
+  # public branch on 2026-11-18, because the scan ran only in local hooks. The
+  # list lives only in the PRIVATE_TERMS secret (it cannot be committed), and
+  # this job scans the commits and paths of each pull request or push against
+  # it (scripts/private-terms.sh range). The repository variable
+  # PRIVATE_TERMS_REQUIRED=true makes an empty or missing secret fail, which
+  # the template repository sets; an adopted project has neither and passes
+  # with a notice. The secret goes through a file under RUNNER_TEMP, never
+  # echoed.
+  private-terms:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - name: Scan the range for private terms
+        env:
+          TERMS: ${{ secrets.PRIVATE_TERMS }}
+          REQUIRED: ${{ vars.PRIVATE_TERMS_REQUIRED }}
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$TERMS" ] && [ "$REQUIRED" != "true" ]; then
+            echo "::notice::no PRIVATE_TERMS secret and PRIVATE_TERMS_REQUIRED is not true; the private-terms scan is skipped"
+            exit 0
+          fi
+          terms_file="$RUNNER_TEMP/private-terms.txt"
+          printf '%s\n' "$TERMS" > "$terms_file"
+          export PRIVATE_TERMS_FILE="$terms_file"
+          if [ "$REQUIRED" = "true" ]; then export PRIVATE_TERMS_REQUIRED=1; fi
+          if [ "$EVENT" = "pull_request" ]; then base="$PR_BASE"; head="$PR_HEAD"; else base="$PUSH_BEFORE"; head="$PUSH_SHA"; fi
+          ./scripts/private-terms.sh range "$base" "$head"
 
   # The self-tests are plain bash and Windows is a supported platform
   # (scripts/check.cmd), so they also run on Windows. Not a required check:

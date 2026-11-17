@@ -12,6 +12,14 @@
 #   history  every ref name, every commit on every ref with its full diff
 #            (merges as combined diffs, binaries as text), every annotated
 #            tag's tagger and message. Run it before any visibility change.
+#   range    BASE HEAD: every commit in BASE..HEAD (message, author, committer,
+#            full diff) and the paths of the HEAD tree. CI runs it on each
+#            pull request and push, because the terms list lives only in the
+#            PRIVATE_TERMS secret and a leak once reached a public branch. An
+#            all-zero or unknown BASE (a new branch) scans the HEAD commit
+#            and the HEAD paths only.
+# PRIVATE_TERMS_REQUIRED=1 turns a missing or empty terms file into an error
+# in every mode, so an unset secret cannot pass as a clean scan.
 # Output names files, refs, commits and tags with each term masked as ***
 # and the term's line number in the terms file; the term is never printed.
 # Not scanned: submodule contents, untracked files, unstaged edits.
@@ -23,15 +31,27 @@ export LC_ALL=C
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT" || exit 1
 
-usage() { echo "usage: scripts/private-terms.sh check | history" >&2; exit 2; }
-[[ $# -eq 1 ]] || usage
-case "$1" in check|history) MODE="$1" ;; *) usage ;; esac
+usage() { echo "usage: scripts/private-terms.sh check | history | range <BASE> <HEAD>" >&2; exit 2; }
+[[ $# -ge 1 ]] || usage
+MODE="$1"
+case "$MODE" in
+  check|history) [[ $# -eq 1 ]] || usage ;;
+  range) [[ $# -eq 3 ]] || usage; BASE="$2"; HEADREF="$3" ;;
+  *) usage ;;
+esac
+
+# no_terms: nothing usable to scan; an error when the terms are required.
+no_terms() {
+  if [[ "${PRIVATE_TERMS_REQUIRED:-}" == 1 ]]; then
+    echo "private-terms: PRIVATE_TERMS secret is empty or missing; set it with gh secret set PRIVATE_TERMS" >&2
+    exit 1
+  fi
+  echo "private-terms: $1; nothing to check"
+  exit 0
+}
 
 TERMS="${PRIVATE_TERMS_FILE:-.work/private-terms.txt}"
-if [[ ! -f "$TERMS" ]]; then
-  echo "private-terms: no $TERMS; nothing to check"
-  exit 0
-fi
+[[ -f "$TERMS" ]] || no_terms "no $TERMS"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/private-terms.XXXXXX")" || { echo "private-terms: cannot create a temp folder" >&2; exit 1; }
 trap 'rm -rf "$TMP"' EXIT
@@ -76,10 +96,7 @@ case "$tdir/" in
     fi ;;
 esac
 
-if [[ ! -s "$NORM" ]]; then
-  echo "private-terms: no terms in the terms file; nothing to check"
-  exit 0
-fi
+[[ -s "$NORM" ]] || no_terms "no terms in the terms file"
 COUNT="$(awk 'END { print NR }' "$NORM")"
 
 # The scanner. Terms come from the first file operand, lines from stdin.
@@ -173,6 +190,19 @@ if [[ "$MODE" == check ]]; then
   stream_git "local branch names" paths for-each-ref '--format=%(refname)' refs/heads
   if (( HAVE_HEAD )); then
     stream_git "unpushed commits" stream "${DIFF[@]}" "$LOGFMT" HEAD --not --remotes
+  fi
+elif [[ "$MODE" == range ]]; then
+  git rev-parse -q --verify "$HEADREF^{commit}" >/dev/null 2>&1 || { echo "private-terms: HEAD is not a commit" >&2; exit 1; }
+  if git rev-parse -q --verify "$BASE^{commit}" >/dev/null 2>&1; then
+    stream_git "range commits" stream "${DIFF[@]}" "$LOGFMT" "$BASE..$HEADREF"
+  else
+    echo "private-terms: BASE is not a commit (new branch); scanning the HEAD commit and the HEAD paths only"
+    stream_git "the HEAD commit" stream "${DIFF[@]}" -1 "$LOGFMT" "$HEADREF"
+  fi
+  rc=0
+  git -c core.quotepath=off ls-tree -r -z --name-only "$HEADREF" > "$TMP/ls" 2>/dev/null || rc=$?
+  if (( rc != 0 )); then echo "private-terms: git ls-tree failed (exit $rc)" >&2; fail=1
+  else tr '\0' '\n' < "$TMP/ls" | scan paths || fail=1
   fi
 else
   stream_git "ref names" paths for-each-ref '--format=%(refname)'
