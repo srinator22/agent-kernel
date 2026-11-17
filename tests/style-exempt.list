@@ -1,0 +1,6 @@
+# style-exempt.list - files that skip the dash and character style scans
+# (scripts/check.sh step 4a) and nothing else. One git pathspec per line: a
+# tracked file, or a folder with a trailing "/" for vendored code. No
+# wildcards. An entry that matches no tracked file fails the check (stale).
+# The secret scan never reads this list. Never hide a file from the style scans
+# with a .gitattributes -diff: that also hides it from diff-based secret scans.
