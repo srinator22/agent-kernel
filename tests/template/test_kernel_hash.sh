@@ -65,9 +65,12 @@ run ./scripts/kernel-hash.sh --verify
 assert_rc "verify without any marker fails" 1
 assert_contains "no markers are named" "kernel markers not found in AGENTS.md"
 assert_not_contains "no broken pipe on a long file" "Broken pipe"
+hash_before="$(cat .kernel.hash)"
 run ./scripts/kernel-hash.sh --update
 assert_rc "update without markers fails" 1
 assert_contains "update names the missing markers" "kernel markers not found in AGENTS.md"
+# A failed update must leave the recorded hash as it was, not truncate it.
+assert_eq "a failed update keeps .kernel.hash" "$hash_before" "$(cat .kernel.hash)"
 mv AGENTS.good AGENTS.md
 
 t_finish

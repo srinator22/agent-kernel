@@ -59,7 +59,9 @@ MSG
     echo "kernel-hash: OK ($current)"
     ;;
   --update)
-    compute_hash > "$HASH_FILE"
+    # Compute first: a redirect would truncate the file before a failure.
+    h="$(compute_hash)"
+    printf '%s\n' "$h" > "$HASH_FILE"
     echo "kernel-hash: .kernel.hash updated to $(cat "$HASH_FILE")"
     echo "REMINDER: kernel edits require human approval; commit AGENTS.md and .kernel.hash together."
     ;;
