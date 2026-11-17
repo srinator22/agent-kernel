@@ -55,18 +55,26 @@ Alternatives considered:
   the text in a file and pass it by path. The guard reads the command line,
   including heredocs.
 - The guard needs bash 4.4 or newer (manifest.md); a port to bash 3.2 is in
-  BACKLOG. Amended 2026-11-17: the port landed in PR 9; the guard is
-  written for bash 3.2 and a macOS CI job runs its test under /bin/bash.
+  BACKLOG.
 - The quick lane is too slow to run at every turn end until the self-tests
   are faster (BACKLOG P2). Revisit the Stop gate trigger then.
-- Amended 2026-11-15: run in the foreground, the quick lane held the chat in
-  "processing" for over 10 minutes at a claimed finish and queued the
-  human's next message. The hook now starts it detached and returns; a later
-  stop reads `.work/jobs/stop-gate.result`, caches a pass for the same tree
-  and blocks once on a failure. A turn can therefore end before the lane
-  has finished; the red result blocks the next stop instead.
 - Codex and other harnesses have no equivalent hooks. They keep the prose
   rules and the ship procedure (docs/rules/models.md).
+
+## Amendment 2026-11-15
+
+Run in the foreground, the quick lane held the chat in "processing" for over
+10 minutes at a claimed finish and queued the human's next message. The hook
+now starts it detached and returns; a later stop reads
+`.work/jobs/stop-gate.result`, caches a pass for the same tree and blocks
+once on a failure. A turn can therefore end before the lane has finished;
+the red result blocks the next stop instead. The Stop hook timeout is 120
+seconds.
+
+## Amendment 2026-11-17
+
+The bash 3.2 port of the guard landed in PR 9: the guard is written for bash
+3.2 and a macOS CI job runs its test under /bin/bash.
 
 ## Amendment 2026-11-18
 
