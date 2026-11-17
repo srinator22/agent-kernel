@@ -67,3 +67,11 @@ Alternatives considered:
   has finished; the red result blocks the next stop instead.
 - Codex and other harnesses have no equivalent hooks. They keep the prose
   rules and the ship procedure (docs/rules/models.md).
+
+## Amendment 2026-11-18
+
+The "Revisit the Stop gate trigger" note in Consequences is settled: the
+quick lane runs detached at the claimed finish only (the 2026-11-15
+amendment), and `./scripts/check.sh --fast` runs only the self-tests the
+changed files map to. The last Consequences bullet predates the Codex hooks:
+Codex now runs the same hooks (ADR 0014).

@@ -53,7 +53,7 @@ to_crlf() { awk '{ printf "%s\r\n", $0 }' "$1" > "$1.crlf" && mv "$1.crlf" "$1";
 # Usage and missing file.
 run ./scripts/tasklint.sh
 assert_rc "no argument is a usage error" 2
-assert_contains "usage names the subcommands" "check | ship"
+assert_contains "usage names the subcommands" "check | ship | final"
 run ./scripts/tasklint.sh bogus
 assert_rc "unknown argument is a usage error" 2
 run ./scripts/tasklint.sh check extra
@@ -418,6 +418,63 @@ task_review "PASS" "Reviewed tree: $tree_now"
 to_crlf .work/TASK.md
 run ./scripts/tasklint.sh ship
 assert_rc "CRLF verdict on the current tree passes ship" 0
+
+# final = ship plus a required PASS review verdict (kernel rule 5), except in
+# quick mode. check.sh runs ship before the review exists, so ship itself must
+# not demand the verdict (the reviewer needs check.sh's tree line first).
+task_review "PASS - criteria met" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final passes a PASS verdict on the current tree" 0
+task_review ""
+run ./scripts/tasklint.sh final
+assert_rc "final fails an empty Review verdict" 1
+assert_contains "final names the missing verdict" "no PASS review verdict"
+task_review "FAIL - criterion C1 unmet" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final fails a FAIL verdict" 1
+assert_contains "final says the verdict is not PASS" "no PASS review verdict"
+task_review "Pending re-review" "PASS - older round" "Reviewed tree: $tree_now"
+run ./scripts/tasklint.sh final
+assert_rc "final fails a pending re-review" 1
+printf '# Task: fixture
+Mode: standard
+
+## Assumptions
+- [confirmed] fine
+
+## Acceptance criteria
+- [x] C1 done -> tests/x_test.sh
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final fails a task with no Review verdict section" 1
+assert_contains "final names the missing verdict when the section is absent" "no PASS review verdict"
+run ./scripts/tasklint.sh ship
+assert_rc "ship still passes with no verdict (check.sh runs it before the review)" 0
+printf '# Task: fixture
+Mode: quick
+
+## Acceptance criteria
+- [x] C1 done -> tests/x_test.sh
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final lets a quick-mode task skip the verdict" 0
+task_review "PASS - stale" "Reviewed tree: 0000000000000000000000000000000000000000"
+run ./scripts/tasklint.sh final
+assert_rc "final still fails a stale PASS tree" 1
+assert_contains "final names the stale tree" "covers tree 0000000000000000000000000000000000000000"
+printf '# Task: fixture
+Mode: standard
+
+## Assumptions
+- [open] x
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_contains "final also reports open assumptions" "open assumption"
+printf '# Task: {{title}}
+Mode: standard
+' > .work/TASK.md
+run ./scripts/tasklint.sh final
+assert_rc "final passes the pristine template" 0
 
 # Mode.
 printf '# Task: fixture\nMode: standard | quick | autopilot\n\n## Assumptions\n- [open] x\n' > .work/TASK.md

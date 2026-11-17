@@ -70,6 +70,9 @@ Check, with evidence:
   index and the rules of every profile named on its `- Profiles:` line
   (`docs/profiles/<profile>/PROFILE.md`), and check the diff against each
   rule that applies.
+- A change that alters what the app does, shows or returns, in a project with
+  a `verify` skill, has a `verify:` PASS line for the shipped commit in the
+  `.work/TASK.md` Progress log (SW-15).
 
 Findings must affect correctness, security, or a stated acceptance
 criterion. Style preferences and speculative hardening are not findings;

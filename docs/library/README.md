@@ -181,7 +181,7 @@ one that proved unhelpful is archived with its reason.
 | wrap-up and session skills | The core `retro` procedure already updates the backlog and moves task state to `.work/done/`, and `scripts/session-context.sh` already reloads context at session start; a diary or session-log layer would duplicate both and add a second memory tier (kernel rule 8). |
 | bugfix skill | `docs/procedures/bugfix.md` already carries the generic steps (reproduce, owning layer, failing test first, smallest fix, review, ship). The other versions only added a hand-written changelog entry, which conflicts with kernel rule 18 (generated changelog). |
 | changelog generator and name-brainstorming skills | Third-party, unlicensed, redistribution not permitted. |
-| no-dash and secret-scan scripts | `scripts/check.sh` already fails on en and em dashes, and its gitleaks step is mandatory (kernel rule 12); the scripts were a Node wrapper and a scan that passed when gitleaks was missing. |
+| no-dash and secret-scan scripts | `scripts/check.sh` already fails on en and em dashes, and the gitleaks scan wired in `scripts/stack-check.sh` is mandatory (kernel rule 12); the scripts were a Node wrapper and a scan that passed when gitleaks was missing. |
 | skill-structure checker | Its generic part (frontmatter, name equals folder, mirror, cap) is in `scripts/lessons.sh check`; the rest named one project's skills. |
 | core agent variants (reviewer, worker, monitor, explore) | Their generic improvements were approved on 2026-10-23 and applied to the core agents (lessons L001 to L007 in `docs/lessons/INDEX.md`). |
 | run-log analysers, firmware host simulator, board routing and placement scripts | Mostly one product's data and log schema; profiles list them as `port on adoption`. |
