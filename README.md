@@ -197,17 +197,27 @@ its rows.
 A project's session start says `Template update available` when a newer
 `template-v` tag exists than its last sync; the `template-update` skill takes
 it from there: a branch, a dry run, `scripts/template-sync.sh --latest`,
-conflicts merged by hand, kernel changes stopped for the owner,
-`./scripts/check.sh`, and a PR. The core file set is listed in
-`docs/procedures/upstream.md`. Adopted profiles, the AGENTS.md kernel block
-and the rules index are shown as diffs and never applied; the rest of the
-core set applies only when the project's copy is untouched since the last
-sync, and `docs/library/` and `docs/roster/` sync only where the project
-carries them. The Project decisions section and the project's own stack
-steps in `scripts/stack-check.sh` are never touched. A project with no
-usable sync record gets candidates from `--suggest-baseline`. In the
-template, `scripts/fleet.sh` lists every local project's version and status
-from a gitignored `fleet.local.list`.
+conflicts merged by hand, `./scripts/check.sh`, and a PR. The core file set
+is listed in `docs/procedures/upstream.md`. Adopted profiles and the rules
+index are shown as diffs and never applied; the rest of the core set applies
+only when the project's copy is untouched since the last sync, and
+`docs/library/` and `docs/roster/` sync only where the project carries them.
+The Project decisions section and the project's own stack steps in
+`scripts/stack-check.sh` are never touched. A project with no usable sync
+record gets candidates from `--suggest-baseline`.
+
+A kernel change never holds the rest back: every other file still syncs, and
+the sync stays unrecorded until the owner decides the kernel for that project
+(ADR 0020). `--accept-kernel` copies the template's kernel verbatim and
+updates the hash, but only when the project's kernel is unmodified since its
+last recorded release; a customized kernel is merged by hand. A project whose
+owner wrote "template kernel accepted verbatim" on its Standing overrides
+line takes kernel changes without asking.
+
+In the template, `scripts/fleet.sh` and `scripts/fleet-status.sh` report
+every local project's version and status from a gitignored
+`fleet.local.list`, and `scripts/fleet-sync.sh` prepares a sync branch for
+each one in a sibling worktree. It never commits or pushes.
 
 </details>
 
@@ -238,9 +248,11 @@ contract: `docs/procedures/upstream.md`.
   (`scripts/doc-eval.sh check`); the preference registers
   (`scripts/preferences.sh check`); the recorded template ref
   (`scripts/template-sync.sh --status`); no private term in the repository
-  (`scripts/private-terms.sh check`); `scripts/selftest.sh` whenever
+  (`scripts/private-terms.sh check`); the test-code line budget
+  (`scripts/test-budget.sh`, `tests/BUDGET`); `scripts/selftest.sh` whenever
   `tests/template/` exists (under `--fast`, only the test files the changed
-  files map to); executable bits of `scripts/` and `tests/template/` in the
+  files map to; locally the result is reused while its declared inputs are
+  unchanged, ADR 0019); executable bits of `scripts/` and `tests/template/` in the
   git index, before the self-tests. The full gate (not `--quick`) also runs
   `scripts/tasklint.sh ship`: no open assumption, and an autopilot task has a
   PASS plan verdict.
@@ -256,7 +268,10 @@ contract: `docs/procedures/upstream.md`.
   `scripts/worker-git-guard.sh` stops the worker agent from committing or pushing.
 - Template mode (before start): template integrity, including required files,
   placeholders, skill frontmatter, settings validity, ADR references,
-  BLUEPRINT tree parity, and no pipe into head or an early-exit grep.
+  BLUEPRINT tree parity, no pipe into head or an early-exit grep, and the
+  procedure budget (`scripts/doc-budget.sh`: at most 10200 words in
+  `docs/procedures/`, 1700 per file, 120-character lines, and every rule
+  anchor in `tests/docs/procedure-anchors.txt` still present).
 - Project mode (after start writes `.start-done`): the stack gauntlet wired by
   start: format, typecheck, lint with boundary rules, tests, secret scan,
   build, mutation on changed files, CHANGELOG freshness, plus each selected
@@ -268,6 +283,14 @@ contract: `docs/procedures/upstream.md`.
 - Self-tests: `scripts/selftest.sh` runs every fixture in `tests/template/`,
   one test file per script. `scripts/quickgate.sh` (it runs
   `./scripts/check.sh --quick`) is the fast in-work subset of the gauntlet.
+- CI (`.github/workflows/ci.yml`): the same `./scripts/check.sh` on Linux,
+  never reusing a result; the self-tests on Windows in three shards balanced
+  by measured times; the started-project copy (`adopted-project`); a scan of
+  each pull request and push for private terms against the `PRIVATE_TERMS`
+  secret; and `gate-label`, which fails a pull request that changes a gate
+  file until a human adds the `gate-change` label (ADR 0018). In the template
+  repository, main requires `check`, `gate-label`, `private-terms` and
+  `adopted-project`, admins included.
 
 </details>
 
