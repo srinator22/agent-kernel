@@ -1,14 +1,14 @@
 # Bughunt - proactive bug hunting
 
-A scheduled or milestone pass that looks for defects nobody has reported.
-Distinct from `docs/procedures/bugfix.md`, which reacts to one known
-defect. Run at milestones, before first real use, and monthly on any
-project with field or hardware exposure. Fixes use bugfix.md.
+A pass that looks for defects nobody has reported (`docs/procedures/bugfix.md`
+reacts to one known defect, and does the fixes).
+Run at milestones, before first real use, and monthly on any
+project with field or hardware exposure.
 
 1. Choose the hunt from the profile checklist: each
    `docs/profiles/<profile>/PROFILE.md` lists the recurring defect
-   patterns for that kind of project. Add rows from `docs/DEFECT_MEMORY.md`
-   (what already bit this project). Write the chosen concerns into
+   patterns for that kind of project. Add rows from `docs/DEFECT_MEMORY.md`.
+   Write the chosen concerns into
    `.work/TASK.md` before starting.
 2. Ten-pass review. One pass per concern, each by a reader with fresh
    context (parallel workers, disjoint concerns, kernel rule 16):
@@ -18,21 +18,20 @@ project with field or hardware exposure. Fixes use bugfix.md.
    7. units and precision         8. boundaries and adapters
    9. configuration and defaults  10. documentation versus behaviour
    Each pass traces actual events and values, not function names, and
-   ends with a list of findings or "none, covered: <what was read>".
+   ends with findings or "none, covered: <what was read>".
 3. Mechanical hunts, the ones a reader cannot match:
-   - fuzzing and fault sweeps: inject a fault at every step of a run,
-     not at one convenient moment
+   - fuzzing and fault sweeps: inject a fault at every step of a run
    - property-based tests for invariants (round trips, ordering, bounds)
    - differential tests against a reference implementation or the
-     previous version, on the same inputs
+     previous version
    - `git bisect` on any reproduced regression, to the exact commit
    - fresh-clone build and test, to expose untracked local state
    - mutation testing on changed files; a surviving mutant is a missing
      assertion
 4. Cold read. A context-free agent reads the artefact as a newcomer and
    lists what they would doubt, add or refuse, with `file:line`. Every
-   item is dispositioned: accepted (with a decision or BACKLOG task),
-   rejected (with the reason), or already covered (with the pointer).
+   item is dispositioned: accepted (decision or BACKLOG task),
+   rejected (reason), or already covered (pointer).
    No item is left unanswered.
 5. Inspect one concrete failing item before accepting any summary
    verdict such as "placement-limited", "flaky" or "environmental".

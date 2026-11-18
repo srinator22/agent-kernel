@@ -3,6 +3,7 @@
 # template without clobbering what the project changed (docs/procedures/upstream.md).
 # Usage: scripts/template-sync.sh [--template <git url or path>]
 #          [--ref <tag> | --latest] [--baseline <ref>] [--dry-run] [--resolved]
+#          [--accept-kernel]
 #        scripts/template-sync.sh --suggest-baseline | --latest-tag | --status | --list-set
 #        scripts/template-sync.sh --synced-commits <git range>
 #        scripts/template-sync.sh --help | -h
@@ -82,12 +83,21 @@
 # "- Profiles:" line, parsed by scripts/profiles.sh). A DIFF is information, not a conflict: it does not change
 # the exit code. A profile the project does not carry is skipped.
 #
-# AGENTS.md is never applied. The KERNEL block (KERNEL:BEGIN through KERNEL:END)
+# AGENTS.md is never applied, except the kernel under --accept-kernel (below).
+# The KERNEL block (KERNEL:BEGIN through KERNEL:END)
 # and the "## Rules index" section of both versions are compared; when they
 # differ the diffs are written to .work/template-sync/AGENTS.kernel.diff and
 # AGENTS.rules-index.diff, a kernel difference prints "KERNEL CHANGE: needs owner
 # approval and scripts/kernel-hash.sh --update", and the project's .kernel.hash
-# is never touched. After applying, the script re-runs
+# is never touched. A kernel difference does not block the rest: every other
+# file is applied, but the sync is NOT recorded in MAINTENANCE.log (exit 1), so
+# the next run keeps the old ref as its base and still sees the kernel pending.
+# --accept-kernel (a real apply only; the owner's explicit approval, ADR 0020)
+# copies the template kernel block verbatim into AGENTS.md (the file's line
+# endings kept) and runs scripts/kernel-hash.sh --update, but only when the
+# project's kernel equals the kernel of the ref last recorded in MAINTENANCE.log
+# (CRs ignored): a customized kernel, an unrecorded sync or a recorded ref the
+# template lacks stops with KERNEL CHANGE and the reason. After applying, the script re-runs
 # scripts/kernel-hash.sh --verify, then scripts/lessons.sh skills: a project
 # over its kernel rule 10 skills cap gets an "ACTION: skills cap" line, and a
 # cap that could not be counted is reported as not checked.
@@ -130,7 +140,7 @@ list_set() {
 
 usage_text() {
   echo "usage: scripts/template-sync.sh [--template <git url or path>] [--ref <tag> | --latest]"
-  echo "                                 [--baseline <ref>] [--dry-run] [--resolved]"
+  echo "                                 [--baseline <ref>] [--dry-run] [--resolved] [--accept-kernel]"
   echo "       scripts/template-sync.sh [--template <url>] --suggest-baseline | --latest-tag"
   echo "       scripts/template-sync.sh --status | --list-set | --help"
   echo "       scripts/template-sync.sh --synced-commits <git range>"
@@ -139,6 +149,7 @@ usage_text() {
   echo "  --latest: sync to the newest template-v* tag (version order); not with --ref"
   echo "  --baseline <ref>: compare against this template version instead of the last recorded sync"
   echo "  --resolved: the conflicts reported by the previous run were merged by hand; record the sync with them"
+  echo "  --accept-kernel: apply the template kernel verbatim and run kernel-hash.sh --update, only when the project kernel equals the last recorded release's"
   echo "  --suggest-baseline: candidate starting versions (merge-base, then best file matches); read-only"
   echo "  --latest-tag: print the newest template-v* tag at the template URL (ls-remote, no clone)"
   echo "  --status: offline check that the Template line names the last recorded sync"
@@ -543,7 +554,7 @@ LOG
 
 main() {
   local template="" ref="" dry=0 from_agents=0 default_tag="" resolved=0
-  local baseline="" latest=0 mode=sync
+  local baseline="" latest=0 mode=sync accept=0
   while (( $# )); do
     case "$1" in
       -h|--help) usage_text; exit 0 ;;
@@ -558,6 +569,7 @@ main() {
       --suggest-baseline) mode=suggest; shift ;;
       --dry-run) dry=1; shift ;;
       --resolved) resolved=1; shift ;;
+      --accept-kernel) accept=1; shift ;;
       *) usage ;;
     esac
   done
@@ -762,14 +774,34 @@ main() {
   fi
 
   # AGENTS.md is never applied; its kernel and rules index are compared.
-  local kernel_pending=0
+  local kernel_pending=0 do_accept=0
   if [[ -f AGENTS.md && -f "$WORK/new/AGENTS.md" ]]; then
     kernel_block AGENTS.md > "$WORK/k.proj"
     kernel_block "$WORK/new/AGENTS.md" > "$WORK/k.new"
     if [[ -s "$WORK/k.new" ]] && ! cmp -s "$WORK/k.proj" "$WORK/k.new"; then
       diff -u --label "project/AGENTS.md KERNEL" --label "template/AGENTS.md KERNEL" "$WORK/k.proj" "$WORK/k.new" > "$OUTDIR/AGENTS.kernel.diff" || true
-      echo "KERNEL CHANGE: needs owner approval and scripts/kernel-hash.sh --update  (diff: $OUTDIR/AGENTS.kernel.diff)"
       kernel_pending=1
+      if (( accept && ! dry )); then
+        # The release the project last recorded, not --baseline: the owner's
+        # approval covers a kernel that is exactly that release's.
+        local why="" log_ref="" log_sha="" kdir=""
+        if [[ -f "$LOG" ]]; then log_ref="$(grep '^template-sync: ' "$LOG" | tr -d '\r' | tail -n 1 | awk '{print $2}' || true)"; fi
+        if [[ -z "$log_ref" ]]; then why="no recorded sync line in $LOG"
+        else
+          log_sha="$(resolve_ref "$log_ref")"
+          if [[ -z "$log_sha" ]]; then why="recorded ref $log_ref is missing from the template"
+          else
+            kdir="$WORK/oldlog"; export_tree "$log_sha" "$kdir"
+            kernel_block "$kdir/AGENTS.md" > "$WORK/k.old" 2>/dev/null || true
+            cmp -s "$WORK/k.old" "$WORK/k.proj" || why="project kernel differs from its recorded release $log_ref (customized)"
+          fi
+        fi
+        if [[ -z "$why" ]]; then do_accept=1; kernel_pending=0
+        else echo "KERNEL CHANGE: --accept-kernel refused: $why"; fi
+      fi
+      if (( ! do_accept )); then
+        echo "KERNEL CHANGE: needs owner approval and scripts/kernel-hash.sh --update  (diff: $OUTDIR/AGENTS.kernel.diff)"
+      fi
     fi
     rules_index AGENTS.md > "$WORK/r.proj"
     rules_index "$WORK/new/AGENTS.md" > "$WORK/r.new"
@@ -836,10 +868,27 @@ main() {
     echo "template-sync: new scripts; keep them executable in git: git update-index --add --chmod=+x ${newsh[*]}"
   fi
 
+  if (( do_accept )); then
+    local cr=""
+    local begin_line
+    begin_line="$(sed -n '/<!-- KERNEL:BEGIN -->/p' AGENTS.md)"
+    case "$begin_line" in *$'\r'*) cr=$'\r' ;; esac
+    awk -v nf="$WORK/k.new" -v cr="$cr" '
+      /<!-- KERNEL:BEGIN -->/ && !done { while ((getline l < nf) > 0) print l cr; skip = 1; done = 1 }
+      skip { if (/<!-- KERNEL:END -->/) skip = 0; next }
+      { print }' AGENTS.md > "$WORK/agents.tmp"
+    cat "$WORK/agents.tmp" > AGENTS.md
+    bash scripts/kernel-hash.sh --update >/dev/null
+    echo "template-sync: kernel accepted verbatim from $new_ref under --accept-kernel"
+  fi
+
   local recorded="the sync is recorded"
   if (( ${#conflicts[@]} && ! resolved )); then
     recorded="the sync is NOT recorded"
     echo "template-sync: sync NOT recorded: ${#conflicts[@]} conflict(s) remain and are reported on every run until merged by hand and attested with --resolved"
+  elif (( kernel_pending )); then
+    recorded="the sync is NOT recorded"
+    echo "template-sync: sync NOT recorded: the kernel change is pending; the next run keeps ${prev:-no previous sync} as its base"
   else
     mkdir -p "$(dirname "$LOG")"
     echo "template-sync: $new_ref ${TEMPLATE_SYNC_TODAY:-$(date -u +%F)}" >> "$LOG"

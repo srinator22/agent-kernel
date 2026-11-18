@@ -257,27 +257,88 @@ SHIPPED_DONE="shipped-set-check-complete"
 # description:. With a PROFILE.md, its Skills: names and the skills/ folders
 # are the same set, so the cap of kernel rule 10 counts exactly what start
 # installs.
+# Each file class is judged by one awk over all its files, not one grep or awk
+# per file: on Windows a process spawn costs tens of milliseconds, and the
+# per-file version made this script most of check.sh's run time (83 s of
+# 109 s, 2026-11-18). The awk programs walk ARGV themselves so an empty file,
+# which yields no records, is still judged.
 shipped_set_errors() {
   local dir="$1" profile="${2:-}" f name declared shipped
+  local fm_files=() tomls=()
   for f in "$dir"/agents/*.md "$dir"/skills/*/SKILL.md; do
-    [[ -f "$f" ]] || continue
-    if [[ "$f" == */SKILL.md ]]; then name="$(basename "$(dirname "$f")")"; else name="$(basename "$f" .md)"; fi
-    if [[ "$(sed -n 1p "$f" | tr -d '\r')" != '---' ]]; then
-      echo "$f: frontmatter must open with ---"
-      continue
-    fi
-    [[ -n "$(frontmatter_field "$f" description)" ]] || echo "$f: frontmatter missing description"
-    [[ "$(frontmatter_field "$f" name)" == "$name" ]] || echo "$f: frontmatter name: must be $name"
-    if [[ "$f" != */SKILL.md && ! -f "$dir/agents/$name.toml" ]]; then
-      echo "$f: no Codex twin $dir/agents/$name.toml"
-    fi
+    if [[ -f "$f" ]]; then fm_files+=("$f"); fi
   done
   for f in "$dir"/agents/*.toml; do
-    [[ -f "$f" ]] || continue
-    grep -q '^name = ' "$f" || echo "$f: missing name field"
-    grep -q '^description = ' "$f" || echo "$f: missing description field"
-    grep -q '^developer_instructions = ' "$f" || echo "$f: missing developer_instructions field"
+    if [[ -f "$f" ]]; then tomls+=("$f"); fi
   done
+  if (( ${#fm_files[@]} )); then
+    awk -v tomls="$(printf '%s\n' ${tomls[@]+"${tomls[@]}"})" '
+      function expected(f,   n) {
+        n = f
+        if (n ~ /\/SKILL\.md$/) { sub(/\/SKILL\.md$/, "", n); sub(/.*\//, "", n); return n }
+        sub(/.*\//, "", n); sub(/\.md$/, "", n); return n
+      }
+      function finish(f,   n, twin) {
+        if (!openok) { print f ": frontmatter must open with ---"; return }
+        if (dv == "") print f ": frontmatter missing description"
+        n = expected(f)
+        if (nv != n) print f ": frontmatter name: must be " n
+        if (f !~ /\/SKILL\.md$/) {
+          twin = f; sub(/\/[^\/]*$/, "", twin); twin = twin "/" n ".toml"
+          if (!(twin in has_toml)) print f ": no Codex twin " twin
+        }
+      }
+      function reset() { openok = 0; fm = 0; nf = 0; nv = ""; df = 0; dv = "" }
+      function advance(f) {
+        if (cur != "") finish(cur)
+        while (ai < ARGC && ARGV[ai] != f) { reset(); finish(ARGV[ai]); ai++ }
+        ai++; cur = f; reset()
+      }
+      BEGIN {
+        n = split(tomls, t, "\n")
+        for (i = 1; i <= n; i++) if (t[i] != "") has_toml[t[i]] = 1
+        ai = 1; cur = ""
+      }
+      FNR == 1 {
+        advance(FILENAME)
+        l = $0; gsub(/\r/, "", l); openok = (l == "---")
+        l = $0; sub(/\r$/, "", l); fm = (l == "---") ? 1 : 0
+        next
+      }
+      {
+        if (!openok || fm != 1) next
+        l = $0; sub(/\r$/, "", l)
+        if (l == "---") { fm = 2; next }
+        if (!nf && index(l, "name:") == 1) { nf = 1; nv = substr(l, 6); sub(/^[ \t]+/, "", nv) }
+        if (!df && index(l, "description:") == 1) { df = 1; dv = substr(l, 13); sub(/^[ \t]+/, "", dv) }
+      }
+      END {
+        if (cur != "") finish(cur)
+        while (ai < ARGC) { reset(); finish(ARGV[ai]); ai++ }
+      }' "${fm_files[@]}"
+  fi
+  if (( ${#tomls[@]} )); then
+    awk '
+      function finish(f) {
+        if (!a) print f ": missing name field"
+        if (!b) print f ": missing description field"
+        if (!c) print f ": missing developer_instructions field"
+      }
+      function advance(f) {
+        if (cur != "") finish(cur)
+        while (ai < ARGC && ARGV[ai] != f) { a = b = c = 0; finish(ARGV[ai]); ai++ }
+        ai++; cur = f; a = b = c = 0
+      }
+      BEGIN { ai = 1; cur = "" }
+      FNR == 1 { advance(FILENAME) }
+      /^name = / { a = 1 }
+      /^description = / { b = 1 }
+      /^developer_instructions = / { c = 1 }
+      END {
+        if (cur != "") finish(cur)
+        while (ai < ARGC) { a = b = c = 0; finish(ARGV[ai]); ai++ }
+      }' "${tomls[@]}"
+  fi
   for f in "$dir"/skills/*/; do
     [[ -d "$f" ]] || continue
     [[ -f "$f/SKILL.md" ]] || echo "${f%/}: skill folder has no SKILL.md"
@@ -287,69 +348,122 @@ shipped_set_errors() {
   if [[ -n "$profile" ]]; then
     declared="$(profile_skill_names "$profile" | sort -u)"
     # A missing skills/ folder must not end this function under set -e.
-    shipped="$(for f in "$dir"/skills/*/; do if [[ -d "$f" ]]; then basename "$f"; fi; done | sort -u)"
+    shipped="$(for f in "$dir"/skills/*/; do if [[ -d "$f" ]]; then f="${f%/}"; echo "${f##*/}"; fi; done | sort -u)"
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
-      grep -qx -- "$name" <<< "$shipped" || echo "$profile: Skills: lists $name but $dir/skills/$name/SKILL.md does not exist"
+      in_lines "$name" "$shipped" || echo "$profile: Skills: lists $name but $dir/skills/$name/SKILL.md does not exist"
     done <<< "$declared"
     while IFS= read -r name; do
       [[ -n "$name" ]] || continue
-      grep -qx -- "$name" <<< "$declared" || echo "$dir/skills/$name ships but $profile does not list it on its Skills: line"
+      in_lines "$name" "$declared" || echo "$dir/skills/$name ships but $profile does not list it on its Skills: line"
     done <<< "$shipped"
   fi
   echo "$SHIPPED_DONE"
 }
 
-# trim_blank_edges: drop leading and trailing blank lines and CRs from stdin.
-trim_blank_edges() {
-  awk '{ sub(/\r$/, ""); lines[NR] = $0 }
-    END { s = 1; while (s <= NR && lines[s] ~ /^[ \t]*$/) s++
-          e = NR; while (e >= s && lines[e] ~ /^[ \t]*$/) e--
-          for (i = s; i <= e; i++) print lines[i] }'
-}
+# in_lines NAME LIST: NAME is a whole line of LIST (grep -qx without a process).
+in_lines() { [[ $'\n'"$2"$'\n' == *$'\n'"$1"$'\n'* ]]; }
 
 # twin_errors MD_DIR [TOML_DIR]: an agent's Codex developer_instructions is its
 # .md body, unchanged except that a hard-rule line "- Read-only." may read
 # "- Your sandbox is read-only." (Codex enforces it with sandbox_mode); both
 # forms ship today. TOML_DIR defaults to MD_DIR (library, profiles, roster);
 # the core pair is .claude/agents and .codex/agents. Twins drifted silently
-# before this check existed.
+# before this check existed. Leading and trailing blank lines and CRs do not
+# count. One awk reads every pair (md, toml) in order.
 twin_errors() {
-  local dir="$1" tomldir="${2:-$1}" md toml
+  local dir="$1" tomldir="${2:-$1}" md toml pairs=()
   for md in "$dir"/*.md; do
     [[ -f "$md" ]] || continue
     toml="$tomldir/$(basename "$md" .md).toml"
     [[ -f "$toml" ]] || continue
-    if ! diff -q \
-      <(awk '{ sub(/\r$/, "") } NR == 1 && $0 == "---" { f = 1; next } f == 1 && $0 == "---" { f = 2; next } f == 2' "$md" \
-          | trim_blank_edges) \
-      <(awk '{ sub(/\r$/, "") } /^developer_instructions = """/ { f = 1; next } f && $0 == "\"\"\"" { exit } f' "$toml" \
-          | sed 's/^- Your sandbox is read-only\./- Read-only./' | trim_blank_edges) \
-      >/dev/null; then
-      echo "$toml: developer_instructions differ from the body of $md (regenerate the twin from the .md)"
-    fi
+    pairs+=("$md" "$toml")
   done
+  (( ${#pairs[@]} )) || return 0
+  awk '
+    function close_file(i) {
+      if (i % 2 == 1) { mn = n; for (k = 1; k <= n; k++) m[k] = buf[k] }
+      else compare(ARGV[i - 1], ARGV[i])
+    }
+    function trim(arr, cnt, out,   s, e, k, j) {
+      s = 1; while (s <= cnt && arr[s] ~ /^[ \t]*$/) s++
+      e = cnt; while (e >= s && arr[e] ~ /^[ \t]*$/) e--
+      j = 0; for (k = s; k <= e; k++) out[++j] = arr[k]
+      return j
+    }
+    function compare(mdf, tf,   a, b, an, bn, k) {
+      an = trim(m, mn, a); bn = trim(buf, n, b)
+      if (an == bn) { for (k = 1; k <= an; k++) if (a[k] != b[k]) break; if (k > an) return }
+      print tf ": developer_instructions differ from the body of " mdf " (regenerate the twin from the .md)"
+    }
+    function advance(f) {
+      if (ai > 0) close_file(ai)
+      ai++
+      while (ai < ARGC && ARGV[ai] != f) { n = 0; close_file(ai); ai++ }
+      n = 0; st = 0
+    }
+    BEGIN { ai = 0 }
+    FNR == 1 { advance(FILENAME) }
+    {
+      l = $0; sub(/\r$/, "", l)
+      if (ai % 2 == 1) {
+        if (FNR == 1 && l == "---") { st = 1; next }
+        if (st == 1 && l == "---") { st = 2; next }
+        if (st == 2) buf[++n] = l
+      } else {
+        if (st == 2) next
+        if (l ~ /^developer_instructions = """/) { st = 1; next }
+        if (st == 1 && l == "\"\"\"") { st = 2; next }
+        if (st == 1) {
+          if (index(l, "- Your sandbox is read-only.") == 1) l = "- Read-only." substr(l, 29)
+          buf[++n] = l
+        }
+      }
+    }
+    END {
+      if (ai > 0) close_file(ai)
+      ai++
+      while (ai < ARGC) { n = 0; close_file(ai); ai++ }
+    }' "${pairs[@]}"
 }
 
 # handoff_errors DIR: every backticked lowercase-hyphenated name in an agent's
 # "## Hand-offs" section is an agent that ships in this template (core, library,
 # profiles or roster), so a hand-off never points at a role that does not exist.
+# Names are reported per file in sort -u order, as the per-file version did.
 handoff_errors() {
-  local dir="$1" md known name
+  local dir="$1" md known f mds=()
   known="$(for f in .claude/agents/*.md .codex/agents/*.toml docs/library/agents/*.md docs/library/agents/*.toml docs/profiles/*/agents/*.md docs/roster/agents/*.md; do
     # "|| continue", not "&&": an unmatched last glob would end the loop with
     # status 1, and set -e then ends the function silently, losing every problem.
     [[ -f "$f" ]] || continue
-    basename "$f" | sed 's/\.[a-z]*$//'
+    f="${f##*/}"
+    echo "${f%.[a-z]*}"
   done | sort -u)"
   for md in "$dir"/agents/*.md; do
-    [[ -f "$md" ]] || continue
-    while IFS= read -r name; do
-      [[ -n "$name" ]] || continue
-      grep -qx -- "$name" <<< "$known" || echo "$md: Hand-offs names \`$name\`, which is not an agent in this template"
-    done < <(awk '{ sub(/\r$/, "") } /^## / { f = ($0 == "## Hand-offs"); next } f' "$md" \
-      | grep -o '`[a-z][a-z0-9]*\(-[a-z0-9]\+\)\+`' | tr -d '`' | sort -u)
+    if [[ -f "$md" ]]; then mds+=("$md"); fi
   done
+  (( ${#mds[@]} )) || return 0
+  awk '
+    # The file index is the ARGV position: an empty file yields no records,
+    # so counting first lines would shift every later file onto a wrong name.
+    FNR == 1 { while (ARGV[++fi] != FILENAME) ; f = 0 }
+    { sub(/\r$/, "") }
+    /^## / { f = ($0 == "## Hand-offs"); next }
+    f {
+      s = $0
+      while (match(s, /`[a-z][a-z0-9]*(-[a-z0-9]+)+`/)) {
+        print fi "\t" substr(s, RSTART + 1, RLENGTH - 2)
+        s = substr(s, RSTART + RLENGTH)
+      }
+    }' "${mds[@]}" \
+    | sort -t "$(printf '\t')" -k1,1n -k2,2 -u \
+    | awk -v known="$known" -v files="$(printf '%s\n' "${mds[@]}")" '
+      BEGIN {
+        n = split(known, k, "\n"); for (i = 1; i <= n; i++) if (k[i] != "") ok[k[i]] = 1
+        split(files, fl, "\n"); FS = "\t"
+      }
+      !($2 in ok) { print fl[$1] ": Hand-offs names `" $2 "`, which is not an agent in this template" }'
 }
 
 # shipped_set_check DIR [PROFILE.md]: problems from shipped_set_errors, plus one
@@ -378,7 +492,7 @@ roster_inventory_errors() {
   done <<< "$listed"
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
-    grep -qx -- "$name" <<< "$listed" || echo "docs/roster/agents/$name ships but $readme does not list it"
+    in_lines "$name" "$listed" || echo "docs/roster/agents/$name ships but $readme does not list it"
   done <<< "$shipped"
   return 0
 }
@@ -421,7 +535,7 @@ library_inventory_errors() {
       "$lib"/hooks/*) kind=hook; name="${f##*/}"; name="${name%.py}" ;;
       *) kind=tool; name="${f##*/}"; name="${name%.*}" ;;
     esac
-    grep -qx -- "$kind $name" <<< "$rows" || echo "$f ships but $readme does not list it as a $kind"
+    in_lines "$kind $name" "$rows" || echo "$f ships but $readme does not list it as a $kind"
   done
   return 0
 }

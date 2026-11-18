@@ -67,3 +67,16 @@ every pull request would be noise.
     then simply does not exist. GitHub runs a pull request's own workflow
     file, and only a required check or a base-branch ruleset prevents
     that.
+
+## Amendment 2026-11-18
+
+The owner made the label binding ("Do those", answering the 2026-11-18
+rating): `gate-label` runs on every pull request with `always()` and fails
+itself when the paths job did not succeed, so a skipped job can no longer
+count as passing; main's branch protection requires `check`, `gate-label`,
+`private-terms` and `adopted-project` with `enforce_admins` on, so the owner's token, which
+agents use, cannot merge past them either. The gate-file list now also
+holds `tests/template/test_check_always*.sh` (the file split into six) with
+their shared `tests/template/check_always_lib.sh`, and
+`scripts/private-terms.sh`, which the `private-terms` CI job runs.
+tests/template/test_ci_gate_files.sh pins the list and the no-skip shape.

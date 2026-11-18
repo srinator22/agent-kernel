@@ -1,0 +1,611 @@
+# Procedure anchors, frozen from the uncut docs/procedures/*.md on 2026-11-18 (node N0).
+# One anchor per rule line or numbered step: <procedure path><TAB><phrase>.
+# Each phrase must stay findable verbatim (fixed string, case-sensitive) somewhere under docs/.
+# tests/template/test_doc_budget.sh enforces it. Editing this file to make a cut pass is
+# weakening a gate (kernel rule 2).
+docs/procedures/adr.md	`scripts/adr.sh check` runs in every
+docs/procedures/adr.md	`- Decision records: <folder>`
+docs/procedures/adr.md	instead of passing unchecked
+docs/procedures/adr.md	`scripts/adr.sh new "<Decision title>"`
+docs/procedures/adr.md	zero-padded to four digits
+docs/procedures/adr.md	fails while a `{{` remains
+docs/procedures/adr.md	Status: accepted
+docs/procedures/adr.md	plain hyphens only, quote the numbers
+docs/procedures/adr.md	`docs/ARCHITECTURE.md` in the same commit
+docs/procedures/adr.md	`Status: superseded by NNNN (YYYY-MM-DD)`
+docs/procedures/adr.md	An accepted ADR's body is never
+docs/procedures/adr.md	`## Amendment YYYY-MM-DD` section
+docs/procedures/adr.md	`docs/decisions/NNNN`
+docs/procedures/adr.md	`origin/HEAD`, else `main`
+docs/procedures/adr.md	renumber yours after its last
+docs/procedures/adr.md	`docs: add ADR NNNN <short title>`
+docs/procedures/adr.md	Never tag or push outside the
+docs/procedures/audit.md	major architecture change or migration
+docs/procedures/audit.md	before removing a legacy reference
+docs/procedures/audit.md	Parallelize across workers by disjoint area
+docs/procedures/audit.md	P0: data loss, security exposure, unsafe behavior
+docs/procedures/audit.md	P1: wrong core result or broken critical journey
+docs/procedures/audit.md	P2: material reliability or maintainability defect
+docs/procedures/audit.md	P3: minor - record in BACKLOG.md and batch
+docs/procedures/audit.md	Separate confirmed defects (evidence, impact, reproduction, owning
+docs/procedures/audit.md	P0 and P1 become tasks now
+docs/procedures/bugfix.md	Reproduce with the smallest reliable case
+docs/procedures/bugfix.md	Get a numeric, exact root cause before writing
+docs/procedures/bugfix.md	State the root cause
+docs/procedures/bugfix.md	as file, function and condition
+docs/procedures/bugfix.md	write the regression test first, pinned to the
+docs/procedures/bugfix.md	confirm it fails for the stated
+docs/procedures/bugfix.md	passes before the patch tests nothing
+docs/procedures/bugfix.md	repro command and its failing output
+docs/procedures/bugfix.md	Progress log of `.work/TASK.md`
+docs/procedures/bugfix.md	Patch the smallest safe surface
+docs/procedures/bugfix.md	then `./scripts/check.sh`. Re-verify against the motivating real
+docs/procedures/bugfix.md	Independent adversarial review (the reviewer agent)
+docs/procedures/bugfix.md	Ship per `docs/procedures/ship.md`
+docs/procedures/bugfix.md	that is never permission to skip re-verification
+docs/procedures/bughunt.md	Run at milestones, before first real use, and
+docs/procedures/bughunt.md	`docs/profiles/<profile>/PROFILE.md` lists the recurring defect
+docs/procedures/bughunt.md	Add rows from `docs/DEFECT_MEMORY.md`
+docs/procedures/bughunt.md	Write the chosen concerns into
+docs/procedures/bughunt.md	Ten-pass review. One pass per concern
+docs/procedures/bughunt.md	each by a reader with fresh
+docs/procedures/bughunt.md	1. timing and blocking paths
+docs/procedures/bughunt.md	10. documentation versus behaviour
+docs/procedures/bughunt.md	"none, covered: <what was read>"
+docs/procedures/bughunt.md	fuzzing and fault sweeps: inject a fault at
+docs/procedures/bughunt.md	property-based tests for invariants
+docs/procedures/bughunt.md	differential tests against a reference implementation
+docs/procedures/bughunt.md	`git bisect` on any reproduced regression
+docs/procedures/bughunt.md	fresh-clone build and test
+docs/procedures/bughunt.md	mutation testing on changed files
+docs/procedures/bughunt.md	a surviving mutant is a missing
+docs/procedures/bughunt.md	Cold read. A context-free agent
+docs/procedures/bughunt.md	with `file:line`
+docs/procedures/bughunt.md	No item is left unanswered
+docs/procedures/bughunt.md	Inspect one concrete failing item before accepting any
+docs/procedures/bughunt.md	a verdict that
+docs/procedures/bughunt.md	Every confirmed defect gets a row in `docs/DEFECT_MEMORY.md`
+docs/procedures/bughunt.md	before its fix
+docs/procedures/bughunt.md	severity P0 to P3
+docs/procedures/bughunt.md	Evidence is quoted, never paraphrased
+docs/procedures/bughunt.md	version, files, tests run and not
+docs/procedures/ci-cost.md	Moving or narrowing a check never makes a
+docs/procedures/ci-cost.md	1. Baseline first. Applies always
+docs/procedures/ci-cost.md	`gh run list`, then
+docs/procedures/ci-cost.md	`check.sh: timing:` line
+docs/procedures/ci-cost.md	`selftest: slowest:` line
+docs/procedures/ci-cost.md	`gh pr list --state merged --json createdAt,mergedAt`
+docs/procedures/ci-cost.md	a median of successful runs hides queue
+docs/procedures/ci-cost.md	2. Delete waste before optimizing
+docs/procedures/ci-cost.md	keep one strong owner per
+docs/procedures/ci-cost.md	Trap: deleting by
+docs/procedures/ci-cost.md	Never delete the only regression test (kernel rule
+docs/procedures/ci-cost.md	3. Stop jobs before setup, cancel what is
+docs/procedures/ci-cost.md	A job-level `if:` fed by a `paths` job
+docs/procedures/ci-cost.md	`concurrency` with `cancel-in-progress` for pull-request runs only
+docs/procedures/ci-cost.md	a skipped job shows "skipped"
+docs/procedures/ci-cost.md	key non-PR runs on ref and SHA
+docs/procedures/ci-cost.md	4. Stage checks by when the answer is
+docs/procedures/ci-cost.md	the PR answer required to merge
+docs/procedures/ci-cost.md	the required check list in branch protection is
+docs/procedures/ci-cost.md	a release gate must match the version shipped
+docs/procedures/ci-cost.md	`scripts/selftest-reuse.sh` skips a test whose inputs listed in
+docs/procedures/ci-cost.md	`tests/template/selftest-inputs.list`
+docs/procedures/ci-cost.md	`CHECK_SELFTEST=full` forces a run
+docs/procedures/ci-cost.md	`verify-inputs` job proves the list
+docs/procedures/ci-cost.md	key a result on a hash of
+docs/procedures/ci-cost.md	6. Select tests from the change, deterministically
+docs/procedures/ci-cost.md	an incomplete plan is rejected
+docs/procedures/ci-cost.md	backtest against past
+docs/procedures/ci-cost.md	keep a switch that forces the full run
+docs/procedures/ci-cost.md	Run any prediction in shadow mode first
+docs/procedures/ci-cost.md	Files read from disk are invisible to an
+docs/procedures/ci-cost.md	7. Catch cheap failures locally
+docs/procedures/ci-cost.md	`./scripts/check.sh --fast`
+docs/procedures/ci-cost.md	a skipped hook is not proof
+docs/procedures/ci-cost.md	Key the cache on lockfile hash, toolchain version
+docs/procedures/ci-cost.md	Only trusted jobs write the
+docs/procedures/ci-cost.md	`scripts/selftest.sh --shard K/N`
+docs/procedures/ci-cost.md	`tests/template/selftest-weights.txt`
+docs/procedures/ci-cost.md	41.7% cheaper and 16.5% slower
+docs/procedures/ci-cost.md	at most 8 concurrent
+docs/procedures/ci-cost.md	10. Record before and after
+docs/procedures/ci-cost.md	what was not measured (wall time versus billed
+docs/procedures/discover.md	Run once per project, before `docs/procedures/start.md`
+docs/procedures/discover.md	Output is `docs/CAPABILITY_MAP.md`
+docs/procedures/discover.md	ONE batched interview, not two
+docs/procedures/discover.md	If missing, ask
+docs/procedures/discover.md	List every activity the project will contain
+docs/procedures/discover.md	automate (agent does and a
+docs/procedures/discover.md	semi-automate (agent does, human checks a named
+docs/procedures/discover.md	human only (judgment, physical action, sign-off)
+docs/procedures/discover.md	`docs/library/toolchains/`
+docs/procedures/discover.md	verify each with `<tool> --version`
+docs/procedures/discover.md	Not installed is a finding, not an assumption
+docs/procedures/discover.md	Policy: CLI over MCP (manifest.md)
+docs/procedures/discover.md	needs an ADR with the reason no CLI
+docs/procedures/discover.md	Rank by hours saved divided by
+docs/procedures/discover.md	Rows go to `BACKLOG.md` as the first tasks
+docs/procedures/discover.md	Assign tiers (docs/rules/models.md) to roles
+docs/procedures/discover.md	every claim about harness limits VERIFY with today's
+docs/procedures/discover.md	Read `docs/profiles/README.md`; pick every profile whose
+docs/procedures/discover.md	Risk register. Name what AI must never do
+docs/procedures/discover.md	Flag any action whose approval must be per-instance
+docs/procedures/discover.md	Write `docs/CAPABILITY_MAP.md` with the date and six sections
+docs/procedures/discover.md	states "none" and the reason; never omit
+docs/procedures/discover.md	tell the owner the three highest-ranked tools
+docs/procedures/discover.md	Reread the map at each retro
+docs/procedures/discover.md	`docs/procedures/ci-cost.md` lists the stages and cost levers
+docs/procedures/doc-eval.md	Trap questions (out of scope or a false
+docs/procedures/doc-eval.md	Run during each maintenance pass (`docs/procedures/maintain.md`)
+docs/procedures/doc-eval.md	`scripts/doc-eval.sh check` is green
+docs/procedures/doc-eval.md	`tests/docs/questions.md`
+docs/procedures/doc-eval.md	Run `scripts/doc-eval.sh brief`
+docs/procedures/doc-eval.md	fresh `explore` agent
+docs/procedures/doc-eval.md	never receives `tests/docs/questions.md`
+docs/procedures/doc-eval.md	give a fresh `reviewer` the answers
+docs/procedures/doc-eval.md	DECLINED or FABRICATED
+docs/procedures/doc-eval.md	LEAKED and scores as WRONG
+docs/procedures/doc-eval.md	every trap DECLINED, and at least 90 percent
+docs/procedures/doc-eval.md	Record the counts and the date
+docs/procedures/doc-eval.md	fix the cause at the owning
+docs/procedures/doc-eval.md	Do not add the answer to the doc
+docs/procedures/doc-eval.md	Re-run steps 2 and 3 on the fixed
+docs/procedures/doc-eval.md	Grow the set when a real question went
+docs/procedures/doc-eval.md	Keep ids and order neutral
+docs/procedures/longjob.md	`scripts/bg.sh`
+docs/procedures/longjob.md	not as a token-burning agent loop (kernel rule
+docs/procedures/longjob.md	checkpoints to a file after every small unit
+docs/procedures/longjob.md	never write a long job that starts over
+docs/procedures/longjob.md	A STATE file in `.work/jobs/` (gitignored)
+docs/procedures/longjob.md	running processes with their log and checkpoint paths
+docs/procedures/longjob.md	honor robots.txt delays, send a descriptive
+docs/procedures/longjob.md	one process per host
+docs/procedures/longjob.md	silent for more than 20 minutes
+docs/procedures/longjob.md	never by image name (L016)
+docs/procedures/longjob.md	A second stall is not retried
+docs/procedures/longjob.md	`Unattended:` field
+docs/procedures/longjob.md	`scripts/tasklint.sh check`
+docs/procedures/longjob.md	kernel rule 15 is
+docs/procedures/longjob.md	never covers deleting data, force-push or kernel
+docs/procedures/longjob.md	schedule a wakeup to resume
+docs/procedures/maintain.md	Run monthly or on request; never mid-task
+docs/procedures/maintain.md	`scripts/lessons.sh check` (<= 20 approved lessons
+docs/procedures/maintain.md	rules files <= 40 lines
+docs/procedures/maintain.md	`used: 0` more
+docs/procedures/maintain.md	45 days after its `approved:` date
+docs/procedures/maintain.md	warns on a `[met]` marker
+docs/procedures/maintain.md	`scripts/lessons.sh expire` to list lessons unused > 45
+docs/procedures/maintain.md	`scripts/lessons.sh expire --apply`
+docs/procedures/maintain.md	`scripts/lessons.sh archive <Lnnn> <reason>`
+docs/procedures/maintain.md	Merge near-duplicates into one
+docs/procedures/maintain.md	Archival is a move to `.archive/` with a
+docs/procedures/maintain.md	Read every retire-when against the repo before
+docs/procedures/maintain.md	`./scripts/check.sh --full-mutation`
+docs/procedures/maintain.md	`tests/quarantine.list` (owner and date
+docs/procedures/maintain.md	`docs/lessons/QUARANTINE.md`
+docs/procedures/maintain.md	Audit surviving external/live data calls against the local-first
+docs/procedures/maintain.md	Verify the kernel hash; regenerate CHANGELOG.md
+docs/procedures/maintain.md	confirm README.md is still present-tense truthful
+docs/procedures/maintain.md	5a. Run the doc evaluation (`docs/procedures/doc-eval.md`)
+docs/procedures/maintain.md	`docs/lessons/UPSTREAM.md` entries
+docs/procedures/maintain.md	`docs/lessons/MAINTENANCE.log`
+docs/procedures/maintain.md	`YYYY-MM-DD maintain: <summary>`
+docs/procedures/maintain.md	`scripts/session-context.sh` looks for
+docs/procedures/maintain.md	within the last 35
+docs/procedures/maintain.md	`expire --apply` and `archive` add their own
+docs/procedures/retro.md	Run at the end of every non-quick task
+docs/procedures/retro.md	never what the repo already
+docs/procedures/retro.md	(a) caught pre-merge by checks
+docs/procedures/retro.md	(b) escaped past merge
+docs/procedures/retro.md	(c) reported by
+docs/procedures/retro.md	(d) self-noticed and self-corrected
+docs/procedures/retro.md	Routes (a) and (d): record nothing
+docs/procedures/retro.md	Routes (b) and (c): verify the failing-then-fixed regression
+docs/procedures/retro.md	`docs/lessons/PENDING.md` in the four-field format
+docs/procedures/retro.md	3a. Traps that cost time
+docs/procedures/retro.md	"none, this note is the guard"
+docs/procedures/retro.md	3b. Classify each lesson
+docs/procedures/retro.md	product (what the product does;
+docs/procedures/retro.md	process (how work is run; goes to
+docs/procedures/retro.md	`docs/lessons/UPSTREAM.md`
+docs/procedures/retro.md	`applies to: core` or `applies to: <profile>`
+docs/procedures/retro.md	4a. Durable decisions
+docs/procedures/retro.md	Record it as an ADR in `docs/decisions/`
+docs/procedures/retro.md	Never record what the repo can already tell
+docs/procedures/retro.md	`scripts/lessons.sh use <Lnnn>`
+docs/procedures/retro.md	`approved:` is the approval date
+docs/procedures/retro.md	Fill the Retro section of `.work/TASK.md`
+docs/procedures/retro.md	`.work/done/YYYY-MM-DD-<slug>.md`
+docs/procedures/retro.md	scripts/new-task.sh embeds it
+docs/procedures/retro.md	`scripts/dream.sh due --offer` exits 0
+docs/procedures/ship.md	Confirm scope: `git status`
+docs/procedures/ship.md	resolve every untracked file deliberately
+docs/procedures/ship.md	bump the single source-of-truth version file per semver
+docs/procedures/ship.md	It comes before verification so the verified tree
+docs/procedures/ship.md	Run `./scripts/check.sh` and keep its complete output
+docs/procedures/ship.md	Anything red: stop and fix first
+docs/procedures/ship.md	`check.sh: verified tree <id>`
+docs/procedures/ship.md	`scripts/tree-id.sh`
+docs/procedures/ship.md	except `.work/` and `CHANGELOG.md`
+docs/procedures/ship.md	`./scripts/check.sh --fast` runs the quick lane
+docs/procedures/ship.md	`--quick`: no mutation or production build
+docs/procedures/ship.md	needs the `gate-change`
+docs/procedures/ship.md	(ADR 0018); agents never add it
+docs/procedures/ship.md	20-60 minutes on Windows
+docs/procedures/ship.md	3a. A project with a `verify` skill (SW-15,
+docs/procedures/ship.md	records a `verify:` line in the `.work/TASK.md` Progress
+docs/procedures/ship.md	Reviewer gate: hand the reviewer agent the diff
+docs/procedures/ship.md	complete and untruncated (never a summary of
+docs/procedures/ship.md	`scripts/lessons.sh match <the diff file or git
+docs/procedures/ship.md	`Reviewed tree: <id>`
+docs/procedures/ship.md	"Evidence checked" list
+docs/procedures/ship.md	`scripts/tasklint.sh ship`
+docs/procedures/ship.md	make "Pending re-review" the first
+docs/procedures/ship.md	Quick-mode tasks may skip the reviewer only if
+docs/procedures/ship.md	`scripts/tasklint.sh final` must pass
+docs/procedures/ship.md	Regenerate `CHANGELOG.md` via git-cliff
+docs/procedures/ship.md	Never hand-edit it
+docs/procedures/ship.md	issue, the fix, and the files and functions
+docs/procedures/ship.md	Push per the recorded workflow
+docs/procedures/ship.md	scripts/push-scan.sh refuses a push while
+docs/procedures/ship.md	`scripts/private-terms.sh check` fails
+docs/procedures/ship.md	`scripts/ci-watch.sh` in the
+docs/procedures/ship.md	delegate to the monitor agent when available
+docs/procedures/ship.md	exit 3 means it
+docs/procedures/ship.md	`--base <remote SHA before the push>`
+docs/procedures/ship.md	A push is complete only when every required
+docs/procedures/ship.md	push the replacement, monitor the replacement
+docs/procedures/ship.md	annotated tag `vX.Y.Z`, push the tag, AND create
+docs/procedures/ship.md	(`gh release create`)
+docs/procedures/ship.md	A tag alone does not appear in the
+docs/procedures/ship.md	`template-vX.Y.Z` tags
+docs/procedures/ship.md	Final handoff format: Outcome / Evidence
+docs/procedures/ship.md	`docs/procedures/ci-cost.md` before
+docs/procedures/start.md	If `.start-done` exists, STOP
+docs/procedures/start.md	Never touch the kernel block in AGENTS.md or
+docs/procedures/start.md	`bash scripts/doctor.sh`
+docs/procedures/start.md	A recommended gap (gh, gitleaks, git-cliff,
+docs/procedures/start.md	`START_REPORT.md`
+docs/procedures/start.md	run `docs/procedures/discover.md`
+docs/procedures/start.md	Existing-project mode: when the
+docs/procedures/start.md	wire `scripts/stack-check.sh` to the commands that
+docs/procedures/start.md	make `./scripts/check.sh` pass on the unmodified code
+docs/procedures/start.md	Failures already present go to
+docs/procedures/start.md	`tests/quarantine.list` with an owner task and date
+docs/procedures/start.md	each entry expires in 30 days
+docs/procedures/start.md	Read `docs/BLUEPRINT.md`, `AGENTS.md` and `docs/CAPABILITY_MAP.md` in full
+docs/procedures/start.md	Ask the human ONE batched set of questions
+docs/procedures/start.md	"branch + gated merge, <details>" or "direct-to-main, <details>"
+docs/procedures/start.md	scripts/new-task.sh reads direct-to-main only when that word is
+docs/procedures/start.md	Deploy target, or none for now?
+docs/procedures/start.md	version-stamped caches become project defaults
+docs/procedures/start.md	`docs/profiles/README.md`
+docs/procedures/start.md	`docs/library/README.md`
+docs/procedures/start.md	`docs/roster/README.md` (default none)
+docs/procedures/start.md	`standard | quick | autopilot`
+docs/procedures/start.md	Any hard invariants I should never violate
+docs/procedures/start.md	gitignored local instruction file, add the
+docs/procedures/start.md	never reference its existence in committed
+docs/procedures/start.md	Consent for the first push, the v0.1.0 tag
+docs/procedures/start.md	into a new `scripts/stack-check.sh`
+docs/procedures/start.md	it takes `--full-mutation` and `--quick` and honours both
+docs/procedures/start.md	template-sync never touches it
+docs/procedures/start.md	`scripts/check.sh` itself unchanged
+docs/procedures/start.md	fill every `{{...}}` in `.github/workflows/ci.yml`
+docs/procedures/start.md	pin runtime and
+docs/procedures/start.md	commit the lockfile
+docs/procedures/start.md	wire mechanical boundary
+docs/procedures/start.md	on `v*` tags
+docs/procedures/start.md	Fill the Project decisions section of `AGENTS.md`
+docs/procedures/start.md	record exactly `- Template: <url> <tag>`
+docs/procedures/start.md	`template-sync: <tag> <date>` to
+docs/procedures/start.md	respect the 180-line
+docs/procedures/start.md	scaffold the test layout of
+docs/procedures/start.md	copying, never moving
+docs/procedures/start.md	`agents/<n>.md` to
+docs/procedures/start.md	`skills/<n>/` to both `.claude/skills/` and `.agents/skills/`
+docs/procedures/start.md	A name that
+docs/procedures/start.md	already exists is merged by hand, never overwritten
+docs/procedures/start.md	a library skill takes one of the 2
+docs/procedures/start.md	`scripts/lessons.sh check` must pass
+docs/procedures/start.md	fill every `{{VERIFY_...}}`
+docs/procedures/start.md	No `{{` may remain in the installed copy
+docs/procedures/start.md	Write `docs/ARCHITECTURE.md` (modules, boundaries, dependency direction)
+docs/procedures/start.md	`docs/operations.md` (deploy, rollback, monitoring)
+docs/procedures/start.md	Write the next-numbered ADR under docs/decisions/
+docs/procedures/start.md	Rewrite `README.md` for the project, present tense
+docs/procedures/start.md	move the template rows to
+docs/procedures/start.md	`bash scripts/start-reset-lessons.sh`
+docs/procedures/start.md	`--check` names a file that still
+docs/procedures/start.md	`docs/DEFECT_MEMORY.md` is left as shipped
+docs/procedures/start.md	attribution/trailers off in settings
+docs/procedures/start.md	seed the permissions allowlist
+docs/procedures/start.md	Write `.start-done` (date + summary)
+docs/procedures/start.md	Completion rule: start may not declare itself complete
+docs/procedures/start.md	installed `verify` skill once against the scaffolded app
+docs/procedures/start.md	Write `START_REPORT.md` (detected, wired, missing, degraded, manual
+docs/procedures/start.md	tag `v0.1.0`
+docs/procedures/start.md	confirm CI on that SHA via `scripts/ci-watch.sh`
+docs/procedures/start.md	Push and tag only as Q11 allowed
+docs/procedures/start.md	Never touch the kernel or `.kernel.hash`
+docs/procedures/preferences.md	`docs/preferences/<area>.md`
+docs/procedures/preferences.md	UserPromptSubmit hook `scripts/feedback-log.sh` appends
+docs/procedures/preferences.md	`.work/feedback/log.jsonl`
+docs/procedures/preferences.md	never enters git
+docs/procedures/preferences.md	`FEEDBACK_LOG=0` turns the hook off
+docs/procedures/preferences.md	`.codex/hooks.json` once the project and its
+docs/procedures/preferences.md	Treat the kind as a guess
+docs/procedures/preferences.md	Record a register row in the turn only
+docs/procedures/preferences.md	Quote the owner's words with the date in
+docs/procedures/preferences.md	In template mode (before start has run) no
+docs/procedures/preferences.md	`docs/preferences/README.md`
+docs/procedures/preferences.md	`scripts/preferences.sh check` validates every
+docs/procedures/preferences.md	A new rule starts as `Review`
+docs/procedures/preferences.md	`scripts/dream/preferences.py` holds the one writer, `write_rows`
+docs/procedures/preferences.md	Numbers have three digits
+docs/procedures/preferences.md	A pipe in
+docs/procedures/preferences.md	a cell is escaped and a newline is
+docs/procedures/preferences.md	already exists in any register is not added
+docs/procedures/preferences.md	Revising a rule appends the date and the
+docs/procedures/preferences.md	Removing or revising a row guarded by a
+docs/procedures/preferences.md	Only when the owner asks
+docs/procedures/preferences.md	`scripts/preferences.sh port --from <path>`
+docs/procedures/preferences.md	Add `--apply` to copy them
+docs/procedures/preferences.md	`--area <a>` and `--id <ID>` (which needs `--area`)
+docs/procedures/preferences.md	ported from <folder> (<original source>)
+docs/procedures/preferences.md	Baselines are never copied
+docs/procedures/preferences.md	Port refuses in template
+docs/procedures/preferences.md	up to 4000 bytes
+docs/procedures/preferences.md	`Review`: a reviewer looks for the rule
+docs/procedures/preferences.md	A named check, a test or script step
+docs/procedures/preferences.md	raises its `Repeats` count
+docs/procedures/preferences.md	changes only through an approved proposal
+docs/procedures/preferences.md	An approved deliverable is recorded in the register's
+docs/procedures/preferences.md	the baseline and reuse what it owns
+docs/procedures/preferences.md	`scripts/new-task.sh` lists the baselines and areas that match
+docs/procedures/preferences.md	Before the owner sees a first draft of
+docs/procedures/preferences.md	reports each rule as met or broken
+docs/procedures/preferences.md	When the owner says "later" or "not now"
+docs/procedures/preferences.md	do not start the work
+docs/procedures/tests.md	Tests exist before the first feature
+docs/procedures/tests.md	name each in `scripts/stack-check.sh`
+docs/procedures/tests.md	unit, property-based, golden-master, integration, end-to-end
+docs/procedures/tests.md	"N/A - reason" in START_REPORT.md
+docs/procedures/tests.md	a replacement or port gets differential
+docs/procedures/tests.md	keep an approved-differences list
+docs/procedures/tests.md	no wall-clock races, no order
+docs/procedures/tests.md	seeds fixed and stored
+docs/procedures/tests.md	never a sleep
+docs/procedures/tests.md	Assert behaviour at
+docs/procedures/tests.md	Cover empty, malformed, extreme,
+docs/procedures/tests.md	Oracle first. The acceptance document
+docs/procedures/tests.md	is written before the tests
+docs/procedures/tests.md	Each assertion names, in a
+docs/procedures/tests.md	never retyped into the test
+docs/procedures/tests.md	Pin ported or numerical logic to validated real
+docs/procedures/tests.md	(docs/rules/scientific-integrity.md)
+docs/procedures/tests.md	Never change an expected value
+docs/procedures/tests.md	a wrong reference is its own reviewed commit
+docs/procedures/tests.md	carries an absolute
+docs/procedures/tests.md	never a relative one only
+docs/procedures/tests.md	Quarantine protocol. A flaky test is a defect
+docs/procedures/tests.md	`tests/quarantine.list`, read by the test runner
+docs/procedures/tests.md	one test path per
+docs/procedures/tests.md	`# owner: <task> date: YYYY-MM-DD`
+docs/procedures/tests.md	`scripts/selftest.sh` for
+docs/procedures/tests.md	a listed path that does not exist fails
+docs/procedures/tests.md	`t_na` in `tests/template/lib.sh`
+docs/procedures/tests.md	fails on any entry older
+docs/procedures/tests.md	than 30 days
+docs/procedures/tests.md	`docs/lessons/QUARANTINE.md`
+docs/procedures/tests.md	Deleting or weakening a
+docs/procedures/tests.md	test is never quarantine
+docs/procedures/tests.md	Adoption baseline: when the template is adopted into
+docs/procedures/tests.md	A fake dependency reproduces the real one's failure
+docs/procedures/tests.md	each fake against recorded real behaviour
+docs/procedures/tests.md	A missing toolchain fails the gate; it never
+docs/procedures/tests.md	is a red check, not a pass
+docs/procedures/tests.md	Timeouts are sized for the CI runner, with
+docs/procedures/tests.md	reports the awaited condition, not a bare
+docs/procedures/tests.md	(fixtures under `tests/template/`)
+docs/procedures/tests.md	change that skips its selftest case is incomplete
+docs/procedures/tests.md	a defect that escapes gets its failing test
+docs/procedures/tests.md	a row in `docs/DEFECT_MEMORY.md`
+docs/procedures/tests.md	anchor matches exactly once before replacing
+docs/procedures/tests.md	function-scoped fixture
+docs/procedures/tests.md	Audit one subsystem at a time
+docs/procedures/tests.md	name the behaviour it protects
+docs/procedures/tests.md	show a believable bug
+docs/procedures/tests.md	keep one strong
+docs/procedures/tests.md	owner per contract
+docs/procedures/tests.md	A test with no believable bug is repaired
+docs/procedures/tests.md	never delete the only regression guard for a
+docs/procedures/tests.md	Consolidation keeps every
+docs/procedures/tests.md	`.work/done/<date>-<slug>-ledger.md`
+docs/procedures/tests.md	A later pass starts from the ledger
+docs/procedures/tests.md	`tests/BUDGET` names the counted test files (`paths:`)
+docs/procedures/tests.md	`ceiling:` in non-blank lines
+docs/procedures/tests.md	`allowance:` (the
+docs/procedures/tests.md	`scripts/test-budget.sh check` (check.sh step 4)
+docs/procedures/tests.md	`raise: <old>-><new> <YYYY-MM-DD> <reason>`
+docs/procedures/tests.md	lower `ceiling:` to the new count
+docs/procedures/tests.md	`scripts/test-budget.sh report` lists files by
+docs/procedures/tests.md	skips the check with a printed line
+docs/procedures/dream.md	`scripts/dream.sh due` decides from file stats
+docs/procedures/dream.md	a dream is due when sessions have new
+docs/procedures/dream.md	or three days passed
+docs/procedures/dream.md	never more than once a day for the
+docs/procedures/dream.md	`scripts/stop-gate.sh`
+docs/procedures/dream.md	`/dream taste` runs only the
+docs/procedures/dream.md	Ask "Start dreaming?"
+docs/procedures/dream.md	On no, stop
+docs/procedures/dream.md	Run `scripts/dream.sh digest`
+docs/procedures/dream.md	`.work/dream/digest.md`
+docs/procedures/dream.md	capped at 40 KB
+docs/procedures/dream.md	`scripts/dream.sh hygiene`
+docs/procedures/dream.md	Exit 3 means neither a new signal nor
+docs/procedures/dream.md	no model runs
+docs/procedures/dream.md	`--match <its path>` to the next digest
+docs/procedures/dream.md	Dispatch the `dreamer` agent (standard tier, read-only)
+docs/procedures/dream.md	at most 12 numbered proposals
+docs/procedures/dream.md	each with evidence (digest signal ids or file:line)
+docs/procedures/dream.md	`.work/dream/<date>-report.md`
+docs/procedures/dream.md	The human answers with numbers
+docs/procedures/dream.md	Apply only the approved numbers
+docs/procedures/dream.md	an approved number is the human's
+docs/procedures/dream.md	`chore/dream-<date>`
+docs/procedures/dream.md	`scripts/dream.sh done --report <report> --applied <numbers>`
+docs/procedures/dream.md	Run the Taste pass below
+docs/procedures/dream.md	`scripts/dream.sh scorecard` prints the same section read-only
+docs/procedures/dream.md	no model writes it, so the dreamer cannot
+docs/procedures/dream.md	the approval rate per proposal kind
+docs/procedures/dream.md	the decided count against 30 (a self-review pass)
+docs/procedures/dream.md	"Approved" is the owner's approval number
+docs/procedures/dream.md	A lesson id is L with three or
+docs/procedures/dream.md	`.work/feedback/log.jsonl` in the main checkout
+docs/procedures/dream.md	at most 12000 bytes
+docs/procedures/dream.md	text clipped to 400 characters
+docs/procedures/dream.md	at most 40
+docs/procedures/dream.md	Repeats counts change only
+docs/procedures/dream.md	renames a log over 5 MB to
+docs/procedures/dream.md	`log.1.jsonl` (one kept)
+docs/procedures/dream.md	A line without its
+docs/procedures/dream.md	shorter than the saved offset is read again
+docs/procedures/dream.md	A missing log is not an
+docs/procedures/dream.md	`[preference]`: a new register row
+docs/procedures/dream.md	`[escalate]`: a rule with repeats moves from Review
+docs/procedures/dream.md	`[baseline]`: an approved deliverable becomes a baselines row
+docs/procedures/dream.md	`scripts/preferences.sh port --from <project>`
+docs/procedures/dream.md	T1. Run `scripts/dream.sh taste digest`
+docs/procedures/dream.md	`.work/dream/taste/digest.md`
+docs/procedures/dream.md	fewer than 5 fresh signals or under 7
+docs/procedures/dream.md	`--force` skips the day rule
+docs/procedures/dream.md	`--projects-dir DIR`
+docs/procedures/dream.md	T2. Dispatch the `taste-dreamer` agent
+docs/procedures/dream.md	`.work/dream/taste/reports/<date>-report.md`
+docs/procedures/dream.md	`scripts/dream.sh taste apply --report <report> <numbers>`
+docs/procedures/dream.md	It refuses everything when any approved
+docs/procedures/dream.md	(160 characters a rule)
+docs/procedures/dream.md	skips an add whose rule text a register
+docs/procedures/dream.md	`scripts/dream.sh taste done --report <report>`
+docs/procedures/dream.md	`scripts/dream.sh taste check`
+docs/procedures/dream.md	`<!-- taste:begin`
+docs/procedures/dream.md	`<!-- taste:end -->`
+docs/procedures/dream.md	A taste report written by an older release
+docs/procedures/dream.md	`scripts/dream.sh fleet`
+docs/procedures/dream.md	`fleet.local.list`, gitignored
+docs/procedures/dream.md	once start has run
+docs/procedures/dream.md	`.work/dream/fleet/digest.md`
+docs/procedures/dream.md	`--max-bytes` (default 40000)
+docs/procedures/dream.md	an entry is cut at 1500 bytes
+docs/procedures/dream.md	Transcripts only with the owner's permission
+docs/procedures/dream.md	`--transcripts` adds each
+docs/procedures/dream.md	Without it no transcript is opened
+docs/procedures/dream.md	Dispatch the `dreamer` agent in fleet mode
+docs/procedures/dream.md	`.work/dream/fleet/<date>-report.md`
+docs/procedures/dream.md	no project name, path or quote enters a
+docs/procedures/dream.md	`scripts/dream.sh fleet done`
+docs/procedures/dream.md	UPSTREAM entries stay in the projects
+docs/procedures/dream.md	they never leave the
+docs/procedures/dream.md	Only the text of approved proposals
+docs/procedures/dream.md	In a public
+docs/procedures/dream.md	repository, no private project names or quotes
+docs/procedures/dream.md	an empty digest stops before any model call
+docs/procedures/dream.md	about 105k tokens on this template
+docs/procedures/dream.md	at most 4000 bytes, about 1k tokens
+docs/procedures/dream.md	transcripts only with `--transcripts`
+docs/procedures/upstream.md	a project's AGENTS.md "Project decisions"
+docs/procedures/upstream.md	section is never overwritten by it
+docs/procedures/upstream.md	prints it with its --list-set option
+docs/procedures/upstream.md	`AGENTS.md`: the kernel block and the rules index
+docs/procedures/upstream.md	`docs/preferences/README.md`: the register format
+docs/procedures/upstream.md	header only, never the entries
+docs/procedures/upstream.md	`.github/workflows/ci.yml`: shown as a diff, never applied
+docs/procedures/upstream.md	synced only in a project that carries the
+docs/procedures/upstream.md	applies only when the project's copy is untouched
+docs/procedures/upstream.md	Never touched: the project's own truth files
+docs/procedures/upstream.md	scripts/stack-check.sh
+docs/procedures/upstream.md	written to `docs/lessons/UPSTREAM.md` in the project
+docs/procedures/upstream.md	a fifth field, `applies to:` `core` or a
+docs/procedures/upstream.md	lessons stay in PENDING.md
+docs/procedures/upstream.md	marks them sent with the link
+docs/procedures/upstream.md	in the template unreviewed
+docs/procedures/upstream.md	Projects sync to tags, never to a moving
+docs/procedures/upstream.md	`scripts/template-release.sh` proposes the next `template-vMAJOR.MINOR.PATCH`
+docs/procedures/upstream.md	`--major` is suggested when the kernel block changed
+docs/procedures/upstream.md	`--tag` creates the annotated tag on a clean
+docs/procedures/upstream.md	pushing the tag is an owner approval (kernel
+docs/procedures/upstream.md	`scripts/fleet.sh` lists the local projects named in `fleet.local.list`
+docs/procedures/upstream.md	status: OK, BEHIND, NO-BASE, BAD-LINE or MISSING
+docs/procedures/upstream.md	It is read-only
+docs/procedures/upstream.md	the first 12 lines of a lessons file
+docs/procedures/upstream.md	--synced-commits option prints one
+docs/procedures/upstream.md	`scripts/fleet-status.sh [--tsv]`
+docs/procedures/upstream.md	exit 0 even when projects lag
+docs/procedures/upstream.md	`scripts/rating.sh [--offline]`
+docs/procedures/upstream.md	A project records its template as exactly `-
+docs/procedures/upstream.md	`template-sync: <ref> <date>`
+docs/procedures/upstream.md	`scripts/template-sync.sh --status` (run by check.sh) fails when the
+docs/procedures/upstream.md	`Template update available`
+docs/procedures/upstream.md	`TEMPLATE_UPDATE_CHECK=0` turns it off
+docs/procedures/upstream.md	`template-update` skill then runs these steps
+docs/procedures/upstream.md	Stop if the working tree is not clean
+docs/procedures/upstream.md	Branch `chore/template-sync-<tag>` from the default branch
+docs/procedures/upstream.md	does not list `--latest`
+docs/procedures/upstream.md	`scripts/template-sync.sh --latest --dry-run`
+docs/procedures/upstream.md	run `--suggest-baseline`
+docs/procedures/upstream.md	`--baseline <ref>`
+docs/procedures/upstream.md	Apply: `scripts/template-sync.sh --latest`
+docs/procedures/upstream.md	UPDATE and ADD entries are applied by the
+docs/procedures/upstream.md	Merge each CONFLICT by hand
+docs/procedures/upstream.md	move them into scripts/stack-check.sh once
+docs/procedures/upstream.md	KERNEL CHANGE: stop and ask the owner
+docs/procedures/upstream.md	`scripts/kernel-hash.sh --update` in the same commit
+docs/procedures/upstream.md	DIFF entries (adopted profiles, ci.yml)
+docs/procedures/upstream.md	Set `- Template: <url> <tag>` to the new
+docs/procedures/upstream.md	a real apply refuses a dirty tree
+docs/procedures/upstream.md	`--resolved`
+docs/procedures/upstream.md	Run `./scripts/check.sh` until green
+docs/procedures/upstream.md	Drop workarounds the new release makes unnecessary
+docs/procedures/upstream.md	take the template's `scripts/selftest.sh` and `scripts/new-task.sh`
+docs/procedures/upstream.md	`tests/template/test_blueprint_parity.sh`
+docs/procedures/upstream.md	"direct-to-main, on master"
+docs/procedures/upstream.md	drop a ruff exclusion of `docs/profiles` or `docs/library`
+docs/procedures/upstream.md	`UserPromptSubmit`
+docs/procedures/upstream.md	open the project in
+docs/procedures/upstream.md	Codex once and trust it and its five
+docs/procedures/upstream.md	RETIRED CORE SKILL names a skill the new
+docs/procedures/upstream.md	Verify skill upgrade (a sync that brings software
+docs/procedures/upstream.md	`.claude/skills/verify/SKILL.md` exists with no `{{` left
+docs/procedures/upstream.md	`git show <ref>:docs/profiles/software/skills/verify/SKILL.md`
+docs/procedures/upstream.md	so it counts as the profile's skill, not
+docs/procedures/upstream.md	The script never touches the Project decisions section
+docs/procedures/upstream.md	kernel hash after applying
+docs/procedures/upstream.md	refuses a real apply on main or on
+docs/procedures/upstream.md	attested with `--resolved`
+docs/procedures/upstream.md	`docs/installed.list`
+docs/procedures/upstream.md	`<project path> <template path>`
+docs/procedures/upstream.md	`[installed from <template path>]`
+docs/procedures/upstream.md	A malformed line stops the sync with exit
+docs/procedures/upstream.md	Paste-ready prompt (one canonical text; the README quotes
+docs/procedures/upstream.md	Adopt the project template from <TEMPLATE URL> at
+docs/procedures/upstream.md	every file you would add or change and
+docs/procedures/upstream.md	Do not touch CI, branch protection or tags
+docs/procedures/upstream.md	List every file to add or change; stop
+docs/procedures/upstream.md	by hand, never replaced
+docs/procedures/upstream.md	Add the `.gitignore` additions
+docs/procedures/upstream.md	`./scripts/check.sh` must pass on the unmodified code before
+docs/procedures/upstream.md	fix neither here
+docs/procedures/upstream.md	the adoption as an ADR (what was
+docs/procedures/upstream.md	180-line cap) moves whole, unedited
+docs/procedures/upstream.md	`docs/memory/<name>-long-form.md`
+docs/procedures/upstream.md	Older ADRs are normalized to the template header
+docs/procedures/upstream.md	`git log --diff-filter=A --follow --format=%as -- docs/decisions/<file>.md`
+docs/procedures/upstream.md	Body text is untouched
+docs/procedures/upstream.md	only file in its folder
+docs/procedures/upstream.md	at most 4 non-blank lines
+docs/procedures/upstream.md	with a different name or description, or naming
+docs/procedures/retro.md	Confirmed-good calls: if the human
+docs/procedures/ship.md	the reviewer returns FAIL
+docs/procedures/ship.md	Conventional commit. The body carries why

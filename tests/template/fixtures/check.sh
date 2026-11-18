@@ -610,6 +610,13 @@ if [[ ! -f .start-done ]]; then
     tests/template/selftest-weights.txt docs/procedures/ci-cost.md
     docs/profiles/product-render/PROFILE.md
     scripts/push-scan.sh tests/template/test_push_scan.sh
+    tests/template/check_always_lib.sh tests/template/test_check_always_fast.sh
+    tests/template/test_check_always_selftest.sh tests/template/test_check_always_reuse.sh
+    tests/template/test_check_always_template.sh tests/template/test_check_always_started.sh
+    tests/template/test_ci_gate_files.sh
+    scripts/doc-budget.sh tests/template/test_doc_budget.sh
+    tests/docs/procedure-anchors.txt
+    scripts/fleet-sync.sh tests/template/test_fleet_sync.sh
   )
   for f in "${required[@]}"; do
     [[ -f "$f" ]] || terr "required template file missing: $f"
@@ -766,10 +773,14 @@ if [[ ! -f .start-done ]]; then
     terr "the template's .claude/skills ($(echo $core_have)) differ from CORE_SKILLS in scripts/lessons.sh ($(echo $core_want))"
   fi
 
+  # 5n. The procedures stay readable in one sitting and keep every frozen
+  # rule anchor (scripts/doc-budget.sh; the cut of 2026-11-18).
+  ./scripts/doc-budget.sh check || terr "scripts/doc-budget.sh check failed (the lines above name the procedure, anchor or path)"
+
   if (( tfail || gfail )); then
     fail "template self-test found the problems listed above"
   fi
-  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list; always section: style and characters, memory caps, task graph, task state, ADR format and refs, test budget, doc questions, selftest, preference registers, private terms)"
+  echo "template self-test: OK (${#required[@]} required files, script syntax, frontmatter, placeholders, check.sh fixture, blueprint parity, template Python ruff contract, no pipe into head, core skills list, procedure budget; always section: style and characters, memory caps, task graph, task state, ADR format and refs, test budget, doc questions, selftest, preference registers, private terms)"
   timing_line
   exit 0
 fi

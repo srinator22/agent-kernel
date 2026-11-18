@@ -275,6 +275,43 @@ PRIVATE_TERMS_FILE="$OUTSIDE/missing.txt" run ./scripts/private-terms.sh check
 assert_contains "the override path is named when missing" "missing.txt"
 rm -rf "$OUTSIDE"
 
+# Range mode: every commit in BASE..HEAD (message, diff) and the HEAD paths;
+# a term only before BASE is not reported; a new-branch base scans HEAD alone.
+new_repo
+printf 'Zelda Quixote\nzq.home+x@mail.example\n' > .work/private-terms.txt
+echo "Zelda Quixote" > docs/old.md && git add -A && git commit -qm "old by Zelda Quixote"
+OLD_SHA="$(git rev-parse HEAD | cut -c1-12)"; BASE="$(git rev-parse HEAD)"
+run ./scripts/private-terms.sh range "$BASE" HEAD
+assert_rc "a term only before BASE is not reported" 0
+echo "m" > docs/m.md && git add docs/m.md && git commit -qm "by zelda quixote"
+R_MSG="$(git rev-parse HEAD | cut -c1-12)"
+echo "see zq.home+x@mail.example" > docs/d.md && git add docs/d.md && git commit -qm "diff"
+R_DIFF="$(git rev-parse HEAD | cut -c1-12)"
+mkdir "docs/Zelda Quixote" && echo x > "docs/Zelda Quixote/n.md" && git add -A && git commit -qm "path"
+run ./scripts/private-terms.sh range "$BASE" HEAD
+assert_rc "range finds terms in commits and paths" 1
+assert_contains "range names a commit message match" "commit $R_MSG (term 1)"
+assert_contains "range names a diff match" "commit $R_DIFF (term 2)"
+assert_contains "range names a HEAD path match, masked" "docs/***/n.md (term 1)"
+assert_not_contains "range skips commits before BASE" "commit $OLD_SHA"
+no_term "range output"
+run ./scripts/private-terms.sh range 0000000000000000000000000000000000000000 HEAD
+assert_rc "a new-branch base still scans HEAD" 1
+assert_contains "a new-branch base is announced" "new branch"
+assert_not_contains "a new-branch base scans only the HEAD commit" "commit $R_MSG"
+
+# PRIVATE_TERMS_REQUIRED=1: a missing or unusable terms file is an error.
+PRIVATE_TERMS_REQUIRED=1 PRIVATE_TERMS_FILE=.work/none.txt run ./scripts/private-terms.sh check
+assert_rc "a required missing terms file fails" 1
+assert_contains "the failure says how to set the secret" "gh secret set PRIVATE_TERMS"
+echo "# only a comment" > .work/empty-terms.txt
+PRIVATE_TERMS_REQUIRED=1 PRIVATE_TERMS_FILE=.work/empty-terms.txt run ./scripts/private-terms.sh range "$BASE" HEAD
+assert_rc "a required comments-only terms file fails" 1
+PRIVATE_TERMS_FILE=.work/none.txt run ./scripts/private-terms.sh range "$BASE" HEAD
+assert_rc "a missing terms file passes when not required" 0
+run ./scripts/private-terms.sh range "$BASE"
+assert_rc "range needs a base and a head" 2
+
 # A7 usage.
 run ./scripts/private-terms.sh
 assert_rc "no command is a usage error" 2

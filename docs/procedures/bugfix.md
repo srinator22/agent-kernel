@@ -3,8 +3,7 @@
 1. Reproduce with the smallest reliable case, against real data where it
    exists. Get a numeric, exact root cause before writing a fix -
    instrument the actual code path; do not theorize. State the root cause
-   as file, function and condition (for example "`src/parse.ts`,
-   `readHeader`, a header shorter than 4 bytes is read past its end").
+   as file, function and condition.
 2. Identify the owning layer. For every fix, not only bugs that escaped
    past merge: write the regression test first, pinned to the real
    numbers from step 1, not a synthetic happy path (kernel rule 3).
@@ -21,6 +20,6 @@
    data independently of the unit tests.
 6. Independent adversarial review (the reviewer agent) trying to find what
    is still wrong, not rubber-stamping.
-7. Ship per `docs/procedures/ship.md`. When speed is requested, parallelize
-   steps across workers; that is never permission to skip re-verification
+7. Ship per `docs/procedures/ship.md`. Parallelizing across workers for
+   speed: that is never permission to skip re-verification
    or review.

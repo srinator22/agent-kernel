@@ -3,8 +3,7 @@
 1. Triggers: after a major architecture change or migration; before first
    real data, customer, or production use; when failures across modules
    suggest systemic problems; before removing a legacy reference
-   implementation; when security, CI, or deploy assumptions have
-   accumulated unreviewed.
+   implementation; when security, CI or deploy assumptions are unreviewed.
 2. Scope: architecture boundaries, data flow, validation, error handling,
    state, concurrency, numerical logic, security, CI, deployment,
    documentation. Parallelize across workers by disjoint area; the advisor
