@@ -36,6 +36,8 @@ target/
 # Dream digest, offsets and reports: local only, they quote session transcripts
 .work/dream/
 .work/feedback/
+# Papercut log: the agent's friction reports, local only (scripts/papercut.sh)
+.work/papercuts/
 
 # Render outputs and caches stay outside git (docs/library/procedures/product-render.md);
 # these catch accidental copies inside a project tree.

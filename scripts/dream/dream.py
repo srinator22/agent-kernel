@@ -53,6 +53,13 @@ lines and the rules in docs/preferences/*.md (at most 40 lines). done commits
 the offset, then rotates a log over 5 MB to log.1.jsonl (one kept) and resets
 the offset to 0; the exit-3 digest, which commits offsets itself, rotates the
 same way so a log of plain messages cannot grow without bound.
+Papercuts: each digest also reads the agent's friction reports, <main checkout>/
+.work/papercuts/log.jsonl (written by scripts/dream/papercut.py, which imports
+the readers here), whole each time: the log is capped at 200 entries, so no
+offset is kept and papercuts alone never make a digest. "## Papercuts" groups
+entries by tool and whitespace-normalized "got" text, newest first, at most 20
+groups; entries filed with refusal "correct" are counted and listed apart and
+are never candidates. Malformed lines are skipped and counted.
 Codex: the same digest, due and taste passes read this repository's interactive
 Codex sessions, <codex home>/sessions/**/rollout-*.jsonl and later-compressed
 .jsonl.zst (codex_home: DREAM_CODEX_HOME, else CODEX_HOME, else ~/.codex; one
@@ -129,6 +136,13 @@ FEEDBACK_KINDS = ("deferral", "correction", "preference", "approval")
 REPEAT_KINDS = ("correction", "preference")
 FEEDBACK_BYTES, REPEAT_LINES, LOG_ROTATE = 12000, 40, 5 * 1024 * 1024
 PREF_DIR = os.path.join("docs", "preferences")
+# Papercuts (scripts/papercut.sh): the log folder under .work, the entry cap
+# and field limit that "add" enforces, the allowed --refusal values (the first
+# marks a false alarm, not a defect), and the groups one digest shows.
+PAPERCUT_DIR, PAPERCUT_CAP, PAPERCUT_FIELD = "papercuts", 200, 300
+PAPERCUT_TEXT = ("tool", "tried", "expected", "got", "fix")
+PAPERCUT_REFUSALS = ("correct", "wrong", "none")
+PAPERCUT_GROUPS = 20
 HYGIENE_FILES = ["AGENTS.md", "BACKLOG.md", "docs/DEFECT_MEMORY.md",
                  "docs/lessons/INDEX.md", "docs/lessons/PENDING.md",
                  "docs/lessons/UPSTREAM.md", "docs/lessons/QUARANTINE.md"]
@@ -1328,6 +1342,93 @@ def feedback_sections(c, entries, nread, bad, exists):
     return out, len(shown)
 
 
+def papercut_dir(root, timeout=10):
+    """The folder papercut.py writes to: the main checkout's .work/papercuts."""
+    return os.path.join(main_worktree(root, timeout), ".work", PAPERCUT_DIR)
+
+
+def read_papercuts(path):
+    """(entries, lines read, malformed) for the whole papercut log; None when
+    there is no log. A line that is not an object with every field as text and
+    a known refusal value is malformed: counted, never guessed at."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read().split(b"\n")
+    except OSError:
+        return None
+    entries, n, bad = [], 0, 0
+    for line in raw:
+        if not line.strip():
+            continue
+        n += 1
+        try:
+            obj = json.loads(line.decode("utf-8", errors="replace"))
+        except ValueError:
+            obj = None
+        if not isinstance(obj, dict) or obj.get("refusal") not in PAPERCUT_REFUSALS \
+                or not all(isinstance(obj.get(k), str) for k in PAPERCUT_TEXT + ("ts",)):
+            bad += 1
+            continue
+        entries.append(obj)
+    return entries, n, bad
+
+
+def papercut_groups(entries):
+    """(defect groups, correct-refusal groups, defect entries, correct entries).
+    A group is a list of entries with the same tool and the same "got" text
+    after whitespace normalization, newest entry first; groups are ordered by
+    their newest entry, newest first."""
+    def grouped(items):
+        table = {}
+        for e in items:
+            table.setdefault((e["tool"].strip(), " ".join(e["got"].split())), []).append(e)
+        groups = [sorted(g, key=lambda e: e["ts"], reverse=True) for g in table.values()]
+        groups.sort(key=lambda g: (g[0]["tool"], g[0]["got"]))
+        groups.sort(key=lambda g: g[0]["ts"], reverse=True)  # stable: ties stay in name order
+        return groups
+    right = [e for e in entries if e["refusal"] == PAPERCUT_REFUSALS[0]]
+    rest = [e for e in entries if e["refusal"] != PAPERCUT_REFUSALS[0]]
+    return grouped(rest), grouped(right), len(rest), len(right)
+
+
+def papercut_lines(group, label="", detail=True):
+    """The lines of one group: count, tool, got and the newest entry's time,
+    then (detail) the refusal counts and that entry's tried, expected and fix."""
+    new = group[0]
+    head = "- %s%dx %s: %s (last %s" % (label, len(group), clean(new["tool"], PAPERCUT_FIELD),
+                                        clean(new["got"], PAPERCUT_FIELD), clean(new["ts"], 20))
+    if not detail:
+        return [head + ")"]
+    kinds = [(r, sum(1 for e in group if e["refusal"] == r)) for r in PAPERCUT_REFUSALS[1:]]
+    return [head + "; refusal: %s)" % ", ".join("%s %d" % k for k in kinds if k[1])] + [
+        "    %s: %s" % (k, clean(new[k], PAPERCUT_FIELD)) for k in ("tried", "expected", "fix")]
+
+
+def papercut_sections(c):
+    out = ["", "## Papercuts",
+           "friction the agent filed with scripts/papercut.sh: evidence only; a human approves any lesson"]
+    got = read_papercuts(os.path.join(papercut_dir(c.root), "log.jsonl"))
+    if got is None:
+        return out + ["no papercut log"]
+    entries, n, bad = got
+    groups, right, n_rest, n_right = papercut_groups(entries)
+    out.append("log: %d lines read, %d malformed; %d candidate entries in %d groups; "
+               "%d correct refusals in %d groups" % (n, bad, n_rest, len(groups), n_right, len(right)))
+    if groups:
+        out.append("candidate defects, newest first (same tool and same result are one group):")
+    for i, g in enumerate(groups[:PAPERCUT_GROUPS], 1):
+        out += papercut_lines(g, "p%d " % i)
+    if len(groups) > PAPERCUT_GROUPS:
+        out.append("... %d more groups not shown" % (len(groups) - PAPERCUT_GROUPS))
+    if right:
+        out.append("correct refusals (not defects, not candidates):")
+    for g in right[:PAPERCUT_GROUPS]:
+        out += papercut_lines(g, detail=False)
+    if len(right) > PAPERCUT_GROUPS:
+        out.append("... %d more correct-refusal groups not shown" % (len(right) - PAPERCUT_GROUPS))
+    return out
+
+
 def count_lines(b):
     return b.count(b"\n") + (1 if b and not b.endswith(b"\n") else 0)
 
@@ -1564,7 +1665,7 @@ def cmd_digest(c, a):
         "transcripts: %d with matches of %d read; new lines read: %d; malformed: %d" % (hit_n, read_n, lines_n, bad_n),
         "signals: %d kept, %d dropped by the %d byte cap" % (len(kept), dropped, a.max_bytes),
     ] + (["codex: %d compressed rollouts skipped (no zstd reader: install zstd or use Python 3.14)"
-          % st["skipped"]] if st["skipped"] else []) + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + [
+          % st["skipped"]] if st["skipped"] else []) + impact_lines(c, pairs, counts) + scorecard_lines(c, pairs) + fb_lines + papercut_sections(c) + [
         "",
         "## Signals",
         "Kinds: C correction, D denied, H hook block, I interrupt, E failed tool call, U message, M mid-turn message.",

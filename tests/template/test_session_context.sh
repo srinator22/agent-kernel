@@ -442,6 +442,17 @@ printf '%s
 run bash scripts/session-context.sh
 assert_not_contains "a CRLF log is read" "Maintenance:"
 unset LESSONS_TODAY
+
+# Papercuts: one line naming the command, only while scripts/papercut.sh exists.
+make_fixture
+cp_script session-context.sh
+run bash scripts/session-context.sh
+assert_not_contains "no papercut script: no line" "papercut"
+cp_script papercut.sh
+run bash scripts/session-context.sh
+assert_rc "with the papercut script: exits 0" 0
+assert_contains "with the papercut script: the command is named" "[session-context] Papercuts: a tool, doc or guard got in your way? File it at once: bash scripts/papercut.sh add"
+assert_eq "and it is one line" 1 "$(printf '%s\n' "$OUT" | grep -c 'Papercuts:')"
 t_cleanup
 
 t_finish

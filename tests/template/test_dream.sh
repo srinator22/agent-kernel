@@ -942,6 +942,38 @@ assert_eq "feedback: repeats are capped at 40 lines" "40" "$(grep -c '^big:R[0-9
 assert_file_has "feedback: the repeats cap reports the rest" "$DR" "5 more not shown"
 rm -rf "$CAPROOT" "$REPROOT"
 
+# --- papercuts: the agent's friction reports (scripts/papercut.sh) as an evidence section ---
+# The whole log is read at each digest (it is capped at 200 entries, no offset is kept).
+dg --projects-dir "$PROJ3" --state-dir "$FIX/statep0"
+assert_file_has "papercuts: no log is one line" "$FIX/statep0/digest.md" "no papercut log"
+PCROOT="$(mktemp -d "${TMPDIR:-/tmp}/template-selftest.pc.XXXXXX")"
+mkdir -p "$PCROOT/.work/papercuts"
+pcl() { printf '{"v":1,"ts":"%s","tool":"%s","tried":"t","expected":"e","got":"%s","fix":"%s","refusal":"%s"}\n' "$@" >> "$PCROOT/.work/papercuts/log.jsonl"; }
+pcl 2026-11-06T09:00:00Z dream.sh "exit 0  on error" "old fix" none
+pcl 2026-11-06T10:00:00Z dream.sh "exit 0 on error" "reject unknown flags" wrong
+pcl 2026-11-06T11:00:00Z guard.sh "refused rm" "nothing" correct
+pcl 2026-11-06T12:00:00Z x.sh "bad refusal value" "f" maybe
+printf '{not json\n' >> "$PCROOT/.work/papercuts/log.jsonl"
+dg --root "$PCROOT" --projects-dir "$PROJE" --state-dir "$PCROOT/st"
+assert_rc "papercuts: alone they are not a reason to dream (exit 3)" 3
+dg --root "$PCROOT" --projects-dir "$PROJ3" --state-dir "$PCROOT/st" --match "$FIX"
+assert_rc "papercuts: a digest with a malformed log line exits 0" 0
+PD="$PCROOT/st/digest.md"
+assert_file_has "papercuts: says evidence, not lessons" "$PD" "evidence only; a human approves any lesson"
+assert_file_has "papercuts: counts, correct refusals apart" "$PD" "log: 5 lines read, 2 malformed; 2 candidate entries in 1 groups; 1 correct refusals in 1 groups"
+assert_file_has "papercuts: a group with its count and newest details" "$PD" "- p1 2x dream.sh: exit 0 on error (last 2026-11-06T10:00:00Z; refusal: wrong 1, none 1)"
+assert_file_has "papercuts: the newest fix is shown" "$PD" "fix: reject unknown flags"
+assert_file_has "papercuts: correct refusals are labelled as no candidates" "$PD" "correct refusals (not defects, not candidates):"
+assert_file_has "papercuts: and listed without a candidate id" "$PD" "- 1x guard.sh: refused rm (last 2026-11-06T11:00:00Z)"
+assert_file_lacks "papercuts: a correct refusal is no candidate" "$PD" "- p2 "
+ORDER="$(grep -n '^## \(Repeats\|Papercuts\|Signals\)$' "$PD" | cut -d: -f2 | tr '\n' ',')"
+assert_eq "papercuts: the section sits between Repeats and Signals" "## Repeats,## Papercuts,## Signals," "$ORDER"
+for n in $(seq 10 40); do pcl 2026-11-06T13:00:00Z "tool$n" "got $n" "f" none; done
+dg --root "$PCROOT" --projects-dir "$PROJ3" --state-dir "$PCROOT/st2" --match "$FIX"
+assert_eq "papercuts: at most 20 groups are shown" "20" "$(grep -c '^- p[0-9]* ' "$PCROOT/st2/digest.md")"
+assert_file_has "papercuts: the rest is counted" "$PCROOT/st2/digest.md" "... 12 more groups not shown"
+rm -rf "$PCROOT"
+
 # --- dreamer definitions (A10) ---
 for f in .claude/agents/dreamer.md .codex/agents/dreamer.toml; do
   for w in "docs/preferences" "[preference]" "[escalate]" "[baseline]"; do

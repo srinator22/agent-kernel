@@ -119,6 +119,27 @@ CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
 assert_contains "a fixture no test names widens, with the reason" "widen:tests/template/fixtures/unnamed.txt, no test names it"
 assert_contains "an unnamed fixture runs every self-test" "selftest stub args=[]"
 commit_fixture
+# exists-only paths: selftest-inputs.list declares them "exists:" (no test reads
+# their content), so naming one in a test must not select that test.
+echo "state" > docs/state.md
+echo "# reads state.md" >> tests/template/test_alpha.sh
+printf '# comment\n\nexists: docs/state.md\n' > tests/template/selftest-inputs.list
+commit_fixture
+echo "changed" >> docs/state.md
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "an exists-only path changed alone runs no self-test" "no self-test maps to the changed files; none run"
+assert_contains "the exists-only skip gives its reason" "skip docs/state.md (exists-only: no test reads its content)"
+echo "# edit" >> scripts/beta.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "an exists-only path beside another still selects for the other" "selftest stub args=[tests/template/test_beta.sh]"
+echo "more" >> docs/notes.md
+echo "# reads notes.md" >> tests/template/test_alpha.sh
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "a path absent from the list still selects by name" "(owner:docs/notes.md)"
+rm tests/template/selftest-inputs.list
+CHECK_FAST_BASE=HEAD run ./scripts/check.sh --fast
+assert_contains "without the list file an exists-only path selects by name" "(owner:docs/state.md)"
+commit_fixture
 
 run ./scripts/check.sh
 assert_rc "the full gate passes" 0

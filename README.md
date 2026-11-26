@@ -263,6 +263,10 @@ contract: `docs/procedures/upstream.md`.
   end reads its result, so no turn waits for it); `scripts/session-context.sh`
   loads the mode, the branch, status, recent commits, the live task and the
   preference registers; `scripts/feedback-log.sh` notes each message you send;
+  `scripts/papercut.sh add` lets the agent file the friction it hits (a
+  rejected flag, a silent failure, a doc naming a missing file, a guard
+  refusal) in the local `.work/papercuts/log.jsonl`, which the dream digest
+  groups as evidence, with correct refusals counted apart;
   `scripts/refuse-shell-stdin.sh` refuses `python -` and here-documents;
   `scripts/hooks-dispatch.sh` runs a project's own hooks from `scripts/hooks.d/`;
   `scripts/worker-git-guard.sh` stops the worker agent from committing or pushing.
