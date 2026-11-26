@@ -60,10 +60,10 @@ other open row is not started.
      (scripts/tasklint.sh check) -->
 - [x] N1: a change to a path that tests/template/selftest-inputs.list declares `exists:` selects no test by name, with a reason line on stderr; any other path selects as before -> tests/template/test_check_always_fast.sh
 - [ ] N2: the ship path fails mechanically when a non-quick task has no PASS verdict for the current tree, at a point after the verdict can exist -> tests/template (file named by the worker)
-- [ ] N3: scripts/papercut.sh add refuses a missing or invalid field and an over-long field, writes one entry, and enforces the cap -> tests/template/test_papercut.sh
-- [ ] N3: scripts/papercut.sh list groups entries and reports correct refusals apart -> tests/template/test_papercut.sh
-- [ ] N3: the dream digest carries the papercut groups as evidence -> tests/template/test_dream.sh
-- [ ] N3: the papercut log is gitignored and holds no prompt text or file contents -> tests/template/test_papercut.sh
+- [x] N3: scripts/papercut.sh add refuses a missing or invalid field and an over-long field, writes one entry, and enforces the cap -> tests/template/test_papercut.sh
+- [x] N3: scripts/papercut.sh list groups entries and reports correct refusals apart -> tests/template/test_papercut.sh
+- [x] N3: the dream digest carries the papercut groups as evidence -> tests/template/test_dream.sh
+- [x] N3: the papercut log is gitignored and holds no prompt text or file contents -> tests/template/test_papercut.sh
 - [ ] Full gate green on the integrated tree -> judgment: check.sh output with its verified tree line
 
 ## Plan
@@ -74,7 +74,7 @@ other open row is not started.
 |---|---|---|---|---|
 | N1 | - | scripts/check.sh, tests/template/test_check_always_fast.sh | standard | done |
 | N2 | - | scripts/tasklint.sh, scripts/push-scan.sh, docs/procedures/ship.md, tests/template/test_tasklint.sh, tests/template/test_push_scan.sh | strong | blocked |
-| N3 | - | scripts/papercut.sh, scripts/dream/dream.py, scripts/session-context.sh, .gitignore, tests/template/test_papercut.sh, tests/template/test_dream.sh, tests/template/test_session_context.sh | strong | doing |
+| N3 | - | scripts/papercut.sh, scripts/dream/dream.py, scripts/session-context.sh, .gitignore, tests/template/test_papercut.sh, tests/template/test_dream.sh, tests/template/test_session_context.sh | strong | done |
 | N4 | N1, N2, N3 | BACKLOG.md, docs/BLUEPRINT.md, tests/template/selftest-inputs.list, tests/BUDGET | advisor | todo |
 
 ## Plan verdict
@@ -87,6 +87,7 @@ other open row is not started.
 - 2026-11-26 15 open rows read: 3 buildable here (rows for --fast selection, tasklint final, papercuts); the template half of cancel-superseded-runs is already in ci.yml; 11 not started, reasons in Non-goals.
 - 2026-11-26 N2 not built, no file changed: a push guard cannot work. ship.md step 3 pushes the finished head before the review (CI is the verify output), and in b19 the verdict first appears in the archive commit afc646e, so tasklint final never sees a live verdict at push time. Options for the owner: gate the archive step in retro (recommended), check new .work/done records in check.sh, or leave as prose.
 - 2026-11-26 N1 done: worker test failed 3 cases before the fix, 45 pass after; on this tree check.sh --fast prints "skip .work/TASK.md (exists-only...)" and selects no test for it. BACKLOG.md is exists-only too and is skipped the same way. tests/template/fixtures/check.sh is the required byte copy of scripts/check.sh (outside the planned owner files). Gate files changed: the pull request needs the owner label.
+- 2026-11-26 N3 done: worker tests failed before (test_papercut.sh 75 of 79) and pass after; on the integrated tree the full gate runs selftest 51 passed, 0 failed, test-budget 13518 of 13672, and fails only on the 6 open assumptions. One real entry filed with the command (the POSIX-locale gate failure). Logic lives in scripts/dream/papercut.py and dream.py; check.sh gained one required-files line (gate file). Not settled: papercuts repeat in every digest until the cap drops them; dream.md, retro.md and the dreamer agent do not mention the section.
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->

@@ -608,6 +608,7 @@ if [[ ! -f .start-done ]]; then
     scripts/dream/feedback.py scripts/dream/preferences.py
     docs/preferences/README.md docs/procedures/preferences.md
     tests/template/test_feedback.sh tests/template/test_preferences.sh
+    scripts/papercut.sh scripts/dream/papercut.py tests/template/test_papercut.sh
     tests/template/test_find_python.sh tests/template/test_taste_project.sh
     scripts/doctor.sh tests/template/test_doctor.sh
     .codex/hooks.json scripts/codex-hook.cmd tests/template/test_codex_hooks.sh

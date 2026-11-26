@@ -174,6 +174,12 @@ preferences_block() {
 }
 preferences_block || true
 
+# Papercuts: one line so the agent knows the command exists (no skill, no
+# kernel text). Printed only while the script is present.
+if [[ -f scripts/papercut.sh ]]; then
+  echo "[session-context] Papercuts: a tool, doc or guard got in your way? File it at once: bash scripts/papercut.sh add (fields: bash scripts/papercut.sh help)."
+fi
+
 # Maintenance cadence (docs/procedures/maintain.md step 7): one line when
 # docs/lessons/MAINTENANCE.log holds no "YYYY-MM-DD maintain: ..." entry dated
 # within the last 35 days (or no log at all). Pure file read and shell

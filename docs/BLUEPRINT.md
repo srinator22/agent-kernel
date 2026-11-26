@@ -171,6 +171,7 @@ scripts/
   tree-id.sh                  # working-tree tree id for the verify line and the review verdict (ADR 0017)
   profiles.sh                 # the one parser of the AGENTS.md Profiles line (template-sync, lessons)
   feedback-log.sh             # UserPromptSubmit hook body: logs the owner's prompt and its situation to .work/feedback/log.jsonl
+  papercut.sh                 # file and list papercuts: an agent's friction reports in .work/papercuts/log.jsonl, evidence for the dream (wrapper for dream/papercut.py)
   find-python.sh              # sourced helper: PY is the first of python3, python that runs as Python 3
   doctor.sh                   # first-run tool check: runs each required and recommended tool, prints install commands
   preferences.sh              # check: the preference registers in docs/preferences/ are well formed
@@ -179,6 +180,7 @@ scripts/
   dream/                      # template Python lives under a folder ruff.toml (check.sh step 5k)
     dream.py                  # stdlib: transcript signals read once per line, byte offsets, due by file stats and retro commit dates
     feedback.py               # stdlib: hook body, classifies the owner's prompt and appends it with its situation to the feedback log
+    papercut.py               # stdlib: papercut add (validated fields, 200-entry cap) and list (groups, correct refusals apart)
     preferences.py            # stdlib: register and baseline checks behind scripts/preferences.sh
     taste.py                  # stdlib: project taste digest (this project's sessions), evidence pool, approved lines into docs/preferences rows
     fleet.py                  # stdlib: template-only fleet digest: projects' open UPSTREAM entries, newest dream reports, opt-in transcript signals; read-only
@@ -252,6 +254,7 @@ tests/
     test_selftest.sh          # quarantine list, n/a lines, summary counts, parallel slots, named files, INT and TERM stop, exec-bit wiring
     test_taste.sh             # owner filter, signal kinds, project scope, pool, stop rules, evidence rule, outcome, guards
     test_feedback.sh          # hook log schema, classifier, situation, bounds, main-checkout log
+    test_papercut.sh          # add fields and refusals, limits, JSON escaping, cap, list groups, ignored path, linked worktree
     test_preferences.sh       # register cells, baselines, template-mode guard, unwired-hook warning
     test_doctor.sh            # tool checks against PATH shims, install lines per system, the Store stub, run from inside scripts/
     test_find_python.sh       # stub python3 skipped by running it, no variable left, scripts that source the helper
