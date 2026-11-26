@@ -79,8 +79,14 @@ fast_changed() {
 # indirectly cannot be traced), or when every test names it (lib.sh). One
 # reason line per selection goes to stderr ("changed-test", "owner:<path>",
 # "widen:<path>") so a surprising selection can be traced.
+# Exception: a path tests/template/selftest-inputs.list declares "exists:" is
+# only required to be present, no test reads its content (tests name .work/
+# TASK.md for their own fixture copy), so its basename selects nothing; the
+# reuse key already ignores it, and selecting by name would run heavy tests
+# on every task-state edit. A missing list file changes nothing (select by name).
 fast_select() {
-  local f b t hit nhit all=0 sel=() ntests=0
+  local f b t hit nhit all=0 sel=() ntests=0 line
+  local inputs=tests/template/selftest-inputs.list
   local tests=(tests/template/test_*.sh)
   for t in "${tests[@]}"; do [[ -f "$t" ]] && ntests=$((ntests + 1)); done
   while IFS= read -r f || [[ -n "$f" ]]; do
@@ -101,6 +107,18 @@ fast_select() {
           continue
         fi ;;
     esac
+    if [[ -f "$inputs" ]]; then
+      line=""
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" == "exists: $f" || "$line" == "exists:$f" ]] && break
+        line=""
+      done < "$inputs"
+      if [[ -n "$line" ]]; then
+        echo "check --fast: skip $f (exists-only: no test reads its content)" >&2
+        continue
+      fi
+    fi
     b="${f##*/}"
     hit=0
     nhit=0

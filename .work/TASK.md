@@ -58,7 +58,7 @@ other open row is not started.
 <!-- each maps to an executable test where possible; list test paths. A ticked
      line needs "-> <existing path>" or "-> judgment: <reason>"
      (scripts/tasklint.sh check) -->
-- [ ] N1: a change to a path that tests/template/selftest-inputs.list declares `exists:` selects no test by name, with a reason line on stderr; any other path selects as before -> tests/template/test_check_always_fast.sh
+- [x] N1: a change to a path that tests/template/selftest-inputs.list declares `exists:` selects no test by name, with a reason line on stderr; any other path selects as before -> tests/template/test_check_always_fast.sh
 - [ ] N2: the ship path fails mechanically when a non-quick task has no PASS verdict for the current tree, at a point after the verdict can exist -> tests/template (file named by the worker)
 - [ ] N3: scripts/papercut.sh add refuses a missing or invalid field and an over-long field, writes one entry, and enforces the cap -> tests/template/test_papercut.sh
 - [ ] N3: scripts/papercut.sh list groups entries and reports correct refusals apart -> tests/template/test_papercut.sh
@@ -72,7 +72,7 @@ other open row is not started.
      Status: todo, doing, done, blocked. Validate: scripts/taskgraph.sh check -->
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
-| N1 | - | scripts/check.sh, tests/template/test_check_always_fast.sh | standard | doing |
+| N1 | - | scripts/check.sh, tests/template/test_check_always_fast.sh | standard | done |
 | N2 | - | scripts/tasklint.sh, scripts/push-scan.sh, docs/procedures/ship.md, tests/template/test_tasklint.sh, tests/template/test_push_scan.sh | strong | blocked |
 | N3 | - | scripts/papercut.sh, scripts/dream/dream.py, scripts/session-context.sh, .gitignore, tests/template/test_papercut.sh, tests/template/test_dream.sh, tests/template/test_session_context.sh | strong | doing |
 | N4 | N1, N2, N3 | BACKLOG.md, docs/BLUEPRINT.md, tests/template/selftest-inputs.list, tests/BUDGET | advisor | todo |
@@ -86,6 +86,7 @@ other open row is not started.
 <!-- timestamped one-liners; this is what survives compaction -->
 - 2026-11-26 15 open rows read: 3 buildable here (rows for --fast selection, tasklint final, papercuts); the template half of cancel-superseded-runs is already in ci.yml; 11 not started, reasons in Non-goals.
 - 2026-11-26 N2 not built, no file changed: a push guard cannot work. ship.md step 3 pushes the finished head before the review (CI is the verify output), and in b19 the verdict first appears in the archive commit afc646e, so tasklint final never sees a live verdict at push time. Options for the owner: gate the archive step in retro (recommended), check new .work/done records in check.sh, or leave as prose.
+- 2026-11-26 N1 done: worker test failed 3 cases before the fix, 45 pass after; on this tree check.sh --fast prints "skip .work/TASK.md (exists-only...)" and selects no test for it. BACKLOG.md is exists-only too and is skipped the same way. tests/template/fixtures/check.sh is the required byte copy of scripts/check.sh (outside the planned owner files). Gate files changed: the pull request needs the owner label.
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
