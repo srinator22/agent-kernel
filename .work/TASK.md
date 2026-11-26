@@ -73,7 +73,7 @@ other open row is not started.
 | node | depends on | owner files | worker tier | status |
 |---|---|---|---|---|
 | N1 | - | scripts/check.sh, tests/template/test_check_always_fast.sh | standard | doing |
-| N2 | - | scripts/tasklint.sh, scripts/push-scan.sh, docs/procedures/ship.md, tests/template/test_tasklint.sh, tests/template/test_push_scan.sh | strong | doing |
+| N2 | - | scripts/tasklint.sh, scripts/push-scan.sh, docs/procedures/ship.md, tests/template/test_tasklint.sh, tests/template/test_push_scan.sh | strong | blocked |
 | N3 | - | scripts/papercut.sh, scripts/dream/dream.py, scripts/session-context.sh, .gitignore, tests/template/test_papercut.sh, tests/template/test_dream.sh, tests/template/test_session_context.sh | strong | doing |
 | N4 | N1, N2, N3 | BACKLOG.md, docs/BLUEPRINT.md, tests/template/selftest-inputs.list, tests/BUDGET | advisor | todo |
 
@@ -85,6 +85,7 @@ other open row is not started.
 ## Progress log
 <!-- timestamped one-liners; this is what survives compaction -->
 - 2026-11-26 15 open rows read: 3 buildable here (rows for --fast selection, tasklint final, papercuts); the template half of cancel-superseded-runs is already in ci.yml; 11 not started, reasons in Non-goals.
+- 2026-11-26 N2 not built, no file changed: a push guard cannot work. ship.md step 3 pushes the finished head before the review (CI is the verify output), and in b19 the verdict first appears in the archive commit afc646e, so tasklint final never sees a live verdict at push time. Options for the owner: gate the archive step in retro (recommended), check new .work/done records in check.sh, or leave as prose.
 
 ## Review verdict
 <!-- written ONLY by the independent reviewer -->
